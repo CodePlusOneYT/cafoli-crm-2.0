@@ -7,7 +7,9 @@ export const getCampaigns = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
-    return await ctx.db.query("campaigns").order("desc").collect();
+    
+    // Limit to recent campaigns for faster loading
+    return await ctx.db.query("campaigns").order("desc").take(50);
   },
 });
 

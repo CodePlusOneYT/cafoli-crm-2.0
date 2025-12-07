@@ -3,37 +3,48 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Users, MessageSquare, BarChart3, Activity } from "lucide-react";
+import { useMemo } from "react";
 
 export default function Dashboard() {
   const leads = useQuery(api.leads.getLeads, { filter: "all" }) || [];
   const campaigns = useQuery(api.campaigns.getCampaigns) || [];
 
-  const stats = [
-    {
-      title: "Total Leads",
-      value: leads.length,
-      icon: Users,
-      description: "All leads in system",
-    },
-    {
-      title: "Active Campaigns",
-      value: campaigns.filter(c => c.status === "Active").length,
-      icon: BarChart3,
-      description: "Currently running",
-    },
-    {
-      title: "New Leads Today",
-      value: leads.filter(l => l._creationTime > Date.now() - 86400000).length,
-      icon: Activity,
-      description: "Last 24 hours",
-    },
-    {
-      title: "Pending Follow-ups",
-      value: leads.filter(l => l.nextFollowUpDate && l.nextFollowUpDate < Date.now()).length,
-      icon: MessageSquare,
-      description: "Needs attention",
-    },
-  ];
+  // Memoize computed stats to avoid recalculation on every render
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const oneDayAgo = now - 86400000;
+    
+    return [
+      {
+        title: "Total Leads",
+        value: leads.length,
+        icon: Users,
+        description: "All leads in system",
+      },
+      {
+        title: "Active Campaigns",
+        value: campaigns.filter(c => c.status === "Active").length,
+        icon: BarChart3,
+        description: "Currently running",
+      },
+      {
+        title: "New Leads Today",
+        value: leads.filter(l => l._creationTime > oneDayAgo).length,
+        icon: Activity,
+        description: "Last 24 hours",
+      },
+      {
+        title: "Pending Follow-ups",
+        value: leads.filter(l => l.nextFollowUpDate && l.nextFollowUpDate < now).length,
+        icon: MessageSquare,
+        description: "Needs attention",
+      },
+    ];
+  }, [leads, campaigns]);
+
+  // Memoize recent leads slice
+  const recentLeads = useMemo(() => leads.slice(0, 5), [leads]);
+  const recentCampaigns = useMemo(() => campaigns.slice(0, 5), [campaigns]);
 
   return (
     <AppLayout>
@@ -69,7 +80,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {leads.slice(0, 5).map((lead) => (
+                {recentLeads.map((lead) => (
                   <div key={lead._id} className="flex items-center justify-between border-b pb-2 last:border-0">
                     <div>
                       <p className="font-medium">{lead.name}</p>
@@ -93,7 +104,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {campaigns.slice(0, 5).map((campaign) => (
+                {recentCampaigns.map((campaign) => (
                   <div key={campaign._id} className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">{campaign.name}</p>
