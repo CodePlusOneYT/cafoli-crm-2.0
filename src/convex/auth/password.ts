@@ -41,10 +41,7 @@ export const password = ConvexCredentials({
           userId: user._id,
           role: "admin",
         });
-      }
-
-      if (!user) {
-        return null;
+        user = { ...user, role: "admin" };
       }
 
       return { userId: user._id };

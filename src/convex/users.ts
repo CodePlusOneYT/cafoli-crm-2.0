@@ -41,12 +41,19 @@ export const ensureRole = mutation({
     if (!userId) return;
 
     const user = await ctx.db.get(userId);
-    if (user && !user.role) {
-      // Check if username is "owner" (case insensitive)
-      const isOwner = user.email?.toLowerCase() === "owner";
-      
+    if (!user) return;
+
+    // Check if username is "owner" (case insensitive)
+    const isOwner = user.email?.toLowerCase() === "owner";
+    
+    // Always ensure owner has admin role, or assign staff if no role exists
+    if (isOwner && user.role !== ROLES.ADMIN) {
       await ctx.db.patch(userId, {
-        role: isOwner ? ROLES.ADMIN : ROLES.STAFF,
+        role: ROLES.ADMIN,
+      });
+    } else if (!user.role) {
+      await ctx.db.patch(userId, {
+        role: ROLES.STAFF,
       });
     }
   },
