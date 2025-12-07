@@ -28,7 +28,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect);
+      navigate(redirect, { replace: true });
     }
   }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
 
@@ -49,8 +49,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       
       await signIn("password", authData);
       
+      // Wait a moment for auth state to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect);
+      navigate(redirect, { replace: true });
     } catch (error) {
       console.error("Sign-in error:", error);
       setError("Invalid username or password");

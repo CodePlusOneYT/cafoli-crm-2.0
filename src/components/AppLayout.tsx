@@ -96,7 +96,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <Button
           variant="outline"
           className="w-full justify-start gap-2"
-          onClick={() => signOut()}
+          onClick={async () => {
+            await signOut();
+            window.location.href = "/";
+          }}
         >
           <LogOut className="h-4 w-4" />
           Sign Out
