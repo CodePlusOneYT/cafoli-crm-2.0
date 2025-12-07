@@ -6,12 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-// import { format } from "date-fns";
-import { CalendarIcon, MessageSquare, Phone, Mail, MapPin, User, Search, Plus } from "lucide-react";
-import { useState } from "react";
+import { MessageSquare, Phone, Mail, MapPin, User, Search, Plus } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
-import { Doc, Id } from "@/convex/_generated/dataModel";
+import type { Doc } from "@/convex/_generated/dataModel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export default function Leads() {
@@ -59,7 +58,7 @@ export default function Leads() {
     toast.success("Comment added");
   };
 
-  const handleCreateLead = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateLead = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     try {
