@@ -5,27 +5,32 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
-import { useMutation, useQuery } from "convex/react";
-import { MessageSquare, Phone, Mail, MapPin, User, Search, Plus, Calendar, Save } from "lucide-react";
+import { useMutation, useQuery, useAction } from "convex/react";
+import { MessageSquare, Phone, Mail, MapPin, User, Search, Plus, Calendar, Save, UserPlus, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Leads() {
   const location = useLocation();
   const path = location.pathname;
+  const { user } = useAuth();
   
   // Determine filter based on path
   const filter = path === "/my_leads" ? "mine" : path === "/all_leads" ? "all" : "unassigned";
   const title = path === "/my_leads" ? "My Leads" : path === "/all_leads" ? "All Leads" : "Unassigned Leads";
 
   const leads = useQuery(api.leads.getLeads, { filter }) || [];
+  const allUsers = useQuery(api.users.getAllUsers) || [];
   const updateLead = useMutation(api.leads.updateLead);
   const addComment = useMutation(api.leads.addComment);
   const createLead = useMutation(api.leads.createLead);
+  const assignLead = useMutation(api.leads.assignLead);
+  const sendWhatsAppMessage = useAction(api.whatsapp.sendWhatsAppMessage);
 
   const [selectedLead, setSelectedLead] = useState<Doc<"leads"> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -33,6 +38,8 @@ export default function Leads() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedLead, setEditedLead] = useState<Partial<Doc<"leads">>>({});
+  const [whatsappMessage, setWhatsappMessage] = useState("");
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
 
   const comments = useQuery(api.leads.getComments, selectedLead ? { leadId: selectedLead._id } : "skip");
 
@@ -41,6 +48,47 @@ export default function Leads() {
     lead.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
     lead.mobile.includes(searchQuery)
   );
+
+  const handleAssignToSelf = async (leadId: string) => {
+    if (!user) return;
+    try {
+      await assignLead({ leadId: leadId as any, userId: user._id });
+      toast.success("Lead assigned to you");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign lead");
+    }
+  };
+
+  const handleAssignToUser = async (leadId: string, userId: string) => {
+    try {
+      await assignLead({ leadId: leadId as any, userId: userId as any });
+      toast.success("Lead assigned successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign lead");
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!selectedLead || !whatsappMessage.trim()) {
+      toast.error("Please enter a message");
+      return;
+    }
+    
+    setIsSendingWhatsApp(true);
+    try {
+      await sendWhatsAppMessage({
+        phoneNumber: selectedLead.mobile,
+        message: whatsappMessage,
+        leadId: selectedLead._id,
+      });
+      setWhatsappMessage("");
+      toast.success("WhatsApp message sent");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send WhatsApp message");
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
 
   const handleStatusChange = async (status: string) => {
     if (!selectedLead) return;
@@ -176,6 +224,9 @@ export default function Leads() {
     return new Date(timestamp).toLocaleString();
   };
 
+  const isAdmin = user?.role === "admin";
+  const isUnassignedView = filter === "unassigned";
+
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)]">
@@ -263,7 +314,7 @@ export default function Leads() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground truncate mb-2">{lead.subject}</p>
-                    <div className="flex gap-2 text-xs flex-wrap">
+                    <div className="flex gap-2 text-xs flex-wrap items-center">
                       <span className="bg-secondary px-2 py-0.5 rounded-full">{lead.source}</span>
                       <span className={`px-2 py-0.5 rounded-full ${
                         lead.status === 'Hot' ? 'bg-red-100 text-red-700' :
@@ -274,6 +325,44 @@ export default function Leads() {
                         <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
                           Overdue
                         </span>
+                      )}
+                      {isUnassignedView && !lead.assignedTo && (
+                        <>
+                          {!isAdmin ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAssignToSelf(lead._id);
+                              }}
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" />
+                              Assign to me
+                            </Button>
+                          ) : (
+                            <Select
+                              onValueChange={(userId) => {
+                                handleAssignToUser(lead._id, userId);
+                              }}
+                            >
+                              <SelectTrigger 
+                                className="h-6 text-xs w-auto"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <SelectValue placeholder="Assign to..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allUsers.map((u) => (
+                                  <SelectItem key={u._id} value={u._id}>
+                                    {u.name || u.email}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </>
                       )}
                     </div>
                   </CardContent>
@@ -505,6 +594,28 @@ export default function Leads() {
                       {selectedLead.message || "No message content."}
                     </div>
                   )}
+                </div>
+
+                <div className="mb-8">
+                  <h3 className="font-semibold mb-2 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-green-600" /> Send WhatsApp Message
+                  </h3>
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder="Type your WhatsApp message..."
+                      value={whatsappMessage}
+                      onChange={(e) => setWhatsappMessage(e.target.value)}
+                      className="min-h-[100px]"
+                    />
+                    <Button 
+                      onClick={handleSendWhatsApp} 
+                      disabled={isSendingWhatsApp || !whatsappMessage.trim()}
+                      className="w-full"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      {isSendingWhatsApp ? "Sending..." : "Send WhatsApp Message"}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">

@@ -76,3 +76,17 @@ export const createUserWithRole = internalMutation({
     });
   },
 });
+
+export const getAllUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    
+    const currentUser = await ctx.db.get(userId);
+    // Only admins can see all users
+    if (currentUser?.role !== ROLES.ADMIN) return [];
+    
+    return await ctx.db.query("users").collect();
+  },
+});

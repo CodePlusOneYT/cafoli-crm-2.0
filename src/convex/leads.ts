@@ -140,6 +140,32 @@ export const updateLead = mutation({
   },
 });
 
+export const assignLead = mutation({
+  args: {
+    leadId: v.id("leads"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const currentUserId = await getAuthUserId(ctx);
+    if (!currentUserId) throw new Error("Unauthorized");
+    
+    const currentUser = await ctx.db.get(currentUserId);
+    const lead = await ctx.db.get(args.leadId);
+    
+    if (!lead) throw new Error("Lead not found");
+    
+    // Staff can only assign to themselves
+    if (currentUser?.role === ROLES.STAFF && args.userId !== currentUserId) {
+      throw new Error("Staff can only assign leads to themselves");
+    }
+    
+    await ctx.db.patch(args.leadId, {
+      assignedTo: args.userId,
+      lastActivity: Date.now(),
+    });
+  },
+});
+
 export const addComment = mutation({
   args: {
     leadId: v.id("leads"),

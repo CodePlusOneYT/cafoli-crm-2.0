@@ -1,0 +1,44 @@
+import { internalMutation } from "./_generated/server";
+import { v } from "convex/values";
+
+export const storeMessage = internalMutation({
+  args: {
+    leadId: v.id("leads"),
+    phoneNumber: v.string(),
+    content: v.string(),
+    direction: v.string(),
+    status: v.string(),
+    externalId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find or create chat
+    let chat = await ctx.db
+      .query("chats")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    if (!chat) {
+      const chatId = await ctx.db.insert("chats", {
+        leadId: args.leadId,
+        platform: "whatsapp",
+        externalId: args.phoneNumber,
+        lastMessageAt: Date.now(),
+      });
+      chat = await ctx.db.get(chatId);
+    } else {
+      await ctx.db.patch(chat._id, {
+        lastMessageAt: Date.now(),
+      });
+    }
+
+    if (!chat) throw new Error("Failed to create chat");
+
+    // Store message
+    await ctx.db.insert("messages", {
+      chatId: chat._id,
+      direction: args.direction,
+      content: args.content,
+      status: args.status,
+    });
+  },
+});
