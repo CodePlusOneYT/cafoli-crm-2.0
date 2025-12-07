@@ -77,6 +77,18 @@ export const createUserWithRole = internalMutation({
   },
 });
 
+export const updateUserRole = internalMutation({
+  args: {
+    userId: v.id("users"),
+    role: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, {
+      role: args.role as "admin" | "staff",
+    });
+  },
+});
+
 export const getAllUsers = query({
   args: {},
   handler: async (ctx) => {

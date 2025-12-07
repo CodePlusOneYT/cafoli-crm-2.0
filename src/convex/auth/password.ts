@@ -12,9 +12,6 @@ const HARDCODED_USERS = [
   }
 ];
 
-// Dynamic users storage (will be populated from database)
-let dynamicUsers: Array<{ username: string; password: string; role: string; name: string }> = [];
-
 export const password = ConvexCredentials({
   id: "password",
   authorize: async (credentials, ctx): Promise<{ userId: Id<"users"> } | null> => {
@@ -28,16 +25,22 @@ export const password = ConvexCredentials({
 
     if (hardcodedUser) {
       // Check if user exists in database
-      let user: { _id: Id<"users"> } | null = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
+      let user: { _id: Id<"users">; role?: string } | null = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
 
-      // Create user if doesn't exist
+      // Create user if doesn't exist OR update role if it's not admin
       if (!user) {
         const userId = await ctx.runMutation(internal.users.createUserWithRole, {
           email: username,
           name: hardcodedUser.name,
           role: hardcodedUser.role,
         });
-        user = { _id: userId };
+        user = { _id: userId, role: hardcodedUser.role };
+      } else if (user.role !== "admin") {
+        // Ensure the owner account always has admin role
+        await ctx.runMutation(internal.users.updateUserRole, {
+          userId: user._id,
+          role: "admin",
+        });
       }
 
       if (!user) {
