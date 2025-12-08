@@ -14,6 +14,7 @@ import type * as auth_password from "../auth/password.js";
 import type * as campaigns from "../campaigns.js";
 import type * as http from "../http.js";
 import type * as leads from "../leads.js";
+import type * as lib_passwordUtils from "../lib/passwordUtils.js";
 import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as whatsappMutations from "../whatsappMutations.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   campaigns: typeof campaigns;
   http: typeof http;
   leads: typeof leads;
+  "lib/passwordUtils": typeof lib_passwordUtils;
   users: typeof users;
   whatsapp: typeof whatsapp;
   whatsappMutations: typeof whatsappMutations;

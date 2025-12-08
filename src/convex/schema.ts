@@ -40,6 +40,7 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+      passwordHash: v.optional(v.string()), // hashed password for password authentication
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     leads: defineTable({

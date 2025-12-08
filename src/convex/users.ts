@@ -74,12 +74,14 @@ export const createUserWithRole = internalMutation({
     email: v.string(),
     name: v.string(),
     role: v.string(),
+    passwordHash: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("users", {
       email: args.email,
       name: args.name,
       role: args.role as "admin" | "staff",
+      passwordHash: args.passwordHash,
     });
   },
 });
@@ -136,11 +138,16 @@ export const createUser = mutation({
       throw new Error("User with this email already exists");
     }
 
+    // Hash the password before storing
+    const { hashPassword } = await import("./lib/passwordUtils");
+    const passwordHash = hashPassword(args.password);
+
     // Create user in database
     const newUserId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       name: args.name,
       role: args.role as "admin" | "staff",
+      passwordHash,
     });
 
     return newUserId;

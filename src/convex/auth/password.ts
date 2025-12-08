@@ -1,6 +1,9 @@
+"use node";
+
 import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
+import { hashPassword, verifyPassword } from "../lib/passwordUtils";
 
 // Hardcoded credentials storage (in-memory for this implementation)
 const HARDCODED_USERS = [
@@ -25,16 +28,18 @@ export const password = ConvexCredentials({
 
     if (hardcodedUser) {
       // Check if user exists in database
-      let user: { _id: Id<"users">; role?: string } | null = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
+      let user: { _id: Id<"users">; role?: string; passwordHash?: string } | null = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
 
       // Create user if doesn't exist OR update role if it's not admin
       if (!user) {
+        const passwordHash = hashPassword(hardcodedUser.password);
         const userId = await ctx.runMutation(internal.users.createUserWithRole, {
           email: username,
           name: hardcodedUser.name,
           role: hardcodedUser.role,
+          passwordHash,
         });
-        user = { _id: userId, role: hardcodedUser.role };
+        user = { _id: userId, role: hardcodedUser.role, passwordHash };
       } else if (user.role !== "admin") {
         // Ensure the owner account always has admin role
         await ctx.runMutation(internal.users.updateUserRole, {
@@ -50,14 +55,11 @@ export const password = ConvexCredentials({
     // Check against dynamic users (created by admin)
     const dbUser = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
     
-    if (dbUser) {
-      // For now, we'll use a simple password check
-      // In production, you should hash passwords
-      // For this implementation, we'll store passwords in a separate table or use the email as password
-      // Since we don't have password hashing yet, we'll accept any password for existing users
-      // This is a security risk and should be fixed in production
-      
-      return { userId: dbUser._id };
+    if (dbUser && dbUser.passwordHash) {
+      // Verify password using hash
+      if (verifyPassword(password, dbUser.passwordHash)) {
+        return { userId: dbUser._id };
+      }
     }
 
     return null;
