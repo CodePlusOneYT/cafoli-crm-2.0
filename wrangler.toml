@@ -1,13 +1,3 @@
-name = "cafoli-connect"
+name = "cafoli-crm"
 compatibility_date = "2024-12-07"
 pages_build_output_dir = "dist"
-
-[build]
-command = "pnpm run build"
-
-[build.environment]
-NODE_VERSION = "20"
-
-# Environment variables for Cloudflare Pages
-# Note: Set these in the Cloudflare Pages dashboard
-# VITE_CONVEX_URL = "your-convex-url"
