@@ -1,3 +1,19 @@
-name = "cafoli-crm"
-compatibility_date = "2024-12-07"
+name = "cafoli-connect"
+compatibility_date = "2024-12-08"
 pages_build_output_dir = "dist"
+
+# IMPORTANT: Configure these in your Cloudflare Pages dashboard:
+# 
+# Build Settings:
+# - Build command: pnpm run build
+# - Build output directory: dist
+# - Node.js version: 20
+#
+# Environment Variables (required):
+# - VITE_CONVEX_URL: Your Convex deployment URL (from convex dashboard)
+# - JWT_PRIVATE_KEY: Your JWT private key for Convex Auth
+#
+# To get your VITE_CONVEX_URL:
+# 1. Go to your Convex dashboard
+# 2. Copy the deployment URL
+# 3. Add it as an environment variable in Cloudflare Pages settings

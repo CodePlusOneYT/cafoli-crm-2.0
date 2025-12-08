@@ -28,7 +28,34 @@ function RouteLoading() {
   );
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convexUrl = import.meta.env.VITE_CONVEX_URL;
+
+if (!convexUrl) {
+  console.error("VITE_CONVEX_URL is not set. Please configure it in your environment variables.");
+  document.getElementById("root")!.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="max-width: 500px; text-align: center;">
+        <h1 style="color: #dc2626; margin-bottom: 16px;">Configuration Error</h1>
+        <p style="color: #374151; margin-bottom: 24px;">
+          The VITE_CONVEX_URL environment variable is not set. 
+          Please configure it in your Cloudflare Pages dashboard.
+        </p>
+        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; text-align: left;">
+          <p style="font-weight: 600; margin-bottom: 8px;">To fix this:</p>
+          <ol style="margin: 0; padding-left: 20px; color: #374151;">
+            <li>Go to your Cloudflare Pages dashboard</li>
+            <li>Navigate to Settings → Environment Variables</li>
+            <li>Add VITE_CONVEX_URL with your Convex deployment URL</li>
+            <li>Redeploy your application</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  `;
+  throw new Error("VITE_CONVEX_URL is required");
+}
+
+const convex = new ConvexReactClient(convexUrl);
 
 function RouteSyncer() {
   const location = useLocation();
