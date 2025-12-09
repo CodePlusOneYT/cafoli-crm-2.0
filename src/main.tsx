@@ -30,8 +30,17 @@ function RouteLoading() {
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
 
+// Debug logging to help troubleshoot
+console.log("Environment check:", {
+  convexUrl,
+  allEnvVars: import.meta.env,
+  mode: import.meta.env.MODE,
+  prod: import.meta.env.PROD,
+});
+
 if (!convexUrl) {
   console.error("VITE_CONVEX_URL is not set. Please configure it in your environment variables.");
+  console.error("Available env vars:", Object.keys(import.meta.env));
   document.getElementById("root")!.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
       <div style="max-width: 500px; text-align: center;">

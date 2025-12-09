@@ -18,7 +18,17 @@ Your Convex URL is: `https://polished-marmot-96.convex.cloud`
    - **Value**: `https://polished-marmot-96.convex.cloud`
    - **Environment**: Select **both "Production" and "Preview"**
 5. Click **Save**
-6. **CRITICAL**: Go to **Deployments** tab and click **Retry deployment** or push a new commit to trigger a rebuild
+6. **CRITICAL**: Go to **Deployments** tab and:
+   - Click **Retry deployment** (preferred), OR
+   - Push a new commit to trigger a rebuild
+   - **Clear build cache** if the issue persists (in deployment settings)
+
+**Troubleshooting if still not working:**
+- Verify the variable name is exactly `VITE_CONVEX_URL` (case-sensitive)
+- Check the deployment logs to confirm the variable is being set during build
+- Ensure you're checking the correct environment (Production vs Preview)
+- Try clearing Cloudflare's build cache and redeploying
+- Check browser console for debug logs showing available environment variables
 
 ### 2. JWT_PRIVATE_KEY (Backend Environment Variable - Convex Dashboard)
 
