@@ -34,10 +34,38 @@ export const getCurrentUser = async (ctx: QueryCtx) => {
   return await ctx.db.get(userId);
 };
 
+export const login = mutation({
+  args: { email: v.string(), password: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", args.email.toLowerCase()))
+      .unique();
+    
+    if (!user || !user.passwordHash) {
+      return null;
+    }
+
+    const { verifyPassword } = await import("./lib/passwordUtils");
+    if (verifyPassword(args.password, user.passwordHash)) {
+      return user._id;
+    }
+    return null;
+  },
+});
+
+export const getUser = query({
+  args: { id: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    if (!args.id) return null;
+    return await ctx.db.get(args.id);
+  },
+});
+
 export const ensureRole = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
     if (!userId) return;
 
     const user = await ctx.db.get(userId);

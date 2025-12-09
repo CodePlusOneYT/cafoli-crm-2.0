@@ -29,7 +29,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   
   useEffect(() => {
     if (user && !user.role) {
-      ensureRole();
+      ensureRole({ userId: user._id });
     }
   }, [user, ensureRole]);
 
