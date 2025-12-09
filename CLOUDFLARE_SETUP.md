@@ -1,30 +1,31 @@
 # Cloudflare Pages Deployment Setup
 
+## Your Convex Deployment URL
+
+Your Convex URL is: `https://polished-marmot-96.convex.cloud`
+
 ## Required Environment Variables
 
-You need to set these environment variables in your Cloudflare Pages dashboard:
+### 1. VITE_CONVEX_URL (Frontend Environment Variable - Cloudflare Pages)
 
-### 1. VITE_CONVEX_URL (Frontend Environment Variable)
+**IMPORTANT**: After adding or updating environment variables, you MUST trigger a new deployment for changes to take effect.
 
 1. Go to your Cloudflare Pages dashboard
-2. Select your project
+2. Select your project (cafoli-crm or similar)
 3. Navigate to **Settings** → **Environment Variables**
 4. Add a new variable:
    - **Variable name**: `VITE_CONVEX_URL`
-   - **Value**: Your Convex deployment URL (e.g., `https://your-project.convex.cloud`)
-   - **Environment**: Select both "Production" and "Preview"
+   - **Value**: `https://polished-marmot-96.convex.cloud`
+   - **Environment**: Select **both "Production" and "Preview"**
+5. Click **Save**
+6. **CRITICAL**: Go to **Deployments** tab and click **Retry deployment** or push a new commit to trigger a rebuild
 
-To find your Convex URL:
-- Go to your Convex dashboard at https://dashboard.convex.dev
-- Select your project
-- Copy the deployment URL from the dashboard
-
-### 2. JWT_PRIVATE_KEY (Backend Environment Variable)
+### 2. JWT_PRIVATE_KEY (Backend Environment Variable - Convex Dashboard)
 
 **Note**: This should be set in your Convex backend, NOT in Cloudflare Pages.
 
 1. Go to your Convex dashboard at https://dashboard.convex.dev
-2. Select your project
+2. Select your project (polished-marmot-96)
 3. Navigate to **Settings** → **Environment Variables**
 4. Add a new variable:
    - **Variable name**: `JWT_PRIVATE_KEY`
