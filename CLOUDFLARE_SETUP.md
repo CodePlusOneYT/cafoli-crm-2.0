@@ -12,6 +12,8 @@ Your Convex URL is: `https://polished-marmot-96.convex.cloud`
 
 **IMPORTANT**: Make sure the value field is not empty when you set the environment variable. The value should be exactly: `https://polished-marmot-96.convex.cloud` (without quotes, no trailing spaces).
 
+**IMPORTANT**: Make sure the value field is not empty when you set the environment variable. The value should be exactly: `https://polished-marmot-96.convex.cloud` (without quotes, no trailing spaces).
+
 1. Go to your Cloudflare Pages dashboard
 2. Select your project (cafoli-crm or similar)
 3. Navigate to **Settings** → **Environment Variables**
