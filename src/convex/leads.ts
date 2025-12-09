@@ -20,9 +20,10 @@ async function checkRole(ctx: any, allowedRoles: string[]) {
 export const getLeads = query({
   args: {
     filter: v.optional(v.string()), // "all", "unassigned", "mine"
+    userId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.userId || await getAuthUserId(ctx);
     if (!userId) return [];
     
     const user = await ctx.db.get(userId);
@@ -65,13 +66,20 @@ export const createLead = mutation({
     email: v.optional(v.string()),
     agencyName: v.optional(v.string()),
     message: v.optional(v.string()),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.userId;
     if (!userId) throw new Error("Unauthorized");
 
     const leadId = await ctx.db.insert("leads", {
-      ...args,
+      name: args.name,
+      subject: args.subject,
+      source: args.source,
+      mobile: args.mobile,
+      email: args.email,
+      agencyName: args.agencyName,
+      message: args.message,
       status: "Cold", // Default
       type: "To be Decided", // Default
       lastActivity: Date.now(),
@@ -100,9 +108,10 @@ export const updateLead = mutation({
       district: v.optional(v.string()),
       station: v.optional(v.string()),
     }),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.userId;
     if (!userId) throw new Error("Unauthorized");
     
     // Get the lead to check if it's assigned
@@ -144,9 +153,10 @@ export const assignLead = mutation({
   args: {
     leadId: v.id("leads"),
     userId: v.id("users"),
+    adminId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const currentUserId = await getAuthUserId(ctx);
+    const currentUserId = args.adminId;
     if (!currentUserId) throw new Error("Unauthorized");
     
     const currentUser = await ctx.db.get(currentUserId);
@@ -170,9 +180,10 @@ export const addComment = mutation({
   args: {
     leadId: v.id("leads"),
     content: v.string(),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.userId;
     if (!userId) throw new Error("Unauthorized");
 
     await ctx.db.insert("comments", {

@@ -16,7 +16,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 
 export default function Admin() {
   const { user: currentUser, signIn } = useAuth();
-  const allUsers = useQuery(api.users.getAllUsers) || [];
+  const allUsers = useQuery(api.users.getAllUsers, currentUser ? { userId: currentUser._id } : "skip") || [];
   const createUser = useMutation(api.users.createUser);
   const deleteUser = useMutation(api.users.deleteUser);
 
@@ -36,12 +36,18 @@ export default function Admin() {
       return;
     }
 
+    if (!currentUser) {
+      toast.error("You must be logged in");
+      return;
+    }
+
     try {
       await createUser({
         email: newUserData.email,
         name: newUserData.name,
         password: newUserData.password,
         role: newUserData.role,
+        adminId: currentUser._id,
       });
       
       toast.success("User created successfully");
@@ -53,8 +59,9 @@ export default function Admin() {
   };
 
   const handleDeleteUser = async (userId: Id<"users">) => {
+    if (!currentUser) return;
     try {
-      await deleteUser({ userId });
+      await deleteUser({ userId, adminId: currentUser._id });
       toast.success("User deleted successfully");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete user");

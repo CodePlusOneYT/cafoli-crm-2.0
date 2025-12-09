@@ -3,9 +3,9 @@ import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const getCampaigns = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
     if (!userId) return [];
     
     // Limit to recent campaigns for faster loading
@@ -17,13 +17,15 @@ export const createCampaign = mutation({
   args: {
     name: v.string(),
     type: v.string(),
+    userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.userId;
     if (!userId) throw new Error("Unauthorized");
     
     return await ctx.db.insert("campaigns", {
-      ...args,
+      name: args.name,
+      type: args.type,
       status: "Draft",
       metrics: {
         sent: 0,

@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import { Plus, Send, BarChart } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Campaigns() {
-  const campaigns = useQuery(api.campaigns.getCampaigns) || [];
+  const { user } = useAuth();
+  const campaigns = useQuery(api.campaigns.getCampaigns, user ? { userId: user._id } : "skip") || [];
 
   return (
     <AppLayout>

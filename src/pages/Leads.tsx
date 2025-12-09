@@ -24,8 +24,8 @@ export default function Leads() {
   const filter = path === "/my_leads" ? "mine" : path === "/all_leads" ? "all" : "unassigned";
   const title = path === "/my_leads" ? "My Leads" : path === "/all_leads" ? "All Leads" : "Unassigned Leads";
 
-  const leads = useQuery(api.leads.getLeads, { filter }) || [];
-  const allUsers = useQuery(api.users.getAllUsers) || [];
+  const leads = useQuery(api.leads.getLeads, user ? { filter, userId: user._id } : "skip") || [];
+  const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];
   const updateLead = useMutation(api.leads.updateLead);
   const addComment = useMutation(api.leads.addComment);
   const createLead = useMutation(api.leads.createLead);
@@ -49,7 +49,7 @@ export default function Leads() {
   const handleAssignToSelf = async (leadId: string) => {
     if (!user) return;
     try {
-      await assignLead({ leadId: leadId as any, userId: user._id });
+      await assignLead({ leadId: leadId as any, userId: user._id, adminId: user._id });
       toast.success("Lead assigned to you");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign lead");
@@ -57,8 +57,9 @@ export default function Leads() {
   };
 
   const handleAssignToUser = async (leadId: string, userId: string) => {
+    if (!user) return;
     try {
-      await assignLead({ leadId: leadId as any, userId: userId as any });
+      await assignLead({ leadId: leadId as any, userId: userId as any, adminId: user._id });
       toast.success("Lead assigned successfully");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign lead");
@@ -66,28 +67,29 @@ export default function Leads() {
   };
 
   const handleStatusChange = async (status: string) => {
-    if (!selectedLead) return;
-    await updateLead({ id: selectedLead._id, patch: { status } });
+    if (!selectedLead || !user) return;
+    await updateLead({ id: selectedLead._id, patch: { status }, userId: user._id });
     setSelectedLead({ ...selectedLead, status });
     toast.success("Status updated");
   };
 
   const handleTypeChange = async (type: string) => {
-    if (!selectedLead) return;
-    await updateLead({ id: selectedLead._id, patch: { type } });
+    if (!selectedLead || !user) return;
+    await updateLead({ id: selectedLead._id, patch: { type }, userId: user._id });
     setSelectedLead({ ...selectedLead, type });
     toast.success("Type updated");
   };
 
   const handleAddComment = async () => {
-    if (!selectedLead || !newComment.trim()) return;
-    await addComment({ leadId: selectedLead._id, content: newComment });
+    if (!selectedLead || !newComment.trim() || !user) return;
+    await addComment({ leadId: selectedLead._id, content: newComment, userId: user._id });
     setNewComment("");
     toast.success("Comment added");
   };
 
   const handleCreateLead = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return;
     const formData = new FormData(e.currentTarget);
     try {
       await createLead({
@@ -98,6 +100,7 @@ export default function Leads() {
         email: formData.get("email") as string || undefined,
         agencyName: formData.get("agencyName") as string || undefined,
         message: formData.get("message") as string || undefined,
+        userId: user._id,
       });
       setIsCreateOpen(false);
       toast.success("Lead created successfully");
@@ -132,7 +135,7 @@ export default function Leads() {
   };
 
   const saveEdits = async () => {
-    if (!selectedLead) return;
+    if (!selectedLead || !user) return;
 
     // Validate follow-up date if lead is assigned
     if (selectedLead.assignedTo && editedLead.nextFollowUpDate) {
@@ -171,7 +174,8 @@ export default function Leads() {
           station: editedLead.station,
           message: editedLead.message,
           nextFollowUpDate: editedLead.nextFollowUpDate,
-        } 
+        },
+        userId: user._id,
       });
       setSelectedLead({ ...selectedLead, ...editedLead });
       setIsEditing(false);

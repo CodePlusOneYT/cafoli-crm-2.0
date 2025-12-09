@@ -157,9 +157,9 @@ export const updateUserRole = internalMutation({
 });
 
 export const getAllUsers = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
     if (!userId) return [];
     
     const currentUser = await ctx.db.get(userId);
@@ -176,9 +176,10 @@ export const createUser = mutation({
     name: v.string(),
     password: v.string(),
     role: v.string(),
+    adminId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.adminId;
     if (!userId) throw new Error("Unauthorized");
     
     const currentUser = await ctx.db.get(userId);
@@ -215,9 +216,10 @@ export const createUser = mutation({
 export const deleteUser = mutation({
   args: {
     userId: v.id("users"),
+    adminId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const currentUserId = await getAuthUserId(ctx);
+    const currentUserId = args.adminId;
     if (!currentUserId) throw new Error("Unauthorized");
     
     const currentUser = await ctx.db.get(currentUserId);
