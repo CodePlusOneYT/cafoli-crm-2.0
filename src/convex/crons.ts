@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Fetch Pharmavends leads every 5 minutes
-// Temporarily commented to allow type regeneration
+// Note: Temporarily disabled to allow type regeneration, will re-enable after deployment
 // crons.interval(
 //   "fetch_pharmavends_leads",
 //   { minutes: 5 },

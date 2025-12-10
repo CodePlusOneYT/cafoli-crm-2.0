@@ -12,24 +12,39 @@ http.route({
   path: "/webhooks/whatsapp",
   method: "GET",
   handler: httpAction(async (ctx, req) => {
-    const url = new URL(req.url);
-    const mode = url.searchParams.get("hub.mode");
-    const token = url.searchParams.get("hub.verify_token");
-    const challenge = url.searchParams.get("hub.challenge");
+    try {
+      const url = new URL(req.url);
+      const mode = url.searchParams.get("hub.mode");
+      const token = url.searchParams.get("hub.verify_token");
+      const challenge = url.searchParams.get("hub.challenge");
 
-    const verifyToken = process.env.WEBHOOK_VERIFICATION_TOKEN || "cafoli_webhook_verify_2025";
+      const verifyToken = process.env.WEBHOOK_VERIFICATION_TOKEN || "cafoli_webhook_verify_2025";
 
-    console.log("Webhook verification attempt:", { mode, token, verifyToken, challenge });
-
-    if (mode === "subscribe" && token === verifyToken) {
-      console.log("Webhook verified successfully");
-      return new Response(challenge, { 
-        status: 200,
-        headers: { "Content-Type": "text/plain" }
+      console.log("WhatsApp webhook verification:", { 
+        mode, 
+        receivedToken: token, 
+        expectedToken: verifyToken,
+        challenge,
+        match: token === verifyToken
       });
-    } else {
-      console.error("Webhook verification failed", { mode, token, verifyToken });
-      return new Response("Forbidden", { status: 403 });
+
+      if (mode === "subscribe" && token === verifyToken) {
+        console.log("✅ Webhook verified successfully");
+        return new Response(challenge || "", { 
+          status: 200,
+          headers: { "Content-Type": "text/plain" }
+        });
+      } else {
+        console.error("❌ Webhook verification failed:", { 
+          mode, 
+          tokenMatch: token === verifyToken,
+          hasChallenge: !!challenge 
+        });
+        return new Response("Verification failed", { status: 403 });
+      }
+    } catch (error) {
+      console.error("Webhook verification error:", error);
+      return new Response("Internal error", { status: 500 });
     }
   }),
 });
