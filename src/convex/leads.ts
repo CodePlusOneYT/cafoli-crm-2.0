@@ -45,7 +45,7 @@ export const getLeads = query({
       leads = await ctx.db.query("leads").order("desc").collect();
       leads = leads.filter(l => !l.assignedTo);
     } else if (args.filter === "all") {
-      if (user.role !== ROLES.ADMIN) throw new Error("Unauthorized");
+      if (user.role !== ROLES.ADMIN) return [];
       leads = await ctx.db.query("leads").order("desc").collect();
     } else {
       // Default behavior for /leads page (unassigned)
