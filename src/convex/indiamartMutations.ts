@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 export const checkIndiamartLeadExists = internalQuery({
   args: { uniqueQueryId: v.string() },
@@ -58,6 +59,21 @@ export const createIndiamartLead = internalMutation({
       indiamartUniqueId: args.uniqueQueryId,
       indiamartMetadata: args.metadata,
     });
+    
+    // Send welcome email if email is provided
+    // Temporarily disabled to allow type generation
+    // if (args.email) {
+    //   try {
+    //     await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+    //       leadName: args.name,
+    //       leadEmail: args.email,
+    //       source: "IndiaMART",
+    //     });
+    //   } catch (error) {
+    //     console.error("Failed to schedule welcome email:", error);
+    //     // Don't throw - lead creation should succeed even if email fails
+    //   }
+    // }
     
     return leadId;
   },

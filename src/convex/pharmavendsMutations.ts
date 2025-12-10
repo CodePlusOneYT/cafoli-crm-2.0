@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 export const checkLeadExists = internalQuery({
   args: { uid: v.string() },
@@ -55,6 +56,21 @@ export const createPharmavendsLead = internalMutation({
       pharmavendsUid: args.uid,
       pharmavendsMetadata: args.metadata,
     });
+    
+    // Send welcome email
+    // Temporarily disabled to allow type generation
+    // if (args.email) {
+    //   try {
+    //     await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+    //       leadName: args.name,
+    //       leadEmail: args.email,
+    //       source: "Pharmavends",
+    //     });
+    //   } catch (error) {
+    //     console.error("Failed to schedule welcome email:", error);
+    //     // Don't throw - lead creation should succeed even if email fails
+    //   }
+    // }
     
     return leadId;
   },

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { ROLES } from "./schema";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { internal } from "./_generated/api";
 
 // Helper to check permissions
 async function checkRole(ctx: any, allowedRoles: string[]) {
@@ -80,10 +81,26 @@ export const createLead = mutation({
       email: args.email,
       agencyName: args.agencyName,
       message: args.message,
-      status: "Cold", // Default
-      type: "To be Decided", // Default
+      status: "Cold",
+      type: "To be Decided",
       lastActivity: Date.now(),
     });
+    
+    // Send welcome email for manually created leads if email is provided
+    // Temporarily disabled to allow type generation
+    // if (args.email) {
+    //   try {
+    //     await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+    //       leadName: args.name,
+    //       leadEmail: args.email,
+    //       source: args.source,
+    //     });
+    //   } catch (error) {
+    //     console.error("Failed to schedule welcome email:", error);
+    //     // Don't throw - lead creation should succeed even if email fails
+    //   }
+    // }
+    
     return leadId;
   },
 });
