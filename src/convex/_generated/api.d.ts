@@ -24,6 +24,7 @@ import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as whatsappMutations from "../whatsappMutations.js";
 import type * as whatsappQueries from "../whatsappQueries.js";
+import type * as whatsappStorage from "../whatsappStorage.js";
 
 import type {
   ApiFromModules,
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   whatsapp: typeof whatsapp;
   whatsappMutations: typeof whatsappMutations;
   whatsappQueries: typeof whatsappQueries;
+  whatsappStorage: typeof whatsappStorage;
 }>;
 
 /**

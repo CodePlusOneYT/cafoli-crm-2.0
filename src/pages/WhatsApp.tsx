@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MessageSquare, Send, Search, Phone, Video, MoreVertical, Check, CheckCheck, Paperclip, Smile, Image as ImageIcon } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -22,12 +22,17 @@ export default function WhatsApp() {
   const leads = useQuery(api.leads.getLeads, { filter, userId: user?._id }) || [];
   
   const sendWhatsAppMessage = useAction(api.whatsapp.sendWhatsAppMessage);
+  const sendWhatsAppMedia = useAction(api.whatsapp.sendWhatsAppMedia);
+  const generateUploadUrl = useMutation(api.whatsappStorage.generateUploadUrl);
   
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
   const [whatsappMessage, setWhatsappMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedLead = leads.find(l => l._id === selectedLeadId);
   const messages = useQuery(
@@ -45,8 +50,69 @@ export default function WhatsApp() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check file size (max 16MB for WhatsApp)
+      if (file.size > 16 * 1024 * 1024) {
+        toast.error("File size must be less than 16MB");
+        return;
+      }
+      setSelectedFile(file);
+      toast.success(`Selected: ${file.name}`);
+    }
+  };
+
   const handleSendWhatsApp = async () => {
-    if (!selectedLead || !whatsappMessage.trim()) {
+    if (!selectedLead) {
+      toast.error("Please select a contact");
+      return;
+    }
+
+    // If there's a file, send as media
+    if (selectedFile) {
+      setIsUploading(true);
+      setIsSending(true);
+      try {
+        // Generate upload URL
+        const uploadUrl = await generateUploadUrl();
+        
+        // Upload file to Convex storage
+        const result = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": selectedFile.type },
+          body: selectedFile,
+        });
+        
+        const { storageId } = await result.json();
+        
+        // Send media message
+        await sendWhatsAppMedia({
+          phoneNumber: selectedLead.mobile,
+          message: whatsappMessage.trim() || undefined,
+          leadId: selectedLead._id,
+          storageId,
+          fileName: selectedFile.name,
+          mimeType: selectedFile.type,
+        });
+        
+        setWhatsappMessage("");
+        setSelectedFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        toast.success("Media sent successfully");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to send media");
+      } finally {
+        setIsUploading(false);
+        setIsSending(false);
+      }
+      return;
+    }
+
+    // Send text message
+    if (!whatsappMessage.trim()) {
       toast.error("Please enter a message");
       return;
     }
@@ -274,12 +340,39 @@ export default function WhatsApp() {
 
                 {/* Message Input */}
                 <div className="border-t p-4">
+                  {selectedFile && (
+                    <div className="mb-2 flex items-center gap-2 p-2 bg-muted rounded-lg">
+                      <Paperclip className="h-4 w-4" />
+                      <span className="text-sm flex-1 truncate">{selectedFile.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = "";
+                          }
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  )}
                   <div className="flex items-end gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    />
                     <Button 
                       variant="ghost" 
                       size="icon"
                       className="h-10 w-10 text-muted-foreground hover:text-foreground"
                       title="Attach file"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSending || isUploading}
                     >
                       <Paperclip className="h-5 w-5" />
                     </Button>
@@ -290,7 +383,7 @@ export default function WhatsApp() {
                         onChange={(e) => setWhatsappMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
                         className="pr-10"
-                        disabled={isSending}
+                        disabled={isSending || isUploading}
                       />
                       <Button 
                         variant="ghost" 
@@ -303,7 +396,7 @@ export default function WhatsApp() {
                     </div>
                     <Button 
                       onClick={handleSendWhatsApp} 
-                      disabled={isSending || !whatsappMessage.trim()}
+                      disabled={isSending || isUploading || (!whatsappMessage.trim() && !selectedFile)}
                       size="icon"
                       className="h-10 w-10"
                     >
