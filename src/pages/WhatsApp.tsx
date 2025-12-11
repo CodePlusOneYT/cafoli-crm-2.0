@@ -11,9 +11,16 @@ import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAuth } from "@/hooks/use-auth";
+import { ROLES } from "@/convex/schema";
 
 export default function WhatsApp() {
-  const leads = useQuery(api.leads.getLeads, { filter: "all" }) || [];
+  const { user } = useAuth();
+  
+  // Determine filter based on user role
+  const filter = user?.role === ROLES.ADMIN ? "all" : "mine";
+  const leads = useQuery(api.leads.getLeads, { filter, userId: user?._id }) || [];
+  
   const sendWhatsAppMessage = useAction(api.whatsapp.sendWhatsAppMessage);
   
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
@@ -55,7 +62,11 @@ export default function WhatsApp() {
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         <div className="mb-6">
           <h1 className="text-3xl font-bold tracking-tight">WhatsApp Messaging</h1>
-          <p className="text-muted-foreground">Send WhatsApp messages to your leads.</p>
+          <p className="text-muted-foreground">
+            {user?.role === ROLES.ADMIN 
+              ? "Send WhatsApp messages to all leads." 
+              : "Send WhatsApp messages to your assigned leads."}
+          </p>
         </div>
 
         <div className="flex-1 grid md:grid-cols-2 gap-6 overflow-hidden">
