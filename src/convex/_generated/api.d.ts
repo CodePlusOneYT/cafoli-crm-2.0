@@ -23,6 +23,7 @@ import type * as pharmavendsMutations from "../pharmavendsMutations.js";
 import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as whatsappMutations from "../whatsappMutations.js";
+import type * as whatsappQueries from "../whatsappQueries.js";
 
 import type {
   ApiFromModules,
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   whatsapp: typeof whatsapp;
   whatsappMutations: typeof whatsappMutations;
+  whatsappQueries: typeof whatsappQueries;
 }>;
 
 /**
