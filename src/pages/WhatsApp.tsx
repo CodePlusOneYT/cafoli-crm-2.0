@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ROLES } from "@/convex/schema";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { TemplatesDialog } from "@/components/TemplatesDialog";
 
 export default function WhatsApp() {
   const { user } = useAuth();
@@ -209,12 +210,17 @@ export default function WhatsApp() {
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-4rem)]">
         <div className="flex-shrink-0 p-6 pb-4">
-          <h1 className="text-3xl font-bold tracking-tight">WhatsApp Messaging</h1>
-          <p className="text-muted-foreground">
-            {user?.role === ROLES.ADMIN 
-              ? "Send WhatsApp messages to all leads." 
-              : "Send WhatsApp messages to your assigned leads."}
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">WhatsApp Messaging</h1>
+              <p className="text-muted-foreground">
+                {user?.role === ROLES.ADMIN 
+                  ? "Send WhatsApp messages to all leads." 
+                  : "Send WhatsApp messages to your assigned leads."}
+              </p>
+            </div>
+            <TemplatesDialog />
+          </div>
         </div>
 
         <div className="flex-1 grid md:grid-cols-[350px_1fr] gap-4 px-6 pb-6 min-h-0 overflow-hidden">

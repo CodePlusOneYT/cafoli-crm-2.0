@@ -116,6 +116,27 @@ const schema = defineSchema(
       })),
     }),
 
+    // WhatsApp Templates
+    templates: defineTable({
+      name: v.string(),
+      language: v.string(), // e.g., "en_US"
+      category: v.string(), // "MARKETING", "UTILITY", "AUTHENTICATION"
+      status: v.string(), // "APPROVED", "PENDING", "REJECTED"
+      externalId: v.optional(v.string()), // Meta template ID
+      components: v.array(v.object({
+        type: v.string(), // "HEADER", "BODY", "FOOTER", "BUTTONS"
+        format: v.optional(v.string()), // "TEXT", "IMAGE", "VIDEO", "DOCUMENT"
+        text: v.optional(v.string()),
+        buttons: v.optional(v.array(v.object({
+          type: v.string(), // "QUICK_REPLY", "URL", "PHONE_NUMBER"
+          text: v.string(),
+          url: v.optional(v.string()),
+          phoneNumber: v.optional(v.string()),
+        }))),
+      })),
+      lastSyncedAt: v.optional(v.number()),
+    }).index("by_status", ["status"]),
+
     // For WhatsApp integration later
     chats: defineTable({
       leadId: v.id("leads"),
