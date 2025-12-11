@@ -47,7 +47,30 @@ export const storeMessage = internalMutation({
       mediaUrl: args.mediaUrl,
       mediaName: args.mediaName,
       mediaMimeType: args.mediaMimeType,
+      externalId: args.externalId,
     });
+  },
+});
+
+// Update message status based on webhook events
+export const updateMessageStatus = internalMutation({
+  args: {
+    externalId: v.string(),
+    status: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find message by external ID
+    const messages = await ctx.db.query("messages").collect();
+    const message = messages.find(m => m.externalId === args.externalId);
+    
+    if (message) {
+      await ctx.db.patch(message._id, {
+        status: args.status,
+      });
+      console.log(`Updated message ${args.externalId} status to ${args.status}`);
+    } else {
+      console.log(`Message not found for external ID: ${args.externalId}`);
+    }
   },
 });
 

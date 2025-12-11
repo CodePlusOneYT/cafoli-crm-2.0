@@ -133,6 +133,7 @@ const schema = defineSchema(
       mediaUrl: v.optional(v.string()), // URL for images/files
       mediaName: v.optional(v.string()), // Original filename
       mediaMimeType: v.optional(v.string()), // MIME type
+      externalId: v.optional(v.string()), // WhatsApp message ID for status tracking
     }).index("by_chat", ["chatId"]),
   },
   {

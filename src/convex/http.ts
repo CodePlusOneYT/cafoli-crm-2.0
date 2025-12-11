@@ -55,7 +55,7 @@ http.route({
   }),
 });
 
-// WhatsApp webhook for incoming messages (POST)
+// WhatsApp webhook for incoming messages and status updates (POST)
 http.route({
   path: "/webhooks/whatsapp",
   method: "POST",
@@ -64,6 +64,18 @@ http.route({
       const body = await req.json();
       
       console.log("Received WhatsApp webhook:", JSON.stringify(body, null, 2));
+
+      // Process status updates (sent, delivered, read)
+      if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
+        const statuses = body.entry[0].changes[0].value.statuses;
+        
+        for (const statusUpdate of statuses) {
+          await ctx.runAction(internal.whatsapp.handleStatusUpdate, {
+            messageId: statusUpdate.id,
+            status: statusUpdate.status, // "sent", "delivered", "read", "failed"
+          });
+        }
+      }
 
       // Process incoming messages
       if (body.entry?.[0]?.changes?.[0]?.value?.messages) {
