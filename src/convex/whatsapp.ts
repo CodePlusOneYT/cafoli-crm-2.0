@@ -149,6 +149,9 @@ export const handleIncomingMessage = internalAction({
     timestamp: v.string(),
     text: v.string(),
     type: v.string(),
+    mediaId: v.optional(v.string()),
+    mediaMimeType: v.optional(v.string()),
+    mediaFilename: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -166,6 +169,51 @@ export const handleIncomingMessage = internalAction({
       if (matchingLeads && matchingLeads.length > 0) {
         const leadId = matchingLeads[0]._id;
 
+        // Download media if present
+        let mediaUrl = null;
+        if (args.mediaId) {
+          try {
+            const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
+            
+            // Get media URL from WhatsApp
+            const mediaResponse = await fetch(
+              `https://graph.facebook.com/v16.0/${args.mediaId}`,
+              {
+                headers: {
+                  "Authorization": `Bearer ${accessToken}`,
+                },
+              }
+            );
+            
+            const mediaData = await mediaResponse.json();
+            
+            if (mediaData.url) {
+              // Download the media file
+              const fileResponse = await fetch(mediaData.url, {
+                headers: {
+                  "Authorization": `Bearer ${accessToken}`,
+                },
+              });
+              
+              const fileBlob = await fileResponse.blob();
+              
+              // Upload to Convex storage
+              const storageId = await ctx.storage.store(fileBlob);
+              mediaUrl = await ctx.storage.getUrl(storageId);
+            }
+          } catch (error) {
+            console.error("Error downloading incoming media:", error);
+          }
+        }
+
+        // Determine message type
+        let messageType = "text";
+        if (args.type === "image") {
+          messageType = "image";
+        } else if (args.type === "document" || args.type === "video" || args.type === "audio") {
+          messageType = "file";
+        }
+
         // Store incoming message
         await ctx.runMutation(internal.whatsappMutations.storeMessage, {
           leadId,
@@ -174,6 +222,10 @@ export const handleIncomingMessage = internalAction({
           direction: "inbound",
           status: "received",
           externalId: args.messageId,
+          messageType: messageType !== "text" ? messageType : undefined,
+          mediaUrl: mediaUrl || undefined,
+          mediaName: args.mediaFilename || undefined,
+          mediaMimeType: args.mediaMimeType || undefined,
         });
 
         console.log(`Stored incoming message from ${args.from} for lead ${leadId}`);

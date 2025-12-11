@@ -70,12 +70,39 @@ http.route({
         const messages = body.entry[0].changes[0].value.messages;
         
         for (const message of messages) {
+          // Extract media information based on message type
+          let mediaId = null;
+          let mediaCaption = null;
+          let mediaMimeType = null;
+          let mediaFilename = null;
+
+          if (message.type === "image" && message.image) {
+            mediaId = message.image.id;
+            mediaCaption = message.image.caption;
+            mediaMimeType = message.image.mime_type;
+          } else if (message.type === "document" && message.document) {
+            mediaId = message.document.id;
+            mediaCaption = message.document.caption;
+            mediaMimeType = message.document.mime_type;
+            mediaFilename = message.document.filename;
+          } else if (message.type === "video" && message.video) {
+            mediaId = message.video.id;
+            mediaCaption = message.video.caption;
+            mediaMimeType = message.video.mime_type;
+          } else if (message.type === "audio" && message.audio) {
+            mediaId = message.audio.id;
+            mediaMimeType = message.audio.mime_type;
+          }
+
           await ctx.runAction(internal.whatsapp.handleIncomingMessage, {
             from: message.from,
             messageId: message.id,
             timestamp: message.timestamp,
-            text: message.text?.body || "",
+            text: message.text?.body || mediaCaption || "",
             type: message.type,
+            mediaId: mediaId || undefined,
+            mediaMimeType: mediaMimeType || undefined,
+            mediaFilename: mediaFilename || undefined,
           });
         }
       }
