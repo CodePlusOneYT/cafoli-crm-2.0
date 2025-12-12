@@ -172,3 +172,116 @@ export const createTemplate = action({
     }
   },
 });
+
+// Delete a template from Meta API and database
+export const deleteTemplate = action({
+  args: {
+    templateName: v.string(),
+    templateId: v.id("templates"),
+  },
+  handler: async (ctx, args) => {
+    const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
+    const businessAccountId = process.env.WA_BUSINESS_ACCOUNT_ID;
+    
+    if (!accessToken || accessToken.trim() === "") {
+      throw new Error("CLOUD_API_ACCESS_TOKEN is not set or is empty.");
+    }
+    
+    if (!businessAccountId || businessAccountId.trim() === "") {
+      throw new Error("WA_BUSINESS_ACCOUNT_ID is not set or is empty.");
+    }
+
+    try {
+      // Delete from Meta API
+      const response = await fetch(
+        `https://graph.facebook.com/v16.0/${businessAccountId}/message_templates?name=${args.templateName}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error("Meta API delete error:", data);
+        throw new Error(`Meta API error: ${JSON.stringify(data)}`);
+      }
+
+      // Delete from database
+      await ctx.runMutation(internal.whatsappTemplatesMutations.deleteTemplate, {
+        templateId: args.templateId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error("Template deletion error:", error);
+      throw new Error(`Failed to delete template: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  },
+});
+
+// Send a template message to a contact
+export const sendTemplateMessage = action({
+  args: {
+    phoneNumber: v.string(),
+    templateName: v.string(),
+    languageCode: v.string(),
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+    
+    if (!accessToken || !phoneNumberId) {
+      throw new Error("WhatsApp API not configured.");
+    }
+
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v16.0/${phoneNumberId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: args.phoneNumber,
+            type: "template",
+            template: {
+              name: args.templateName,
+              language: {
+                code: args.languageCode,
+              },
+            },
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
+      }
+
+      // Store message in database
+      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+        leadId: args.leadId,
+        phoneNumber: args.phoneNumber,
+        content: `[Template: ${args.templateName}]`,
+        direction: "outbound",
+        status: "sent",
+        externalId: data.messages?.[0]?.id || "",
+      });
+
+      return { success: true, messageId: data.messages?.[0]?.id };
+    } catch (error) {
+      console.error("Template send error:", error);
+      throw new Error(`Failed to send template: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  },
+});

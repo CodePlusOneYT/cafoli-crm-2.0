@@ -52,3 +52,12 @@ export const upsertTemplate = internalMutation({
     }
   },
 });
+
+export const deleteTemplate = internalMutation({
+  args: {
+    templateId: v.id("templates"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.templateId);
+  },
+});
