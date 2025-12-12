@@ -14,8 +14,11 @@ export const syncTemplates = action({
     console.log("Environment check:", {
       hasAccessToken: !!accessToken,
       accessTokenLength: accessToken?.length || 0,
+      accessTokenValue: accessToken ? `${accessToken.substring(0, 10)}...` : "undefined",
       hasBusinessAccountId: !!businessAccountId,
       businessAccountIdLength: businessAccountId?.length || 0,
+      businessAccountIdValue: businessAccountId || "undefined",
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes("WA_") || k.includes("CLOUD_")),
     });
     
     if (!accessToken || accessToken.trim() === "") {
@@ -101,8 +104,11 @@ export const createTemplate = action({
     console.log("Create template environment check:", {
       hasAccessToken: !!accessToken,
       accessTokenLength: accessToken?.length || 0,
+      accessTokenValue: accessToken ? `${accessToken.substring(0, 10)}...` : "undefined",
       hasBusinessAccountId: !!businessAccountId,
       businessAccountIdLength: businessAccountId?.length || 0,
+      businessAccountIdValue: businessAccountId || "undefined",
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes("WA_") || k.includes("CLOUD_")),
     });
     
     if (!accessToken || accessToken.trim() === "") {
