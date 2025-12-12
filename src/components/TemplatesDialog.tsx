@@ -4,13 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, Plus, RefreshCw, CheckCircle, Clock, XCircle } from "lucide-react";
+import { FileText, Plus, RefreshCw, CheckCircle, Clock, XCircle, Info } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function TemplatesDialog() {
   const [open, setOpen] = useState(false);
@@ -25,6 +26,7 @@ export function TemplatesDialog() {
     name: "",
     language: "en_US",
     category: "MARKETING",
+    headerType: "TEXT",
     headerText: "",
     bodyText: "",
     footerText: "",
@@ -52,11 +54,11 @@ export function TemplatesDialog() {
     try {
       const components = [];
       
-      if (formData.headerText) {
+      if (formData.headerType !== "NONE" && formData.headerText) {
         components.push({
           type: "HEADER",
-          format: "TEXT",
-          text: formData.headerText,
+          format: formData.headerType,
+          text: formData.headerType === "TEXT" ? formData.headerText : undefined,
         });
       }
       
@@ -84,6 +86,7 @@ export function TemplatesDialog() {
         name: "",
         language: "en_US",
         category: "MARKETING",
+        headerType: "TEXT",
         headerText: "",
         bodyText: "",
         footerText: "",
@@ -106,6 +109,34 @@ export function TemplatesDialog() {
       default:
         return null;
     }
+  };
+
+  const insertFormatting = (format: string) => {
+    const textarea = document.getElementById("body") as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = formData.bodyText.substring(start, end);
+    
+    let formattedText = "";
+    switch (format) {
+      case "bold":
+        formattedText = `*${selectedText || "bold text"}*`;
+        break;
+      case "italic":
+        formattedText = `_${selectedText || "italic text"}_`;
+        break;
+      case "strikethrough":
+        formattedText = `~${selectedText || "strikethrough text"}~`;
+        break;
+      case "monospace":
+        formattedText = `\`\`\`${selectedText || "monospace text"}\`\`\``;
+        break;
+    }
+
+    const newText = formData.bodyText.substring(0, start) + formattedText + formData.bodyText.substring(end);
+    setFormData({ ...formData, bodyText: newText });
   };
 
   return (
@@ -160,7 +191,9 @@ export function TemplatesDialog() {
                     <div className="text-sm space-y-1">
                       {template.components.map((comp, idx) => (
                         <div key={idx} className="bg-muted/50 p-2 rounded">
-                          <span className="font-medium text-xs">{comp.type}:</span>{" "}
+                          <span className="font-medium text-xs">{comp.type}</span>
+                          {comp.format && <span className="text-xs text-muted-foreground"> ({comp.format})</span>}
+                          {": "}
                           <span className="text-xs">{comp.text || "(No text)"}</span>
                         </div>
                       ))}
@@ -172,6 +205,13 @@ export function TemplatesDialog() {
           </TabsContent>
 
           <TabsContent value="create" className="space-y-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Templates must be approved by Meta before use. This typically takes 24-48 hours.
+              </AlertDescription>
+            </Alert>
+
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Template Name *</Label>
@@ -197,6 +237,8 @@ export function TemplatesDialog() {
                       <SelectItem value="es">Spanish</SelectItem>
                       <SelectItem value="fr">French</SelectItem>
                       <SelectItem value="de">German</SelectItem>
+                      <SelectItem value="hi">Hindi</SelectItem>
+                      <SelectItem value="ar">Arabic</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -217,24 +259,95 @@ export function TemplatesDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="header">Header (Optional)</Label>
-                <Input
-                  id="header"
-                  placeholder="Header text"
-                  value={formData.headerText}
-                  onChange={(e) => setFormData({ ...formData, headerText: e.target.value })}
-                />
+                <Label htmlFor="headerType">Header Type</Label>
+                <Select value={formData.headerType} onValueChange={(value) => setFormData({ ...formData, headerType: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">None</SelectItem>
+                    <SelectItem value="TEXT">Text</SelectItem>
+                    <SelectItem value="IMAGE">Image</SelectItem>
+                    <SelectItem value="VIDEO">Video</SelectItem>
+                    <SelectItem value="DOCUMENT">Document</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {formData.headerType === "TEXT" && (
+                <div className="space-y-2">
+                  <Label htmlFor="header">Header Text</Label>
+                  <Input
+                    id="header"
+                    placeholder="Header text (max 60 characters)"
+                    maxLength={60}
+                    value={formData.headerText}
+                    onChange={(e) => setFormData({ ...formData, headerText: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">{formData.headerText.length}/60 characters</p>
+                </div>
+              )}
+
+              {(formData.headerType === "IMAGE" || formData.headerType === "VIDEO" || formData.headerType === "DOCUMENT") && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    Media headers must be uploaded separately via Meta Business Manager after template creation.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="body">Body Text *</Label>
+                <div className="flex gap-2 mb-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => insertFormatting("bold")}
+                    title="Bold"
+                  >
+                    <strong>B</strong>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => insertFormatting("italic")}
+                    title="Italic"
+                  >
+                    <em>I</em>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => insertFormatting("strikethrough")}
+                    title="Strikethrough"
+                  >
+                    <s>S</s>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => insertFormatting("monospace")}
+                    title="Monospace"
+                  >
+                    <code>{"</>"}</code>
+                  </Button>
+                </div>
                 <Textarea
                   id="body"
-                  placeholder="Your message body..."
-                  rows={4}
+                  placeholder="Your message body... (max 1024 characters)"
+                  rows={6}
+                  maxLength={1024}
                   value={formData.bodyText}
                   onChange={(e) => setFormData({ ...formData, bodyText: e.target.value })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {formData.bodyText.length}/1024 characters | Formatting: *bold* _italic_ ~strikethrough~ 
+                </p>
               </div>
 
               <div className="space-y-2">
