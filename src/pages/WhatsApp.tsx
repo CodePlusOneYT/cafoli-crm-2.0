@@ -219,7 +219,7 @@ export default function WhatsApp() {
                   : "Send WhatsApp messages to your assigned leads."}
               </p>
             </div>
-            <TemplatesDialog />
+            <TemplatesDialog selectedLeadId={selectedLeadId} />
           </div>
         </div>
 

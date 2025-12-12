@@ -14,7 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Id } from "@/convex/_generated/dataModel";
 
-export function TemplatesDialog() {
+interface TemplatesDialogProps {
+  selectedLeadId?: Id<"leads"> | null;
+}
+
+export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -148,12 +152,20 @@ export function TemplatesDialog() {
   };
 
   const handleSendTemplate = async () => {
-    if (!selectedTemplate || !sendFormData.leadId) {
+    if (!selectedTemplate) {
+      toast.error("No template selected");
+      return;
+    }
+
+    // Use the leadId from sendFormData or fall back to selectedLeadId prop
+    const targetLeadId = sendFormData.leadId || selectedLeadId;
+    
+    if (!targetLeadId) {
       toast.error("Please select a contact");
       return;
     }
 
-    const lead = leads.find(l => l._id === sendFormData.leadId);
+    const lead = leads.find(l => l._id === targetLeadId);
     if (!lead) {
       toast.error("Lead not found");
       return;
@@ -271,6 +283,10 @@ export function TemplatesDialog() {
                             className="h-8 w-8"
                             onClick={() => {
                               setSelectedTemplate(template);
+                              // Pre-populate with currently selected lead if available
+                              if (selectedLeadId) {
+                                setSendFormData({ leadId: selectedLeadId });
+                              }
                               setSendDialogOpen(true);
                             }}
                             title="Send template"
@@ -496,28 +512,43 @@ export function TemplatesDialog() {
           <DialogHeader>
             <DialogTitle>Send Template Message</DialogTitle>
             <DialogDescription>
-              Send "{selectedTemplate?.name}" to a contact
+              {selectedLeadId 
+                ? `Send "${selectedTemplate?.name}" to ${leads.find(l => l._id === (sendFormData.leadId || selectedLeadId))?.name || "selected contact"}`
+                : `Send "${selectedTemplate?.name}" to a contact`
+              }
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="lead">Select Contact</Label>
-              <Select
-                value={sendFormData.leadId}
-                onValueChange={(value) => setSendFormData({ leadId: value as Id<"leads"> })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a contact..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {leads.map((lead) => (
-                    <SelectItem key={lead._id} value={lead._id}>
-                      {lead.name} - {lead.mobile}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!selectedLeadId && (
+              <div className="space-y-2">
+                <Label htmlFor="lead">Select Contact</Label>
+                <Select
+                  value={sendFormData.leadId}
+                  onValueChange={(value) => setSendFormData({ leadId: value as Id<"leads"> })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a contact..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leads.map((lead) => (
+                      <SelectItem key={lead._id} value={lead._id}>
+                        {lead.name} - {lead.mobile}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {selectedLeadId && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">
+                  {leads.find(l => l._id === selectedLeadId)?.name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {leads.find(l => l._id === selectedLeadId)?.mobile}
+                </p>
+              </div>
+            )}
             <Button onClick={handleSendTemplate} className="w-full">
               <SendIcon className="h-4 w-4 mr-2" />
               Send Template
