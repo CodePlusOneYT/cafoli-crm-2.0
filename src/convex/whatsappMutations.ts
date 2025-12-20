@@ -15,6 +15,7 @@ export const storeMessage = internalMutation({
     mediaName: v.optional(v.string()),
     mediaMimeType: v.optional(v.string()),
     quotedMessageId: v.optional(v.id("messages")),
+    quotedMessageExternalId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Find or create chat
@@ -46,6 +47,19 @@ export const storeMessage = internalMutation({
 
     if (!chat) throw new Error("Failed to create chat");
 
+    // Resolve quoted message ID
+    let quotedMessageId = args.quotedMessageId;
+    if (!quotedMessageId && args.quotedMessageExternalId) {
+      const quotedMsg = await ctx.db
+        .query("messages")
+        .withIndex("by_external_id", (q) => q.eq("externalId", args.quotedMessageExternalId))
+        .first();
+      
+      if (quotedMsg) {
+        quotedMessageId = quotedMsg._id;
+      }
+    }
+
     // Store message
     await ctx.db.insert("messages", {
       chatId: chat._id,
@@ -57,7 +71,7 @@ export const storeMessage = internalMutation({
       mediaName: args.mediaName,
       mediaMimeType: args.mediaMimeType,
       externalId: args.externalId,
-      quotedMessageId: args.quotedMessageId,
+      quotedMessageId: quotedMessageId,
     });
   },
 });

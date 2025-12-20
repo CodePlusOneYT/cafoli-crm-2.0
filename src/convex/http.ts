@@ -122,6 +122,7 @@ http.route({
             mediaMimeType: mediaMimeType || undefined,
             mediaFilename: mediaFilename || undefined,
             senderName,
+            quotedMessageExternalId: message.context?.id,
           });
         }
       }

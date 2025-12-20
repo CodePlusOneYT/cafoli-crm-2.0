@@ -161,7 +161,8 @@ const schema = defineSchema(
       quotedMessageId: v.optional(v.id("messages")), // ID of the message being replied to
     })
     .index("by_chat", ["chatId"])
-    .index("by_chat_status", ["chatId", "status"]),
+    .index("by_chat_status", ["chatId", "status"])
+    .index("by_external_id", ["externalId"]),
   },
   {
     schemaValidation: false,

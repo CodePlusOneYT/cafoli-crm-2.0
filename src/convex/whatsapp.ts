@@ -254,6 +254,7 @@ export const handleIncomingMessage = internalAction({
     mediaMimeType: v.optional(v.string()),
     mediaFilename: v.optional(v.string()),
     senderName: v.optional(v.string()),
+    quotedMessageExternalId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     try {
@@ -339,6 +340,7 @@ export const handleIncomingMessage = internalAction({
           mediaUrl: mediaUrl || undefined,
           mediaName: args.mediaFilename || undefined,
           mediaMimeType: args.mediaMimeType || undefined,
+          quotedMessageExternalId: args.quotedMessageExternalId,
         });
 
         // NOTE: We do NOT send read receipt automatically anymore.
