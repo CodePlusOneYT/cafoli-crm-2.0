@@ -151,6 +151,31 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
     toast.info("Editing creates a new template version (Meta limitation)");
   };
 
+  const quickSendTemplate = async (template: any, leadId: Id<"leads">) => {
+    if (!leads || leads.length === 0) {
+      toast.error("Loading contacts... Please try again.");
+      return;
+    }
+
+    const lead = leads.find(l => l._id === leadId);
+    if (!lead) {
+      toast.error("Contact not found");
+      return;
+    }
+
+    try {
+      await sendTemplateMessage({
+        phoneNumber: lead.mobile,
+        templateName: template.name,
+        languageCode: template.language,
+        leadId: lead._id,
+      });
+      toast.success(`Template "${template.name}" sent successfully`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send template");
+    }
+  };
+
   const handleSendTemplate = async () => {
     if (!selectedTemplate) {
       toast.error("No template selected");
@@ -289,12 +314,15 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => {
-                              setSelectedTemplate(template);
-                              // Pre-populate with currently selected lead if available
                               if (selectedLeadId) {
-                                setSendFormData({ leadId: selectedLeadId });
+                                if (confirm(`Send template "${template.name}" to selected contact?`)) {
+                                  quickSendTemplate(template, selectedLeadId);
+                                }
+                              } else {
+                                setSelectedTemplate(template);
+                                setSendFormData({ leadId: "" });
+                                setSendDialogOpen(true);
                               }
-                              setSendDialogOpen(true);
                             }}
                             title="Send template"
                             disabled={template.status !== "APPROVED"}
