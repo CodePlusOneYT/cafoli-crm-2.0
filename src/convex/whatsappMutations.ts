@@ -1,6 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 export const storeMessage = internalMutation({
   args: {
@@ -92,7 +92,7 @@ export const sendWelcomeTemplate = internalMutation({
   handler: async (ctx, args) => {
     try {
       // Schedule the action to send the template
-      await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendTemplateMessage, {
+      await ctx.scheduler.runAfter(0, api.whatsappTemplates.sendTemplateMessage, {
         phoneNumber: args.phoneNumber,
         templateName: "cafoliwelcomemessage",
         languageCode: "en",
