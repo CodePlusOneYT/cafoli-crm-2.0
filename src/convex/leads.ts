@@ -100,6 +100,17 @@ export const createLead = mutation({
       }
     }
     
+    // Send WhatsApp welcome template for new leads
+    try {
+      await ctx.scheduler.runAfter(0, internal.whatsappMutations.sendWelcomeTemplate, {
+        leadId: leadId,
+        phoneNumber: args.mobile,
+      });
+    } catch (error) {
+      console.error("Failed to schedule welcome WhatsApp template:", error);
+      // Don't throw - lead creation should succeed even if WhatsApp fails
+    }
+    
     return leadId;
   },
 });

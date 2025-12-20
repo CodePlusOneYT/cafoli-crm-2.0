@@ -25,7 +25,6 @@ export default function WhatsApp() {
   const sendWhatsAppMessage = useAction(api.whatsapp.sendWhatsAppMessage);
   const sendWhatsAppMedia = useAction(api.whatsapp.sendWhatsAppMedia);
   const generateUploadUrl = useMutation(api.whatsappStorage.generateUploadUrl);
-  const sendTemplateMessage = useAction(api.whatsappTemplates.sendTemplateMessage);
   
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
   const [whatsappMessage, setWhatsappMessage] = useState("");
@@ -33,7 +32,6 @@ export default function WhatsApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [sentWelcomeTemplates, setSentWelcomeTemplates] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,39 +50,6 @@ export default function WhatsApp() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Auto-send welcome template when chat is opened
-  useEffect(() => {
-    const sendWelcomeTemplate = async () => {
-      if (!selectedLead || !selectedLeadId) return;
-      
-      // Check if we've already sent the welcome template to this lead
-      const leadKey = selectedLead.mobile;
-      if (sentWelcomeTemplates.has(leadKey)) return;
-      
-      // Check if there are any existing messages
-      if (messages.length > 0) return;
-      
-      try {
-        await sendTemplateMessage({
-          phoneNumber: selectedLead.mobile,
-          templateName: "cafoliwelcomemessage",
-          languageCode: "en",
-          leadId: selectedLeadId,
-        });
-        
-        // Mark this lead as having received the welcome template
-        setSentWelcomeTemplates(prev => new Set(prev).add(leadKey));
-        
-        toast.success("Welcome message sent automatically");
-      } catch (error) {
-        console.error("Failed to send welcome template:", error);
-        // Don't show error toast for automatic sending
-      }
-    };
-    
-    sendWelcomeTemplate();
-  }, [selectedLeadId, selectedLead, messages.length, sentWelcomeTemplates, sendTemplateMessage]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -245,16 +210,13 @@ export default function WhatsApp() {
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-4rem)]">
         <div className="flex-shrink-0 p-6 pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">WhatsApp Messaging</h1>
-              <p className="text-muted-foreground">
-                {user?.role === ROLES.ADMIN 
-                  ? "Send WhatsApp messages to all leads." 
-                  : "Send WhatsApp messages to your assigned leads."}
-              </p>
-            </div>
-            <TemplatesDialog selectedLeadId={selectedLeadId} />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">WhatsApp Messaging</h1>
+            <p className="text-muted-foreground">
+              {user?.role === ROLES.ADMIN 
+                ? "Send WhatsApp messages to all leads." 
+                : "Send WhatsApp messages to your assigned leads."}
+            </p>
           </div>
         </div>
 
@@ -417,6 +379,7 @@ export default function WhatsApp() {
                     >
                       <Paperclip className="h-5 w-5" />
                     </Button>
+                    <TemplatesDialog selectedLeadId={selectedLeadId} />
                     <div className="flex-1 relative">
                       <Input
                         placeholder="Type a message..."

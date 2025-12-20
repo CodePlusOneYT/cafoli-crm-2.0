@@ -56,6 +56,7 @@
     "crud": "link:convex-helpers/server/crud",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "esbuild": "^0.27.2",
     "framer-motion": "^12.23.25",
     "hono": "^4.10.7",
     "input-otp": "^1.4.2",

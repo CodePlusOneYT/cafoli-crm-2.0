@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 export const storeMessage = internalMutation({
   args: {
@@ -79,5 +80,27 @@ export const getLeadsForMatching = internalQuery({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("leads").collect();
+  },
+});
+
+// Send welcome template to new lead
+export const sendWelcomeTemplate = internalMutation({
+  args: {
+    leadId: v.id("leads"),
+    phoneNumber: v.string(),
+  },
+  handler: async (ctx, args) => {
+    try {
+      // Schedule the action to send the template
+      await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendTemplateMessage, {
+        phoneNumber: args.phoneNumber,
+        templateName: "cafoliwelcomemessage",
+        languageCode: "en",
+        leadId: args.leadId,
+      });
+      console.log(`Scheduled welcome template for lead ${args.leadId}`);
+    } catch (error) {
+      console.error("Failed to schedule welcome template:", error);
+    }
   },
 });
