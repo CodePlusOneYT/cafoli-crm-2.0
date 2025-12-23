@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X } from "lucide-react";
+import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X, AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -28,9 +28,25 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
+  const [now, setNow] = useState(Date.now());
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update time every minute to keep window status accurate
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Calculate 24h window status (23h 30m)
+  const lastInboundMessage = messages
+    .filter((m: any) => m.direction === "inbound")
+    .pop();
+    
+  const lastInboundTime = lastInboundMessage ? lastInboundMessage._creationTime : 0;
+  const windowDuration = (23 * 60 + 30) * 60 * 1000; // 23h 30m
+  const isWithinWindow = (now - lastInboundTime) < windowDuration;
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -59,6 +75,11 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
   const handleSendWhatsApp = async () => {
     if (!selectedLead) {
       toast.error("Please select a contact");
+      return;
+    }
+
+    if (!isWithinWindow) {
+      toast.error("Session expired. Please send a template.");
       return;
     }
 
@@ -298,6 +319,13 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
       </div>
 
       <div className="border-t p-4 flex-shrink-0 bg-background">
+        {!isWithinWindow && (
+          <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-md flex items-center gap-2 text-amber-800 text-sm">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>Session expired. Please send a template to resume the conversation.</span>
+          </div>
+        )}
+        
         {replyingTo && (
           <div className="mb-2 flex items-center gap-2 p-2 bg-muted rounded-lg border-l-4 border-primary">
             <div className="flex-1 overflow-hidden">
@@ -351,32 +379,33 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
             className="h-10 w-10 text-muted-foreground hover:text-foreground"
             title="Attach file"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isSending || isUploading}
+            disabled={isSending || isUploading || !isWithinWindow}
           >
             <Paperclip className="h-5 w-5" />
           </Button>
           <TemplatesDialog selectedLeadId={selectedLeadId} />
           <div className="flex-1 relative">
             <Input
-              placeholder="Type a message..."
+              placeholder={isWithinWindow ? "Type a message..." : "Session expired. Send a template."}
               value={whatsappMessage}
               onChange={(e) => setWhatsappMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               className="pr-10"
-              disabled={isSending || isUploading}
+              disabled={isSending || isUploading || !isWithinWindow}
             />
             <Button 
               variant="ghost" 
               size="icon"
               className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-foreground"
               title="Add emoji"
+              disabled={!isWithinWindow}
             >
               <Smile className="h-5 w-5" />
             </Button>
           </div>
           <Button 
             onClick={handleSendWhatsApp} 
-            disabled={isSending || isUploading || (!whatsappMessage.trim() && !selectedFile)}
+            disabled={isSending || isUploading || (!whatsappMessage.trim() && !selectedFile) || !isWithinWindow}
             size="icon"
             className="h-10 w-10"
           >
