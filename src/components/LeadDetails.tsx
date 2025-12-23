@@ -159,6 +159,11 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
             <span className="text-sm text-muted-foreground bg-background border px-2 py-1 rounded">
               {lead.source}
             </span>
+            {lead.adminAssignmentRequired && (
+              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded border border-purple-200 font-medium">
+                Admin Assignment Required
+              </span>
+            )}
           </div>
           <p className="text-muted-foreground">{lead.subject}</p>
         </div>

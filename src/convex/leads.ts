@@ -22,7 +22,7 @@ async function checkRole(ctx: any, allowedRoles: string[]) {
 export const getPaginatedLeads = query({
   args: {
     paginationOpts: paginationOptsValidator,
-    filter: v.optional(v.string()), // "all", "unassigned", "mine"
+    filter: v.optional(v.string()), // "all", "unassigned", "mine", "irrelevant"
     userId: v.optional(v.id("users")),
     search: v.optional(v.string()),
   },
@@ -90,6 +90,7 @@ export const getPaginatedLeads = query({
         .query("leads")
         .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
         .order("desc")
+        .filter((q) => q.neq(q.field("type"), "Irrelevant"))
         .paginate(args.paginationOpts);
     } else if (args.filter === "unassigned") {
       // Filter for unassigned leads. 
@@ -98,20 +99,39 @@ export const getPaginatedLeads = query({
       return await ctx.db
         .query("leads")
         .order("desc")
-        .filter((q) => q.eq(q.field("assignedTo"), undefined))
+        .filter((q) => 
+          q.and(
+            q.eq(q.field("assignedTo"), undefined),
+            q.neq(q.field("type"), "Irrelevant")
+          )
+        )
         .paginate(args.paginationOpts);
-    } else if (args.filter === "all") {
-      // Admin view or all leads
+    } else if (args.filter === "irrelevant") {
+      // New filter for irrelevant leads
       return await ctx.db
         .query("leads")
         .order("desc")
+        .filter((q) => q.eq(q.field("type"), "Irrelevant"))
+        .paginate(args.paginationOpts);
+    } else if (args.filter === "all") {
+      // Admin view or all leads - exclude irrelevant by default unless specifically asked?
+      // Usually "All Leads" implies active leads.
+      return await ctx.db
+        .query("leads")
+        .order("desc")
+        .filter((q) => q.neq(q.field("type"), "Irrelevant"))
         .paginate(args.paginationOpts);
     } else {
       // Default to unassigned
       return await ctx.db
         .query("leads")
         .order("desc")
-        .filter((q) => q.eq(q.field("assignedTo"), undefined))
+        .filter((q) => 
+          q.and(
+            q.eq(q.field("assignedTo"), undefined),
+            q.neq(q.field("type"), "Irrelevant")
+          )
+        )
         .paginate(args.paginationOpts);
     }
   },
@@ -137,20 +157,22 @@ export const getLeads = query({
         .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
         .order("desc")
         .collect();
+      leads = leads.filter(l => l.type !== "Irrelevant");
     } else if (args.filter === "unassigned") {
       // Note: Convex doesn't support querying for null in index directly easily without a specific index or filter
       // We will fetch all and filter for now, or use a custom index strategy. 
       // For simplicity in this iteration, we'll filter in memory or use a "null" sentinel if needed, 
       // but let's try filtering.
       leads = await ctx.db.query("leads").order("desc").collect();
-      leads = leads.filter(l => !l.assignedTo);
+      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant");
     } else if (args.filter === "all") {
       if (user.role !== ROLES.ADMIN) return [];
       leads = await ctx.db.query("leads").order("desc").collect();
+      leads = leads.filter(l => l.type !== "Irrelevant");
     } else {
       // Default behavior for /leads page (unassigned)
       leads = await ctx.db.query("leads").order("desc").collect();
-      leads = leads.filter(l => !l.assignedTo);
+      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant");
     }
 
     return leads;
@@ -303,6 +325,11 @@ export const assignLead = mutation({
     
     if (!lead) throw new Error("Lead not found");
     
+    // Check for admin assignment requirement
+    if (lead.adminAssignmentRequired && currentUser?.role !== ROLES.ADMIN) {
+      throw new Error("This lead can only be assigned by an admin");
+    }
+
     // Staff can only assign to themselves
     if (currentUser?.role === ROLES.STAFF && args.userId !== currentUserId) {
       throw new Error("Staff can only assign leads to themselves");
@@ -330,6 +357,10 @@ export const assignLead = mutation({
       assignedTo: args.userId,
       nextFollowUpDate: args.nextFollowUpDate,
       lastActivity: Date.now(),
+      // Clear the admin requirement once assigned? 
+      // Or keep it? Usually once assigned it's fine. 
+      // Let's clear it so it behaves normally after assignment.
+      adminAssignmentRequired: undefined, 
     });
   },
 });

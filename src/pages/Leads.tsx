@@ -28,6 +28,7 @@ export default function Leads() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [viewIrrelevant, setViewIrrelevant] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function Leads() {
   } = usePaginatedQuery(
     api.leads.getPaginatedLeads, 
     { 
-      filter, 
+      filter: viewIrrelevant ? "irrelevant" : filter, 
       userId: user?._id,
       search: debouncedSearch || undefined
     }, 
@@ -154,10 +155,19 @@ export default function Leads() {
       <div className="flex flex-col h-[calc(100vh-8rem)]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {viewIrrelevant ? "Irrelevant Leads" : title}
+            </h1>
             <p className="text-muted-foreground">Manage your leads and communications.</p>
           </div>
           <div className="flex gap-2">
+            <Button 
+              variant={viewIrrelevant ? "secondary" : "outline"}
+              onClick={() => setViewIrrelevant(!viewIrrelevant)}
+            >
+              {viewIrrelevant ? "Show Active Leads" : "Show Irrelevant Leads"}
+            </Button>
+
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Button>
@@ -280,20 +290,32 @@ export default function Leads() {
                         lead.status === 'Mature' ? 'bg-green-100 text-green-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>{lead.status}</span>
+                      
+                      {lead.adminAssignmentRequired && (
+                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">
+                          Admin Assign Only
+                        </span>
+                      )}
+
                       {lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() && (
                         <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
                           Overdue
                         </span>
                       )}
-                      {isUnassignedView && !lead.assignedTo && (
+                      {isUnassignedView && !lead.assignedTo && !viewIrrelevant && (
                         <>
                           {!isAdmin ? (
                             <Button
                               size="sm"
                               variant="outline"
                               className="h-6 text-xs"
+                              disabled={lead.adminAssignmentRequired}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (lead.adminAssignmentRequired) {
+                                  toast.error("This lead can only be assigned by an admin");
+                                  return;
+                                }
                                 handleAssignToSelf(lead._id);
                               }}
                             >

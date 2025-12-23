@@ -10,7 +10,25 @@ export const checkLeadExists = internalQuery({
       .filter((q) => q.eq(q.field("pharmavendsUid"), args.uid))
       .first();
     
-    return lead !== null;
+    if (!lead) return null;
+
+    return {
+      _id: lead._id,
+      type: lead.type,
+    };
+  },
+});
+
+export const reactivateLead = internalMutation({
+  args: { id: v.id("leads") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      type: "To be Decided",
+      status: "Cold", // Reset status? Maybe keep it. Let's reset to Cold to be safe as it's "new"
+      assignedTo: undefined, // Ensure it is unassigned
+      adminAssignmentRequired: true,
+      lastActivity: Date.now(),
+    });
   },
 });
 

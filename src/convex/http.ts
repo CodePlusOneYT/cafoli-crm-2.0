@@ -164,11 +164,22 @@ http.route({
       const uniqueQueryId = response.UNIQUE_QUERY_ID;
 
       // Check if lead already exists
-      const exists = await ctx.runQuery(internal.indiamartMutations.checkIndiamartLeadExists, {
+      const existing = await ctx.runQuery(internal.indiamartMutations.checkIndiamartLeadExists, {
         uniqueQueryId,
       });
 
-      if (exists) {
+      if (existing) {
+        if (existing.type === "Irrelevant") {
+          await ctx.runMutation(internal.indiamartMutations.reactivateLead, {
+            id: existing._id,
+          });
+          console.log(`Reactivated irrelevant IndiaMART lead: ${uniqueQueryId}`);
+          return new Response(JSON.stringify({ success: true, message: "Lead reactivated" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         console.log(`IndiaMART lead ${uniqueQueryId} already exists, skipping`);
         return new Response(JSON.stringify({ success: true, message: "Lead already exists" }), {
           status: 200,

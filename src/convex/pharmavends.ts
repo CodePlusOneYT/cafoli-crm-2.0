@@ -66,7 +66,18 @@ export const fetchPharmavendsLeads = action({
         });
         
         if (existing) {
-          duplicatesCount++;
+          // If lead exists but is Irrelevant, reactivate it
+          if (existing.type === "Irrelevant") {
+            await ctx.runMutation(internal.pharmavendsMutations.reactivateLead, {
+              id: existing._id,
+            });
+            console.log(`Reactivated irrelevant lead: ${lead.uid}`);
+            // We count this as a "new" lead for the user's perspective? 
+            // Or maybe just log it. Let's count it as new so they know something happened.
+            newLeadsCount++; 
+          } else {
+            duplicatesCount++;
+          }
           continue;
         }
         

@@ -69,6 +69,9 @@ const schema = defineSchema(
       
       nextFollowUpDate: v.optional(v.number()),
       lastActivity: v.number(),
+
+      // Special flags
+      adminAssignmentRequired: v.optional(v.boolean()),
       
       // Pharmavends specific fields
       pharmavendsUid: v.optional(v.string()),

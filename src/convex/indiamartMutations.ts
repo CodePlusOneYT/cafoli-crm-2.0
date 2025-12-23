@@ -10,7 +10,25 @@ export const checkIndiamartLeadExists = internalQuery({
       .filter((q) => q.eq(q.field("indiamartUniqueId"), args.uniqueQueryId))
       .first();
     
-    return lead !== null;
+    if (!lead) return null;
+
+    return {
+      _id: lead._id,
+      type: lead.type,
+    };
+  },
+});
+
+export const reactivateLead = internalMutation({
+  args: { id: v.id("leads") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      type: "To be Decided",
+      status: "Cold",
+      assignedTo: undefined,
+      adminAssignmentRequired: true,
+      lastActivity: Date.now(),
+    });
   },
 });
 
