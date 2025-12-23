@@ -67,7 +67,7 @@ export const getPaginatedLeads = query({
         // Let's stick to name search for now as defined in schema.
       }
 
-      return await ctx.db
+      const results = await ctx.db
         .query("leads")
         .withSearchIndex("search_name", (q) => {
           let search = q.search("name", args.search!);
@@ -77,6 +77,12 @@ export const getPaginatedLeads = query({
           return search;
         })
         .take(args.paginationOpts.numItems); 
+
+      return {
+        page: results,
+        isDone: true,
+        continueCursor: "",
+      };
     }
 
     if (args.filter === "mine") {
@@ -148,6 +154,15 @@ export const getLeads = query({
     }
 
     return leads;
+  },
+});
+
+export const getLead = query({
+  args: { id: v.id("leads") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    return await ctx.db.get(args.id);
   },
 });
 
