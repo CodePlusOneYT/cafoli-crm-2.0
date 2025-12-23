@@ -18,7 +18,7 @@ interface LeadDetailsProps {
 
 export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
   const { user } = useAuth();
-  const lead = useQuery(api.leads.getLead, { id: leadId });
+  const lead = useQuery(api.leads.getLead, { id: leadId, userId: user?._id });
   const comments = useQuery(api.leads.getComments, { leadId });
   
   const updateLead = useMutation(api.leads.updateLead);

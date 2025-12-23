@@ -158,9 +158,12 @@ export const getLeads = query({
 });
 
 export const getLead = query({
-  args: { id: v.id("leads") },
+  args: { 
+    id: v.id("leads"),
+    userId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = args.userId || await getAuthUserId(ctx);
     if (!userId) return null;
     return await ctx.db.get(args.id);
   },
