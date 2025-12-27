@@ -9,7 +9,8 @@ import {
   Users,
   UserSquare2,
   Menu,
-  X
+  X,
+  PieChart
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -46,6 +47,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: "My Leads", href: "/my_leads", icon: UserSquare2 },
     { name: "WhatsApp", href: "/whatsapp", icon: MessageSquare },
     { name: "Campaigns", href: "/campaigns", icon: BarChart3 },
+    { name: "Reports", href: "/reports", icon: PieChart },
     ...(isAdmin ? [{ name: "Admin", href: "/admin", icon: Settings }] : []),
   ];
 

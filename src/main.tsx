@@ -5,7 +5,8 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { createBrowserRouter, RouterProvider, Route, Routes } from "react-router";
+import AppLayout from "@/components/AppLayout";
 import "./index.css";
 import "./types/global.d.ts";
 
@@ -15,6 +16,7 @@ const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Leads = lazy(() => import("./pages/Leads.tsx"));
 const Campaigns = lazy(() => import("./pages/Campaigns.tsx"));
+const Reports = lazy(() => import("./pages/Reports.tsx"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp.tsx"));
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -69,56 +71,73 @@ if (!convexUrl || convexUrl === 'undefined' || convexUrl === '') {
   throw new Error("VITE_CONVEX_URL is required");
 }
 
-const convex = new ConvexReactClient(convexUrl);
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
-function RouteSyncer() {
-  const location = useLocation();
-  useEffect(() => {
-    window.parent.postMessage(
-      { type: "iframe-route-change", path: location.pathname },
-      "*",
-    );
-  }, [location.pathname]);
-
-  useEffect(() => {
-    function handleMessage(event: MessageEvent) {
-      if (event.data?.type === "navigate") {
-        if (event.data.direction === "back") window.history.back();
-        if (event.data.direction === "forward") window.history.forward();
-      }
-    }
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-
-  return null;
-}
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Landing />,
+  },
+  {
+    path: "/auth",
+    element: <AuthPage redirectAfterAuth="/dashboard" />,
+  },
+  {
+    path: "/dashboard",
+    element: <Dashboard />,
+  },
+  {
+    path: "/leads",
+    element: <Leads />,
+  },
+  {
+    path: "/all_leads",
+    element: <Leads />,
+  },
+  {
+    path: "/my_leads",
+    element: <Leads />,
+  },
+  {
+    path: "/campaigns",
+    element: (
+      <AppLayout>
+        <Campaigns />
+      </AppLayout>
+    ),
+  },
+  {
+    path: "/reports",
+    element: (
+      <AppLayout>
+        <Reports />
+      </AppLayout>
+    ),
+  },
+  {
+    path: "/whatsapp",
+    element: (
+      <AppLayout>
+        <WhatsApp />
+      </AppLayout>
+    ),
+  },
+  {
+    path: "/admin",
+    element: <Admin />,
+  },
+  {
+    path: "*",
+    element: <NotFound />,
+  },
+]);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <VlyToolbar />
     <InstrumentationProvider>
       <ConvexAuthProvider client={convex}>
-        <BrowserRouter>
-          <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
-              
-              {/* Protected Routes */}
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/leads" element={<Leads />} />
-              <Route path="/all_leads" element={<Leads />} />
-              <Route path="/my_leads" element={<Leads />} />
-              <Route path="/campaigns" element={<Campaigns />} />
-              <Route path="/whatsapp" element={<WhatsApp />} />
-              <Route path="/admin" element={<Admin />} />
-              
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+        <RouterProvider router={router} />
         <Toaster />
       </ConvexAuthProvider>
     </InstrumentationProvider>
