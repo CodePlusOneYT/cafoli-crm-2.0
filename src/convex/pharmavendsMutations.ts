@@ -24,7 +24,7 @@ export const reactivateLead = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       type: "To be Decided",
-      status: "Cold", // Reset status? Maybe keep it. Let's reset to Cold to be safe as it's "new"
+      status: "Cold", // Reset status to Cold
       assignedTo: undefined, // Ensure it is unassigned
       adminAssignmentRequired: true,
       lastActivity: Date.now(),
@@ -39,40 +39,46 @@ export const createPharmavendsLead = internalMutation({
     subject: v.string(),
     mobile: v.string(),
     altMobile: v.optional(v.string()),
-    email: v.string(),
+    email: v.optional(v.string()),
+    altEmail: v.optional(v.string()),
     agencyName: v.optional(v.string()),
-    pincode: v.string(),
-    state: v.string(),
-    station: v.string(),
-    message: v.string(),
-    metadata: v.object({
-      gstNo: v.string(),
-      drugLicence: v.string(),
-      receivedOn: v.string(),
-      requirementType: v.string(),
-      timeToCall: v.string(),
-      profession: v.string(),
-      experience: v.string(),
-    }),
+    pincode: v.optional(v.string()),
+    state: v.optional(v.string()),
+    district: v.optional(v.string()),
+    station: v.optional(v.string()),
+    message: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Generate search text
+    const searchText = [
+      args.name,
+      args.subject,
+      args.mobile,
+      args.altMobile,
+      args.email,
+      args.altEmail,
+      args.message
+    ].filter(Boolean).join(" ");
+
     const leadId = await ctx.db.insert("leads", {
       name: args.name,
       subject: args.subject,
-      source: "Pharmavends",
+      source: "Website and Pharmavends",
       mobile: args.mobile,
       altMobile: args.altMobile,
       email: args.email,
+      altEmail: args.altEmail,
       agencyName: args.agencyName,
       pincode: args.pincode,
       state: args.state,
+      district: args.district,
       station: args.station,
       message: args.message,
       status: "Cold",
       type: "To be Decided",
       lastActivity: Date.now(),
       pharmavendsUid: args.uid,
-      pharmavendsMetadata: args.metadata,
+      searchText,
     });
     
     // Send welcome email
@@ -81,7 +87,7 @@ export const createPharmavendsLead = internalMutation({
         await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
           leadName: args.name,
           leadEmail: args.email,
-          source: "Pharmavends",
+          source: "Website and Pharmavends",
         });
       } catch (error) {
         console.error("Failed to schedule welcome email:", error);
