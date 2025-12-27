@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
-import { useMutation, useQuery, usePaginatedQuery } from "convex/react";
-import { Search, Plus, UserPlus, Loader2 } from "lucide-react";
+import { useMutation, useQuery, usePaginatedQuery, useAction } from "convex/react";
+import { Search, Plus, UserPlus, Loader2, RefreshCw } from "lucide-react";
 import { useState, type FormEvent, useEffect } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useInView } from "react-intersection-observer";
 import LeadDetails from "@/components/LeadDetails";
-import { Id } from "@/convex/_generated/dataModel";
+import { Id, Doc } from "@/convex/_generated/dataModel";
 import { LeadCard } from "@/components/LeadCard";
 
 export default function Leads() {
@@ -34,6 +34,22 @@ export default function Leads() {
   // New filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+
+  const manualSync = useAction(api.pharmavends.manualSyncPharmavends);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      await manualSync();
+      toast.success("Sync started in background");
+    } catch (error) {
+      toast.error("Failed to start sync");
+      console.error(error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Debounce search
   useEffect(() => {
@@ -184,7 +200,7 @@ export default function Leads() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 mt-4">
-              {overdueLeads?.map((lead) => (
+              {overdueLeads?.map((lead: Doc<"leads">) => (
                 <div 
                   key={lead._id} 
                   className="p-3 border border-red-200 bg-red-50 rounded-lg flex justify-between items-center cursor-pointer hover:bg-red-100 transition-colors"
@@ -218,6 +234,15 @@ export default function Leads() {
               <p className="text-muted-foreground">Manage your leads and communications.</p>
             </div>
             <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={handleSync}
+                disabled={isSyncing}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
+                Sync Leads
+              </Button>
+
               <Button 
                 variant={viewIrrelevant ? "secondary" : "outline"}
                 onClick={() => setViewIrrelevant(!viewIrrelevant)}
@@ -352,7 +377,7 @@ export default function Leads() {
               />
             </div>
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-              {leads?.map((lead) => (
+              {leads?.map((lead: Doc<"leads">) => (
                 <LeadCard
                   key={lead._id}
                   lead={lead}

@@ -25,19 +25,19 @@ export default function Dashboard() {
       },
       {
         title: "Active Campaigns",
-        value: campaigns.filter(c => c.status === "Active").length,
+        value: campaigns.filter((c: any) => c.status === "Active").length,
         icon: BarChart3,
         description: "Currently running",
       },
       {
         title: "New Leads Today",
-        value: leads.filter(l => l._creationTime > oneDayAgo).length,
+        value: leads.filter((l: any) => l._creationTime > oneDayAgo).length,
         icon: Activity,
         description: "Last 24 hours",
       },
       {
         title: "Pending Follow-ups",
-        value: leads.filter(l => l.nextFollowUpDate && l.nextFollowUpDate < now).length,
+        value: leads.filter((l: any) => l.nextFollowUpDate && l.nextFollowUpDate < now).length,
         icon: MessageSquare,
         description: "Needs attention",
       },
@@ -82,7 +82,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentLeads.map((lead) => (
+                {recentLeads.map((lead: any) => (
                   <div key={lead._id} className="flex items-center justify-between border-b pb-2 last:border-0">
                     <div>
                       <p className="font-medium">{lead.name}</p>
@@ -106,7 +106,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentCampaigns.map((campaign) => (
+                {recentCampaigns.map((campaign: any) => (
                   <div key={campaign._id} className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">{campaign.name}</p>

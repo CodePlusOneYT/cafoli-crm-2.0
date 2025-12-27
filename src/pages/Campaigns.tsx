@@ -24,7 +24,7 @@ export default function Campaigns() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {campaigns.map((campaign) => (
+        {campaigns.map((campaign: any) => (
           <Card key={campaign._id}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg font-medium">{campaign.name}</CardTitle>

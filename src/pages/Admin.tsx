@@ -193,7 +193,7 @@ export default function Admin() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {allUsers.map((user) => (
+              {allUsers.map((user: any) => (
                 <div
                   key={user._id}
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"

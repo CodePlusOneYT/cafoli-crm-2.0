@@ -264,7 +264,7 @@ export const handleIncomingMessage = internalAction({
       // Clean phone number (remove + and spaces)
       const cleanPhone = args.from.replace(/[\s+]/g, "");
       
-      const matchingLeads = allLeads.filter(lead => {
+      const matchingLeads = allLeads.filter((lead: any) => {
         const leadPhone = lead.mobile.replace(/[\s+]/g, "");
         return leadPhone.includes(cleanPhone) || cleanPhone.includes(leadPhone);
       });

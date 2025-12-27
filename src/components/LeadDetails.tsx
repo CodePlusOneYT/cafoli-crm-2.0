@@ -382,7 +382,7 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
           </h3>
           
           <div className="space-y-4 mb-4">
-            {comments?.map((comment) => (
+            {comments?.map((comment: any) => (
               <div key={comment._id} className="bg-muted/30 p-3 rounded-lg">
                 <div className="flex justify-between items-center mb-1">
                   <span className="font-medium text-sm">{comment.userName}</span>

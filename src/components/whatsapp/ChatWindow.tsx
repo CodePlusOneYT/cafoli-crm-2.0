@@ -285,7 +285,7 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
               <p className="text-sm text-muted-foreground">Send a message to start the conversation</p>
             </div>
           ) : (
-            messages.map((message) => (
+            messages.map((message: any) => (
               <div
                 key={message._id}
                 className={`flex ${message.direction === "outbound" ? "justify-end" : "justify-start"} group`}

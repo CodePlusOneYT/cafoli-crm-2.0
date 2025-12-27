@@ -21,7 +21,7 @@ export default function WhatsApp() {
   const leads = useQuery(api.whatsappQueries.getLeadsWithChatStatus, { filter, userId: user?._id }) || [];
   
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
-  const selectedLead = leads.find(l => l._id === selectedLeadId);
+  const selectedLead = leads.find((l: any) => l._id === selectedLeadId);
 
   const updateInterface = useAction(api.whatsapp.updateWhatsAppInterface);
   const [isUpdating, setIsUpdating] = useState(false);

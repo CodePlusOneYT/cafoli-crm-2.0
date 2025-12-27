@@ -163,7 +163,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       return;
     }
 
-    const lead = leads.find(l => l._id === leadId);
+    const lead = leads.find((l: any) => l._id === leadId);
     if (!lead) {
       toast.error("Contact not found");
       return;
@@ -202,9 +202,9 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       return;
     }
 
-    const lead = leads.find(l => l._id === targetLeadId);
+    const lead = leads.find((l: any) => l._id === targetLeadId);
     if (!lead) {
-      console.error("Lead not found:", { targetLeadId, availableLeads: leads.map(l => l._id) });
+      console.error("Lead not found:", { targetLeadId, availableLeads: leads.map((l: any) => l._id) });
       toast.error("Contact not found. Please try again.");
       return;
     }
@@ -303,7 +303,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                     No templates found. Click "Sync from Meta" or create a new template.
                   </div>
                 ) : (
-                  templates.map((template) => (
+                  templates.map((template: any) => (
                     <div key={template._id} className="border rounded-lg p-4 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -355,7 +355,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                       </div>
                       <p className="text-sm text-muted-foreground">Language: {template.language}</p>
                       <div className="text-sm space-y-1">
-                        {template.components.map((comp, idx) => (
+                        {template.components.map((comp: any, idx: number) => (
                           <div key={idx} className="bg-muted/50 p-2 rounded">
                             <span className="font-medium text-xs">{comp.type}</span>
                             {comp.format && <span className="text-xs text-muted-foreground"> ({comp.format})</span>}
@@ -552,7 +552,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
             <DialogTitle>Send Template Message</DialogTitle>
             <DialogDescription>
               {selectedLeadId 
-                ? `Send "${selectedTemplate?.name}" to ${leads.find(l => l._id === (sendFormData.leadId || selectedLeadId))?.name || "selected contact"}`
+                ? `Send "${selectedTemplate?.name}" to ${leads.find((l: any) => l._id === (sendFormData.leadId || selectedLeadId))?.name || "selected contact"}`
                 : `Send "${selectedTemplate?.name}" to a contact`
               }
             </DialogDescription>
@@ -569,7 +569,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                     <SelectValue placeholder="Choose a contact..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {leads.map((lead) => (
+                    {leads.map((lead: any) => (
                       <SelectItem key={lead._id} value={lead._id}>
                         {lead.name} - {lead.mobile}
                       </SelectItem>
@@ -581,10 +581,10 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
             {selectedLeadId && (
               <div className="p-3 bg-muted rounded-lg">
                 <p className="text-sm font-medium">
-                  {leads.find(l => l._id === selectedLeadId)?.name}
+                  {leads.find((l: any) => l._id === selectedLeadId)?.name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {leads.find(l => l._id === selectedLeadId)?.mobile}
+                  {leads.find((l: any) => l._id === selectedLeadId)?.mobile}
                 </p>
               </div>
             )}
