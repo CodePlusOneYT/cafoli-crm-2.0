@@ -2,11 +2,12 @@ import { TemplatesDialog } from "@/components/TemplatesDialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X, AlertTriangle } from "lucide-react";
+import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X, AlertTriangle, ImageIcon, HelpCircle, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +30,7 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [now, setNow] = useState(Date.now());
+  const [showCommandMenu, setShowCommandMenu] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,6 +61,28 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
       markChatAsRead({ leadId: selectedLeadId });
     }
   }, [selectedLeadId, selectedLead?.unreadCount, markChatAsRead]);
+
+  // Handle input change to detect slash commands
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setWhatsappMessage(value);
+    setShowCommandMenu(value.startsWith("/"));
+  };
+
+  const handleCommandSelect = (command: string, payload?: string) => {
+    if (command === "image") {
+      fileInputRef.current?.click();
+      setWhatsappMessage("");
+    } else if (command === "faq") {
+      setWhatsappMessage(payload || "");
+    }
+    setShowCommandMenu(false);
+    // Focus back on input
+    setTimeout(() => {
+      const input = document.querySelector('input[placeholder="Type a message..."]') as HTMLInputElement;
+      if (input) input.focus();
+    }, 10);
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -217,7 +241,7 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
   };
 
   return (
-    <Card className="flex flex-col h-full overflow-hidden">
+    <Card className="flex flex-col h-full overflow-hidden relative">
       <CardHeader className="border-b py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -318,7 +342,38 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
         </div>
       </div>
 
-      <div className="border-t p-4 flex-shrink-0 bg-background">
+      <div className="border-t p-4 flex-shrink-0 bg-background relative">
+        {/* Command Menu */}
+        {showCommandMenu && (
+          <div className="absolute bottom-full left-4 mb-2 w-64 bg-popover border rounded-md shadow-md z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+            <Command>
+              <CommandList>
+                <CommandGroup heading="Commands">
+                  <CommandItem onSelect={() => handleCommandSelect("image")} className="cursor-pointer">
+                    <ImageIcon className="mr-2 h-4 w-4" />
+                    <span>/image</span>
+                    <span className="ml-auto text-xs text-muted-foreground">Upload image</span>
+                  </CommandItem>
+                </CommandGroup>
+                <CommandGroup heading="Frequently Asked Questions">
+                  <CommandItem onSelect={() => handleCommandSelect("faq", "Our business hours are Mon-Fri, 9 AM - 6 PM.")} className="cursor-pointer">
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span>Business Hours</span>
+                  </CommandItem>
+                  <CommandItem onSelect={() => handleCommandSelect("faq", "We are located at 123 Business Park, Tech City.")} className="cursor-pointer">
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span>Location</span>
+                  </CommandItem>
+                  <CommandItem onSelect={() => handleCommandSelect("faq", "You can view our pricing plans at example.com/pricing")} className="cursor-pointer">
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span>Pricing</span>
+                  </CommandItem>
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </div>
+        )}
+
         {!isWithinWindow && (
           <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-md flex items-center gap-2 text-amber-800 text-sm">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -386,9 +441,9 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
           <TemplatesDialog selectedLeadId={selectedLeadId} />
           <div className="flex-1 relative">
             <Input
-              placeholder={isWithinWindow ? "Type a message..." : "Session expired. Send a template."}
+              placeholder={isWithinWindow ? "Type a message or / for commands..." : "Session expired. Send a template."}
               value={whatsappMessage}
-              onChange={(e) => setWhatsappMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               className="pr-10"
               disabled={isSending || isUploading || !isWithinWindow}
