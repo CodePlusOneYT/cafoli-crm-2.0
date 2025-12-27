@@ -372,3 +372,92 @@ export const handleStatusUpdate = internalAction({
     }
   },
 });
+
+export const updateWhatsAppInterface = action({
+  args: {},
+  handler: async (ctx) => {
+    const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+
+    if (!accessToken || !phoneNumberId) {
+      throw new Error("WhatsApp API not configured");
+    }
+
+    const results = {
+      commands: false,
+      iceBreakers: false,
+      errors: [] as string[]
+    };
+
+    // 1. Set Commands
+    try {
+      const commandsPayload = {
+        commands: [
+          {
+            command_name: "image",
+            description: "Send an image"
+          },
+          {
+            command_name: "faq",
+            description: "Frequently Asked Questions"
+          }
+        ]
+      };
+
+      const cmdResponse = await fetch(
+        `https://graph.facebook.com/v16.0/${phoneNumberId}/commands`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(commandsPayload),
+        }
+      );
+
+      if (!cmdResponse.ok) {
+        const data = await cmdResponse.json();
+        results.errors.push(`Commands Error: ${JSON.stringify(data)}`);
+      } else {
+        results.commands = true;
+      }
+    } catch (e) {
+      results.errors.push(`Commands Exception: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    // 2. Set Ice Breakers (Conversational Automation)
+    try {
+      const iceBreakersPayload = {
+        prompts: [
+          "What are your business hours?",
+          "Where are you located?",
+          "I want to see your catalog"
+        ]
+      };
+      
+      const ibResponse = await fetch(
+        `https://graph.facebook.com/v16.0/${phoneNumberId}/conversational_automation`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(iceBreakersPayload),
+        }
+      );
+
+      if (!ibResponse.ok) {
+        const data = await ibResponse.json();
+        results.errors.push(`Ice Breakers Error: ${JSON.stringify(data)}`);
+      } else {
+        results.iceBreakers = true;
+      }
+    } catch (e) {
+      results.errors.push(`Ice Breakers Exception: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    
+    return results;
+  }
+});

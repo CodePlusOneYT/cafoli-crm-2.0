@@ -2,13 +2,15 @@ import AppLayout from "@/components/AppLayout";
 import { ChatWindow } from "@/components/whatsapp/ChatWindow";
 import { ContactList } from "@/components/whatsapp/ContactList";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { ROLES } from "@/convex/schema";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "convex/react";
-import { MessageSquare } from "lucide-react";
+import { useQuery, useAction } from "convex/react";
+import { MessageSquare, Settings } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export default function WhatsApp() {
   const { user } = useAuth();
@@ -21,10 +23,30 @@ export default function WhatsApp() {
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
   const selectedLead = leads.find(l => l._id === selectedLeadId);
 
+  const updateInterface = useAction(api.whatsapp.updateWhatsAppInterface);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleUpdateInterface = async () => {
+    setIsUpdating(true);
+    try {
+      const result = await updateInterface();
+      if (result.errors.length > 0) {
+        console.error(result.errors);
+        toast.error("Some updates failed. Check console.");
+      } else {
+        toast.success("WhatsApp interface updated successfully");
+      }
+    } catch (error) {
+      toast.error("Failed to update interface");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-4rem)]">
-        <div className="flex-shrink-0 p-6 pb-4">
+        <div className="flex-shrink-0 p-6 pb-4 flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">WhatsApp Messaging</h1>
             <p className="text-muted-foreground">
@@ -33,6 +55,16 @@ export default function WhatsApp() {
                 : "Send WhatsApp messages to your assigned leads."}
             </p>
           </div>
+          {user?.role === ROLES.ADMIN && (
+            <Button 
+              variant="outline" 
+              onClick={handleUpdateInterface}
+              disabled={isUpdating}
+            >
+              <Settings className="mr-2 h-4 w-4" />
+              {isUpdating ? "Syncing..." : "Sync Interface"}
+            </Button>
+          )}
         </div>
 
         <div className="flex-1 grid md:grid-cols-[350px_1fr] gap-4 px-6 pb-6 min-h-0 overflow-hidden">
