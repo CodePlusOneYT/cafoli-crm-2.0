@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInView } from "react-intersection-observer";
 import LeadDetails from "@/components/LeadDetails";
 import { Id } from "@/convex/_generated/dataModel";
+import { LeadCard } from "@/components/LeadCard";
 
 export default function Leads() {
   const location = useLocation();
@@ -29,6 +30,10 @@ export default function Leads() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [viewIrrelevant, setViewIrrelevant] = useState(false);
+  
+  // New filters
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   // Debounce search
   useEffect(() => {
@@ -47,7 +52,9 @@ export default function Leads() {
     { 
       filter: viewIrrelevant ? "irrelevant" : filter, 
       userId: user?._id,
-      search: debouncedSearch || undefined
+      search: debouncedSearch || undefined,
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      source: sourceFilter !== "all" ? sourceFilter : undefined,
     }, 
     { initialNumItems: 20 }
   );
@@ -202,104 +209,133 @@ export default function Leads() {
           </DialogContent>
         </Dialog>
 
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              {viewIrrelevant ? "Irrelevant Leads" : title}
-            </h1>
-            <p className="text-muted-foreground">Manage your leads and communications.</p>
+        <div className="flex flex-col gap-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                {viewIrrelevant ? "Irrelevant Leads" : title}
+              </h1>
+              <p className="text-muted-foreground">Manage your leads and communications.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant={viewIrrelevant ? "secondary" : "outline"}
+                onClick={() => setViewIrrelevant(!viewIrrelevant)}
+              >
+                {viewIrrelevant ? "Show Active Leads" : "Show Irrelevant Leads"}
+              </Button>
+
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Lead
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Lead</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleCreateLead} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Name</label>
+                        <Input name="name" required placeholder="John Doe" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Subject</label>
+                        <Input name="subject" required placeholder="Inquiry about..." />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Mobile</label>
+                        <Input name="mobile" required placeholder="+1234567890" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Email</label>
+                        <Input name="email" type="email" placeholder="john@example.com" />
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <label className="text-sm font-medium">Agency Name</label>
+                        <Input name="agencyName" placeholder="Company Ltd." />
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <label className="text-sm font-medium">Message</label>
+                        <Textarea name="message" placeholder="Initial message..." />
+                      </div>
+                    </div>
+                    <Button type="submit" className="w-full">Create Lead</Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Follow-up Date Assignment Dialog */}
+              <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Set Follow-up Date</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="followUpDate">Follow-up Date & Time</Label>
+                      <Input
+                        id="followUpDate"
+                        type="datetime-local"
+                        value={followUpDate}
+                        onChange={(e) => setFollowUpDate(e.target.value)}
+                        min={getMinDateTime()}
+                        max={getMaxDateTime()}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Must be between now and 31 days in the future
+                      </p>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsAssignDialogOpen(false);
+                          setLeadToAssign(null);
+                          setFollowUpDate("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button onClick={confirmAssignToSelf}>
+                        Assign Lead
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button 
-              variant={viewIrrelevant ? "secondary" : "outline"}
-              onClick={() => setViewIrrelevant(!viewIrrelevant)}
-            >
-              {viewIrrelevant ? "Show Active Leads" : "Show Irrelevant Leads"}
-            </Button>
 
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Lead
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add New Lead</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleCreateLead} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Name</label>
-                      <Input name="name" required placeholder="John Doe" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Subject</label>
-                      <Input name="subject" required placeholder="Inquiry about..." />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Mobile</label>
-                      <Input name="mobile" required placeholder="+1234567890" />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Email</label>
-                      <Input name="email" type="email" placeholder="john@example.com" />
-                    </div>
-                    <div className="col-span-2 space-y-2">
-                      <label className="text-sm font-medium">Agency Name</label>
-                      <Input name="agencyName" placeholder="Company Ltd." />
-                    </div>
-                    <div className="col-span-2 space-y-2">
-                      <label className="text-sm font-medium">Message</label>
-                      <Textarea name="message" placeholder="Initial message..." />
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full">Create Lead</Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+          {/* Filters Row */}
+          <div className="flex gap-2 items-center">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Filter Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="Cold">Cold</SelectItem>
+                <SelectItem value="Hot">Hot</SelectItem>
+                <SelectItem value="Mature">Mature</SelectItem>
+              </SelectContent>
+            </Select>
 
-            {/* Follow-up Date Assignment Dialog */}
-            <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Set Follow-up Date</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="followUpDate">Follow-up Date & Time</Label>
-                    <Input
-                      id="followUpDate"
-                      type="datetime-local"
-                      value={followUpDate}
-                      onChange={(e) => setFollowUpDate(e.target.value)}
-                      min={getMinDateTime()}
-                      max={getMaxDateTime()}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Must be between now and 31 days in the future
-                    </p>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsAssignDialogOpen(false);
-                        setLeadToAssign(null);
-                        setFollowUpDate("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={confirmAssignToSelf}>
-                      Assign Lead
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Filter Source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                <SelectItem value="Manual">Manual</SelectItem>
+                <SelectItem value="Pharmavends">Pharmavends</SelectItem>
+                <SelectItem value="IndiaMART">IndiaMART</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -317,88 +353,18 @@ export default function Leads() {
             </div>
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
               {leads?.map((lead) => (
-                <Card
+                <LeadCard
                   key={lead._id}
-                  className={`cursor-pointer transition-colors hover:bg-accent/50 ${
-                    selectedLeadId === lead._id ? "border-primary bg-accent/50" : ""
-                  } ${
-                    lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() ? "border-red-300 bg-red-50/50" : ""
-                  }`}
-                  onClick={() => setSelectedLeadId(lead._id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold truncate">{lead.name}</h3>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(lead._creationTime).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate mb-2">{lead.subject}</p>
-                    <div className="flex gap-2 text-xs flex-wrap items-center">
-                      <span className="bg-secondary px-2 py-0.5 rounded-full">{lead.source}</span>
-                      <span className={`px-2 py-0.5 rounded-full ${
-                        lead.status === 'Hot' ? 'bg-red-100 text-red-700' :
-                        lead.status === 'Mature' ? 'bg-green-100 text-green-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>{lead.status}</span>
-                      
-                      {lead.adminAssignmentRequired && (
-                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full border border-purple-200">
-                          Admin Assign Only
-                        </span>
-                      )}
-
-                      {lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() && (
-                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium border border-red-200">
-                          Overdue
-                        </span>
-                      )}
-                      {isUnassignedView && !lead.assignedTo && !viewIrrelevant && (
-                        <>
-                          {!isAdmin ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 text-xs"
-                              disabled={lead.adminAssignmentRequired}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (lead.adminAssignmentRequired) {
-                                  toast.error("This lead can only be assigned by an admin");
-                                  return;
-                                }
-                                handleAssignToSelf(lead._id);
-                              }}
-                            >
-                              <UserPlus className="h-3 w-3 mr-1" />
-                              Assign to me
-                            </Button>
-                          ) : (
-                            <Select
-                              onValueChange={(userId) => {
-                                handleAssignToUser(lead._id, userId);
-                              }}
-                            >
-                              <SelectTrigger 
-                                className="h-6 text-xs w-auto"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <SelectValue placeholder="Assign to..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {allUsers.map((u) => (
-                                  <SelectItem key={u._id} value={u._id}>
-                                    {u.name || u.email}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                  lead={lead}
+                  isSelected={selectedLeadId === lead._id}
+                  isUnassignedView={isUnassignedView}
+                  viewIrrelevant={viewIrrelevant}
+                  isAdmin={isAdmin}
+                  allUsers={allUsers}
+                  onSelect={setSelectedLeadId}
+                  onAssignToSelf={(id) => handleAssignToSelf(id)}
+                  onAssignToUser={(leadId, userId) => handleAssignToUser(leadId, userId)}
+                />
               ))}
               
               {/* Loading indicator and infinite scroll trigger */}

@@ -45,6 +45,8 @@ export const getPaginatedLeads = query({
     filter: v.optional(v.string()), // "all", "unassigned", "mine", "irrelevant"
     userId: v.optional(v.id("users")),
     search: v.optional(v.string()),
+    status: v.optional(v.string()),
+    source: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = args.userId || await getAuthUserId(ctx);
@@ -69,7 +71,7 @@ export const getPaginatedLeads = query({
 
     // Search logic
     if (args.search) {
-      const results = await ctx.db
+      let results = await ctx.db
         .query("leads")
         .withSearchIndex("search_all", (q) => {
           let search = q.search("searchText", args.search!);
@@ -79,6 +81,14 @@ export const getPaginatedLeads = query({
           return search;
         })
         .take(args.paginationOpts.numItems); 
+
+      // Apply in-memory filters for search results
+      if (args.status) {
+        results = results.filter(l => l.status === args.status);
+      }
+      if (args.source) {
+        results = results.filter(l => l.source === args.source);
+      }
 
       return {
         page: results,
@@ -99,7 +109,15 @@ export const getPaginatedLeads = query({
         .collect();
 
       // Filter out irrelevant leads unless specifically asked (though "mine" usually excludes them in previous logic)
-      const activeLeads = allLeads.filter(l => l.type !== "Irrelevant");
+      let activeLeads = allLeads.filter(l => l.type !== "Irrelevant");
+
+      // Apply filters
+      if (args.status) {
+        activeLeads = activeLeads.filter(l => l.status === args.status);
+      }
+      if (args.source) {
+        activeLeads = activeLeads.filter(l => l.source === args.source);
+      }
 
       const sortedLeads = activeLeads.sort((a, b) => {
         const dateA = a.nextFollowUpDate;
@@ -130,46 +148,37 @@ export const getPaginatedLeads = query({
         isDone,
         continueCursor,
       };
-    } else if (args.filter === "unassigned") {
-      // Filter for unassigned leads. 
-      // Since "assignedTo" is optional and missing in unassigned leads, they are not in the index.
-      // We must use a filter.
-      return await ctx.db
-        .query("leads")
-        .order("desc")
-        .filter((q) => 
-          q.and(
-            q.eq(q.field("assignedTo"), undefined),
-            q.neq(q.field("type"), "Irrelevant")
-          )
-        )
-        .paginate(args.paginationOpts);
-    } else if (args.filter === "irrelevant") {
-      // New filter for irrelevant leads
-      return await ctx.db
-        .query("leads")
-        .order("desc")
-        .filter((q) => q.eq(q.field("type"), "Irrelevant"))
-        .paginate(args.paginationOpts);
-    } else if (args.filter === "all") {
-      // Admin view or all leads - exclude irrelevant by default unless specifically asked?
-      // Usually "All Leads" implies active leads.
-      return await ctx.db
-        .query("leads")
-        .order("desc")
-        .filter((q) => q.neq(q.field("type"), "Irrelevant"))
-        .paginate(args.paginationOpts);
     } else {
-      // Default to unassigned
+      // Database query for other views
       return await ctx.db
         .query("leads")
         .order("desc")
-        .filter((q) => 
-          q.and(
-            q.eq(q.field("assignedTo"), undefined),
-            q.neq(q.field("type"), "Irrelevant")
-          )
-        )
+        .filter((q) => {
+          let predicate;
+          
+          // Base filter logic
+          if (args.filter === "unassigned") {
+            predicate = q.and(
+              q.eq(q.field("assignedTo"), undefined),
+              q.neq(q.field("type"), "Irrelevant")
+            );
+          } else if (args.filter === "irrelevant") {
+            predicate = q.eq(q.field("type"), "Irrelevant");
+          } else {
+            // "all" or default
+            predicate = q.neq(q.field("type"), "Irrelevant");
+          }
+
+          // Apply additional filters
+          if (args.status) {
+            predicate = q.and(predicate, q.eq(q.field("status"), args.status));
+          }
+          if (args.source) {
+            predicate = q.and(predicate, q.eq(q.field("source"), args.source));
+          }
+
+          return predicate;
+        })
         .paginate(args.paginationOpts);
     }
   },
