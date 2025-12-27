@@ -71,7 +71,7 @@ if (!convexUrl || convexUrl === 'undefined' || convexUrl === '') {
   throw new Error("VITE_CONVEX_URL is required");
 }
 
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+const convex = new ConvexReactClient(convexUrl);
 
 const router = createBrowserRouter([
   {
