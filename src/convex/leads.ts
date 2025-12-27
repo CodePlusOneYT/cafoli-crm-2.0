@@ -19,6 +19,39 @@ async function checkRole(ctx: any, allowedRoles: string[]) {
   return user;
 }
 
+// Helper to handle follow-up completion
+async function handleFollowUpChange(ctx: any, leadId: any, newDate: number | undefined, userId: any) {
+  const now = Date.now();
+  
+  // Find pending follow-ups for this lead
+  const pending = await ctx.db
+    .query("followups")
+    .withIndex("by_lead", (q: any) => q.eq("leadId", leadId))
+    .filter((q: any) => q.eq(q.field("status"), "pending"))
+    .collect();
+
+  for (const followup of pending) {
+    // Determine if it was overdue (grace period 20 mins = 1200000 ms)
+    const isOverdue = now > (followup.scheduledAt + 20 * 60 * 1000);
+    
+    await ctx.db.patch(followup._id, {
+      status: "completed",
+      completedAt: now,
+      completionStatus: isOverdue ? "overdue" : "timely",
+    });
+  }
+
+  // Schedule new follow-up if provided
+  if (newDate) {
+    await ctx.db.insert("followups", {
+      leadId,
+      assignedTo: userId, // Assign to the user making the change or the lead's assignee? Usually the lead's assignee.
+      scheduledAt: newDate,
+      status: "pending",
+    });
+  }
+}
+
 function generateSearchText(data: {
   name?: string;
   subject?: string;
@@ -294,6 +327,8 @@ export const createLead = mutation({
       searchText,
     });
     
+    // No follow-up scheduled on creation by default unless specified, but here it's not in args.
+    
     // Send welcome email for manually created leads if email is provided
     if (args.email) {
       try {
@@ -332,8 +367,7 @@ export const updateLead = mutation({
       assignedTo: v.optional(v.id("users")),
       nextFollowUpDate: v.optional(v.number()),
       message: v.optional(v.string()),
-      comments: v.optional(v.string()), // We'll handle comments separately but maybe update message
-      // Add other fields as needed
+      comments: v.optional(v.string()), 
       name: v.optional(v.string()),
       mobile: v.optional(v.string()),
       email: v.optional(v.string()),
@@ -366,6 +400,12 @@ export const updateLead = mutation({
       if (followUpDate > maxFutureDate) {
         throw new Error("Follow-up date cannot be more than 31 days in the future");
       }
+
+      // Handle follow-up history
+      // Use the assigned user for the new follow-up, or the current user if not assigned?
+      // Usually follow-ups belong to the assignee.
+      const assignee = args.patch.assignedTo || lead.assignedTo || userId;
+      await handleFollowUpChange(ctx, args.id, followUpDate, assignee);
     }
 
     // Check if lead is assigned and requires follow-up date
@@ -441,6 +481,9 @@ export const assignLead = mutation({
       throw new Error("Follow-up date cannot be more than 31 days in the future");
     }
     
+    // Handle follow-up history
+    await handleFollowUpChange(ctx, args.leadId, followUpDate, args.userId);
+
     await ctx.db.patch(args.leadId, {
       assignedTo: args.userId,
       nextFollowUpDate: args.nextFollowUpDate,

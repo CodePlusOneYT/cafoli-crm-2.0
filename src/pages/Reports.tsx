@@ -1,143 +1,288 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { BarChart, LineChart, PieChart } from "lucide-react";
+import { format, startOfDay, endOfDay, subDays } from "date-fns";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+
+// Colors for charts
+const COLORS = [
+  "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d", "#ffc658", "#8dd1e1", "#a4de6c", "#d0ed57"
+];
 
 export default function Reports() {
-  // For now, we'll just use the leads query to get some basic stats
-  // In a real app, we should have dedicated aggregation queries
-  const leads = useQuery(api.leads.getLeads, { filter: "all" });
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [selectedSlice, setSelectedSlice] = useState<{ type: string, value: string } | null>(null);
+  
+  // Filters state
+  const [enabledSources, setEnabledSources] = useState<Record<string, boolean>>({});
+  const [enabledStatuses, setEnabledStatuses] = useState<Record<string, boolean>>({
+    "Cold": true, "Hot": true, "Mature": true
+  });
+  const [enabledTypes, setEnabledTypes] = useState<Record<string, boolean>>({
+    "Relevant": true, "Irrelevant": true, "To be Decided": true
+  });
 
-  if (!leads) {
+  // Calculate start and end of the selected day (or range if we expanded to range)
+  // Requirement: "defaulting to today and not allowing future dates"
+  // We'll treat "date" as the single day for the report for now, or maybe a range?
+  // "Date filter" usually implies range. Let's support single day for now as per "defaulting to today".
+  // If user wants range, we'd need a range picker. Let's stick to single day or maybe a simple "Last 7 days" option?
+  // The prompt says "date filter". I'll implement a single date picker that filters for that whole day.
+  
+  const startDate = date ? startOfDay(date).getTime() : startOfDay(new Date()).getTime();
+  const endDate = date ? endOfDay(date).getTime() : endOfDay(new Date()).getTime();
+
+  const stats = useQuery(api.reports.getReportStats, { startDate, endDate });
+  
+  // Query for details when a slice is clicked
+  const detailsLeads = useQuery(api.reports.getLeadsByFilter, 
+    selectedSlice ? {
+      startDate,
+      endDate,
+      filterType: selectedSlice.type,
+      filterValue: selectedSlice.value
+    } : "skip"
+  );
+
+  if (!stats) {
     return <div className="p-8 text-center">Loading reports...</div>;
   }
 
-  // Calculate some basic stats
-  const totalLeads = leads.length;
-  const leadsByStatus = leads.reduce((acc, lead) => {
-    const status = lead.status || "Unknown";
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Filter data based on checkboxes
+  const filteredSources = stats.sources.filter(s => enabledSources[s.name] !== false);
+  const filteredStatus = stats.status.filter(s => enabledStatuses[s.name] !== false);
+  const filteredRelevancy = stats.relevancy.filter(s => enabledTypes[s.name] !== false);
+  
+  // Initialize sources filter if empty and data exists
+  if (Object.keys(enabledSources).length === 0 && stats.sources.length > 0) {
+    const initial: Record<string, boolean> = {};
+    stats.sources.forEach(s => initial[s.name] = true);
+    setEnabledSources(initial);
+  }
 
-  const leadsBySource = leads.reduce((acc, lead) => {
-    const source = lead.source || "Unknown";
-    acc[source] = (acc[source] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const handleSliceClick = (data: any, type: string) => {
+    setSelectedSlice({ type, value: data.name });
+  };
 
-  const leadsByType = leads.reduce((acc, lead) => {
-    const type = lead.type || "Unknown";
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const CustomPieChart = ({ data, type, title, filterState, setFilterState }: any) => (
+    <Card className="flex flex-col">
+      <CardHeader className="items-center pb-0">
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>Click slices for details</CardDescription>
+      </CardHeader>
+      <CardContent className="flex-1 pb-0">
+        <div className="h-[250px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={2}
+                dataKey="count"
+                onClick={(entry) => handleSliceClick(entry, type)}
+                cursor="pointer"
+              >
+                {data.map((entry: any, index: number) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        {filterState && (
+          <div className="flex flex-wrap gap-2 justify-center mt-4 mb-2">
+            {Object.keys(filterState).map(key => (
+              <div key={key} className="flex items-center space-x-2">
+                <Checkbox 
+                  id={`${type}-${key}`} 
+                  checked={filterState[key]} 
+                  onCheckedChange={(checked) => setFilterState({...filterState, [key]: checked})}
+                />
+                <Label htmlFor={`${type}-${key}`} className="text-xs">{key}</Label>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-        <p className="text-muted-foreground">
-          Overview of lead performance and metrics.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalLeads}</div>
-            <p className="text-xs text-muted-foreground">
-              All time leads
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
-            <LineChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {leads.filter(l => l.type !== "Irrelevant").length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Excluding irrelevant
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
-            <PieChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalLeads > 0 
-                ? Math.round((leads.filter(l => l.status === "Mature").length / totalLeads) * 100) 
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Leads marked as Mature
-            </p>
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
+          <p className="text-muted-foreground">
+            Daily performance metrics and analytics.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={"outline"}
+                className={cn(
+                  "w-[240px] justify-start text-left font-normal",
+                  !date && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {date ? format(date, "PPP") : <span>Pick a date</span>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle>Leads by Status</CardTitle>
-            <CardDescription>Distribution of lead statuses</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {Object.entries(leadsByStatus).map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{status}</span>
-                  <span className="text-sm text-muted-foreground">{count}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <CustomPieChart 
+          data={filteredSources} 
+          type="source" 
+          title="Lead Source" 
+          filterState={enabledSources}
+          setFilterState={setEnabledSources}
+        />
+        <CustomPieChart 
+          data={filteredStatus} 
+          type="status" 
+          title="Lead Status" 
+          filterState={enabledStatuses}
+          setFilterState={setEnabledStatuses}
+        />
+        <CustomPieChart 
+          data={filteredRelevancy} 
+          type="type" 
+          title="Lead Relevancy" 
+          filterState={enabledTypes}
+          setFilterState={setEnabledTypes}
+        />
+        
+        {stats.assignment.length > 0 && (
+          <CustomPieChart 
+            data={stats.assignment} 
+            type="assignedTo" 
+            title="Lead Assignment" 
+          />
+        )}
 
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle>Leads by Source</CardTitle>
-            <CardDescription>Where leads are coming from</CardDescription>
+        <Card className="flex flex-col col-span-1 md:col-span-2 lg:col-span-1">
+          <CardHeader className="items-center pb-0">
+            <CardTitle>Follow-up Punctuality</CardTitle>
+            <CardDescription>Timeliness of follow-ups</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {Object.entries(leadsBySource).map(([source, count]) => (
-                <div key={source} className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{source}</span>
-                  <span className="text-sm text-muted-foreground">{count}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle>Leads by Type</CardTitle>
-            <CardDescription>Relevance classification</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {Object.entries(leadsByType).map(([type, count]) => (
-                <div key={type} className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{type}</span>
-                  <span className="text-sm text-muted-foreground">{count}</span>
-                </div>
-              ))}
+          <CardContent className="flex-1 pb-0">
+             <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={stats.punctuality}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="count"
+                  >
+                    {stats.punctuality.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={
+                        entry.name === "Timely-Completed" ? "#4ade80" : 
+                        entry.name === "Overdue-Completed" ? "#facc15" : 
+                        "#f87171"
+                      } />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!selectedSlice} onOpenChange={(open) => !open && setSelectedSlice(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Leads: {selectedSlice?.type} - {selectedSlice?.value}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {detailsLeads ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Mobile</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detailsLeads.length > 0 ? (
+                    detailsLeads.map((lead) => (
+                      <TableRow key={lead._id}>
+                        <TableCell className="font-medium">{lead.name}</TableCell>
+                        <TableCell>{lead.mobile}</TableCell>
+                        <TableCell>{lead.status}</TableCell>
+                        <TableCell>{lead.source}</TableCell>
+                        <TableCell>{format(lead._creationTime, "MMM d, yyyy")}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center">No leads found</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="p-4 text-center">Loading details...</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

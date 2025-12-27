@@ -71,6 +71,31 @@ export const mergeIndiamartLead = internalMutation({
     // If assigned, bump to top of my_leads by setting nextFollowUpDate to now
     if (lead.assignedTo) {
       updates.nextFollowUpDate = now;
+      
+      // Also update follow-up history
+      // Mark previous pending as completed (overdue/timely)
+      const pending = await ctx.db
+        .query("followups")
+        .withIndex("by_lead", (q) => q.eq("leadId", args.id))
+        .filter((q) => q.eq(q.field("status"), "pending"))
+        .collect();
+
+      for (const followup of pending) {
+        const isOverdue = now > (followup.scheduledAt + 20 * 60 * 1000);
+        await ctx.db.patch(followup._id, {
+          status: "completed",
+          completedAt: now,
+          completionStatus: isOverdue ? "overdue" : "timely",
+        });
+      }
+      
+      // Create new follow-up for "now" (immediate attention)
+      await ctx.db.insert("followups", {
+        leadId: args.id,
+        assignedTo: lead.assignedTo,
+        scheduledAt: now,
+        status: "pending",
+      });
     }
 
     // Merge fields

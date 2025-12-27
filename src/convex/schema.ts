@@ -69,6 +69,7 @@ const schema = defineSchema(
       
       nextFollowUpDate: v.optional(v.number()),
       lastActivity: v.number(),
+      _creationTime: v.number(), // Add creation time field
 
       // Special flags
       adminAssignmentRequired: v.optional(v.boolean()),
@@ -121,6 +122,20 @@ const schema = defineSchema(
       content: v.string(),
       isSystem: v.optional(v.boolean()),
     }).index("by_lead", ["leadId"]),
+
+    followups: defineTable({
+      leadId: v.id("leads"),
+      assignedTo: v.optional(v.id("users")),
+      scheduledAt: v.number(),
+      completedAt: v.optional(v.number()),
+      status: v.string(), // "pending", "completed", "rescheduled"
+      completionStatus: v.optional(v.string()), // "timely", "overdue"
+    })
+    .index("by_lead", ["leadId"])
+    .index("by_assigned_to", ["assignedTo"])
+    .index("by_scheduled_at", ["scheduledAt"])
+    .index("by_completed_at", ["completedAt"])
+    .index("by_status", ["status"]),
 
     campaigns: defineTable({
       name: v.string(),
