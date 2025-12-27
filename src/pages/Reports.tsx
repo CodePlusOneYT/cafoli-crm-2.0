@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { format, startOfDay, endOfDay, subDays } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
 import {
   Popover,
   PopoverContent,
@@ -38,7 +39,10 @@ const COLORS = [
 
 export default function Reports() {
   const { user } = useAuth();
-  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: new Date(),
+    to: new Date(),
+  });
   const [selectedSlice, setSelectedSlice] = useState<{ type: string, value: string } | null>(null);
   
   // Filters state
@@ -50,15 +54,9 @@ export default function Reports() {
     "Relevant": true, "Irrelevant": true, "To be Decided": true
   });
 
-  // Calculate start and end of the selected day (or range if we expanded to range)
-  // Requirement: "defaulting to today and not allowing future dates"
-  // We'll treat "date" as the single day for the report for now, or maybe a range?
-  // "Date filter" usually implies range. Let's support single day for now as per "defaulting to today".
-  // If user wants range, we'd need a range picker. Let's stick to single day or maybe a simple "Last 7 days" option?
-  // The prompt says "date filter". I'll implement a single date picker that filters for that whole day.
-  
-  const startDate = date ? startOfDay(date).getTime() : startOfDay(new Date()).getTime();
-  const endDate = date ? endOfDay(date).getTime() : endOfDay(new Date()).getTime();
+  // Calculate start and end of the selected range
+  const startDate = date?.from ? startOfDay(date.from).getTime() : startOfDay(new Date()).getTime();
+  const endDate = date?.to ? endOfDay(date.to).getTime() : (date?.from ? endOfDay(date.from).getTime() : endOfDay(new Date()).getTime());
 
   const stats = useQuery(api.reports.getReportStats, 
     user?._id ? { startDate, endDate, userId: user._id } : "skip"
@@ -160,23 +158,37 @@ export default function Reports() {
           <Popover>
             <PopoverTrigger asChild>
               <Button
+                id="date"
                 variant={"outline"}
                 className={cn(
-                  "w-[240px] justify-start text-left font-normal",
+                  "w-[300px] justify-start text-left font-normal",
                   !date && "text-muted-foreground"
                 )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {date ? format(date, "PPP") : <span>Pick a date</span>}
+                {date?.from ? (
+                  date.to ? (
+                    <>
+                      {format(date.from, "LLL dd, y")} -{" "}
+                      {format(date.to, "LLL dd, y")}
+                    </>
+                  ) : (
+                    format(date.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>Pick a date</span>
+                )}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
               <Calendar
-                mode="single"
+                initialFocus
+                mode="range"
+                defaultMonth={date?.from}
                 selected={date}
                 onSelect={setDate}
+                numberOfMonths={2}
                 disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                initialFocus
               />
             </PopoverContent>
           </Popover>
