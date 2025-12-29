@@ -72,6 +72,9 @@ const schema = defineSchema(
 
       // Special flags
       adminAssignmentRequired: v.optional(v.boolean()),
+      isColdCallerLead: v.optional(v.boolean()),
+      coldCallerAssignedAt: v.optional(v.number()),
+      coldCallerAssignedTo: v.optional(v.id("users")),
       
       // Pharmavends specific fields
       pharmavendsUid: v.optional(v.string()),
@@ -106,6 +109,8 @@ const schema = defineSchema(
     .index("by_indiamart_unique_id", ["indiamartUniqueId"])
     .index("by_mobile", ["mobile"])
     .index("by_last_activity", ["lastActivity"])
+    .index("by_cold_caller_assigned_to", ["coldCallerAssignedTo"])
+    .index("by_is_cold_caller", ["isColdCallerLead"])
     .searchIndex("search_name", {
       searchField: "name",
       filterFields: ["assignedTo"],

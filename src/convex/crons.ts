@@ -11,4 +11,20 @@ crons.interval(
   {}
 );
 
+// Mark cold caller leads every hour
+crons.interval(
+  "mark_cold_caller_leads",
+  { minutes: 60 },
+  internal.coldCallerLeads.markColdCallerLeads,
+  {}
+);
+
+// Allocate cold caller leads daily at 9 AM IST (3:30 AM UTC)
+crons.cron(
+  "allocate_cold_caller_leads",
+  "30 3 * * *",
+  internal.coldCallerLeads.allocateColdCallerLeads,
+  {}
+);
+
 export default crons;

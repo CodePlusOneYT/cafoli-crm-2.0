@@ -13,6 +13,7 @@ import type * as auth_emailOtp from "../auth/emailOtp.js";
 import type * as auth_password from "../auth/password.js";
 import type * as brevo from "../brevo.js";
 import type * as campaigns from "../campaigns.js";
+import type * as coldCallerLeads from "../coldCallerLeads.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as indiamartMutations from "../indiamartMutations.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   "auth/password": typeof auth_password;
   brevo: typeof brevo;
   campaigns: typeof campaigns;
+  coldCallerLeads: typeof coldCallerLeads;
   crons: typeof crons;
   http: typeof http;
   indiamartMutations: typeof indiamartMutations;

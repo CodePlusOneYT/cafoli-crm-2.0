@@ -3,13 +3,47 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Users, MessageSquare, BarChart3, Activity } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { ColdCallerPopup } from "@/components/ColdCallerPopup";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const leads = useQuery(api.leads.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
   const campaigns = useQuery(api.campaigns.getCampaigns, user ? { userId: user._id } : "skip") || [];
+  
+  // Cold Caller Leads
+  const coldCallerLeadsNeedingFollowUp = useQuery(
+    api.coldCallerLeads.getColdCallerLeadsNeedingFollowUp,
+    user ? {} : "skip"
+  ) || [];
+  
+  const overdueColdCallerLeads = useQuery(
+    api.coldCallerLeads.getOverdueColdCallerLeads,
+    user?.role === "admin" ? {} : "skip"
+  ) || [];
+
+  const [isColdCallerPopupOpen, setIsColdCallerPopupOpen] = useState(false);
+  const [isAdminOverduePopupOpen, setIsAdminOverduePopupOpen] = useState(false);
+  const [hasShownColdCallerPopup, setHasShownColdCallerPopup] = useState(false);
+  const [hasShownAdminOverduePopup, setHasShownAdminOverduePopup] = useState(false);
+
+  // Show Cold Caller popup for staff
+  useEffect(() => {
+    if (user?.role === "staff" && coldCallerLeadsNeedingFollowUp.length > 0 && !hasShownColdCallerPopup) {
+      setIsColdCallerPopupOpen(true);
+      setHasShownColdCallerPopup(true);
+    }
+  }, [user, coldCallerLeadsNeedingFollowUp, hasShownColdCallerPopup]);
+
+  // Show overdue popup for admin
+  useEffect(() => {
+    if (user?.role === "admin" && overdueColdCallerLeads.length > 0 && !hasShownAdminOverduePopup) {
+      setIsAdminOverduePopupOpen(true);
+      setHasShownAdminOverduePopup(true);
+    }
+  }, [user, overdueColdCallerLeads, hasShownAdminOverduePopup]);
 
   // Memoize computed stats to avoid recalculation on every render
   const stats = useMemo(() => {
@@ -50,6 +84,56 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
+      {/* Cold Caller Popup for Staff */}
+      {user && coldCallerLeadsNeedingFollowUp.length > 0 && (
+        <ColdCallerPopup
+          leads={coldCallerLeadsNeedingFollowUp}
+          isOpen={isColdCallerPopupOpen}
+          onClose={() => setIsColdCallerPopupOpen(false)}
+          userId={user._id}
+        />
+      )}
+
+      {/* Admin Overdue Notification */}
+      <Dialog open={isAdminOverduePopupOpen} onOpenChange={setIsAdminOverduePopupOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              ⚠️ Cold Caller Leads - Overdue Follow-ups ({overdueColdCallerLeads.length})
+            </DialogTitle>
+            <DialogDescription>
+              The following Cold Caller Leads have follow-ups overdue by 3+ days. Please take action.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-4">
+            {overdueColdCallerLeads.map((lead: any) => (
+              <div 
+                key={lead._id} 
+                className="p-3 border border-red-200 bg-red-50 rounded-lg"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-semibold text-red-900">{lead.name}</h4>
+                    <p className="text-sm text-red-700">{lead.subject}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Assigned to: {lead.coldCallerAssignedToName || "Unknown"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-bold text-red-600">
+                      {lead.nextFollowUpDate ? new Date(lead.nextFollowUpDate).toLocaleString() : "Unknown"}
+                    </div>
+                    <div className="text-xs text-red-500">
+                      {Math.floor((Date.now() - (lead.nextFollowUpDate || 0)) / (24 * 60 * 60 * 1000))} days overdue
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
