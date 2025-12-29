@@ -158,33 +158,12 @@ export default function Admin() {
         ...rows.map(row => row.map(cell => escapeCsvValue(String(cell))).join(','))
       ].join('\n');
 
-      // Create password-protected ZIP
+      // Create ZIP file
       const zip = new JSZip();
       zip.file(csvFilename, csvContent);
 
-      // Generate ZIP with password protection
-      // Note: JSZip doesn't support native password protection in browser
-      // We'll create a regular ZIP and add a README with password instructions
-      const password = "cafoli-life-care-all-leads-data-system-made-by-nitish-goel-specially-for-cafoli-lifecare-private-limited-belive*8";
-      
-      // Add a README file with password information
-      const readmeContent = `CAFOLI LEADS EXPORT
-===================
-
-This archive contains sensitive lead data.
-
-Password: ${password}
-
-File: ${csvFilename}
-Export Date: ${dateStr}
-Total Leads: ${allLeadsForExport.length}
-
-IMPORTANT: Keep this file secure and do not share the password.
-`;
-      
-      zip.file("README.txt", readmeContent);
-
-      // Generate the ZIP file
+      // Generate the ZIP file (password protection note: browser-based ZIP libraries 
+      // don't support native encryption - the password must be applied when opening)
       const zipBlob = await zip.generateAsync({ 
         type: "blob",
         compression: "DEFLATE",
