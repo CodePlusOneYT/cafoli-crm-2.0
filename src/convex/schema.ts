@@ -147,6 +147,14 @@ const schema = defineSchema(
       })),
     }),
 
+    exportLogs: defineTable({
+      userId: v.id("users"),
+      downloadNumber: v.number(),
+      fileName: v.string(),
+      leadCount: v.number(),
+      exportedAt: v.number(),
+    }).index("by_user", ["userId"]),
+
     // WhatsApp Templates
     templates: defineTable({
       name: v.string(),

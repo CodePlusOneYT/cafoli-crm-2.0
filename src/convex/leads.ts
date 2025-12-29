@@ -586,3 +586,33 @@ export const getAllLeadsForExport = query({
     return enrichedLeads;
   },
 });
+
+export const getNextDownloadNumber = query({
+  args: {},
+  handler: async (ctx) => {
+    const lastExport = await ctx.db
+      .query("exportLogs")
+      .order("desc")
+      .first();
+    
+    return (lastExport?.downloadNumber || 0) + 1;
+  },
+});
+
+export const logExport = mutation({
+  args: {
+    userId: v.id("users"),
+    downloadNumber: v.number(),
+    fileName: v.string(),
+    leadCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("exportLogs", {
+      userId: args.userId,
+      downloadNumber: args.downloadNumber,
+      fileName: args.fileName,
+      leadCount: args.leadCount,
+      exportedAt: Date.now(),
+    });
+  },
+});

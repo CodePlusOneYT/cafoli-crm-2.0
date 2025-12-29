@@ -19,8 +19,10 @@ export default function Admin() {
   const { user: currentUser, signIn } = useAuth();
   const allUsers = useQuery(api.users.getAllUsers, currentUser ? { userId: currentUser._id } : "skip") || [];
   const allLeadsForExport = useQuery(api.leads.getAllLeadsForExport, currentUser ? { userId: currentUser._id } : "skip");
+  const nextDownloadNumber = useQuery(api.leads.getNextDownloadNumber);
   const createUser = useMutation(api.users.createUser);
   const deleteUser = useMutation(api.users.deleteUser);
+  const logExport = useMutation(api.leads.logExport);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newUserData, setNewUserData] = useState({
@@ -92,6 +94,11 @@ export default function Admin() {
       return;
     }
 
+    if (!nextDownloadNumber || !currentUser) {
+      toast.error("Unable to generate download");
+      return;
+    }
+
     try {
       // Get current date in dd-mm-yyyy format
       const now = new Date();
@@ -100,10 +107,7 @@ export default function Admin() {
       const year = now.getFullYear();
       const dateStr = `${day}-${month}-${year}`;
 
-      // Get download number (could be stored in localStorage or database)
-      const downloadNo = parseInt(localStorage.getItem('cafoli_csv_download_count') || '0') + 1;
-      localStorage.setItem('cafoli_csv_download_count', downloadNo.toString());
-
+      const downloadNo = nextDownloadNumber;
       const csvFilename = `${downloadNo}_${dateStr}-all-cafoli-leads.csv`;
       const zipFilename = `${downloadNo}_${dateStr}-all-cafoli-leads.zip`;
 
@@ -198,6 +202,14 @@ IMPORTANT: Keep this file secure and do not share the password.
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+
+      // Log the export to database
+      await logExport({
+        userId: currentUser._id,
+        downloadNumber: downloadNo,
+        fileName: zipFilename,
+        leadCount: allLeadsForExport.length,
+      });
 
       toast.success(`Downloaded ${allLeadsForExport.length} leads as ${zipFilename}`);
     } catch (error) {
