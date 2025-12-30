@@ -140,7 +140,7 @@ export default function Dashboard() {
           <p className="text-muted-foreground">Overview of your CRM performance.</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
             <Card key={stat.title}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -159,8 +159,8 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          <Card className="col-span-4">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+          <Card className="col-span-1 lg:col-span-4">
             <CardHeader>
               <CardTitle>Recent Leads</CardTitle>
             </CardHeader>
@@ -184,7 +184,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
           
-          <Card className="col-span-3">
+          <Card className="col-span-1 lg:col-span-3">
             <CardHeader>
               <CardTitle>Campaign Performance</CardTitle>
             </CardHeader>

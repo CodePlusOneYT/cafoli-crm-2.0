@@ -257,8 +257,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       {/* Main Content */}
       <div className="flex-1 md:pl-64 pt-16 md:pt-0">
-        <main className="p-6 max-w-7xl mx-auto">
-          {children}
+        <main className="p-4 sm:p-6 w-full">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

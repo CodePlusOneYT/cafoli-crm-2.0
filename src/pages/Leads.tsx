@@ -219,7 +219,7 @@ export default function Leads() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-[calc(100vh-8rem)]">
+      <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
         {/* Overdue Leads Popup */}
         <Dialog open={isOverduePopupOpen} onOpenChange={setIsOverduePopupOpen}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -258,14 +258,14 @@ export default function Leads() {
         </Dialog>
 
         <div className="flex flex-col gap-4 mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
                 {viewIrrelevant ? "Irrelevant Leads" : title}
               </h1>
-              <p className="text-muted-foreground">Manage your leads and communications.</p>
+              <p className="text-sm sm:text-base text-muted-foreground">Manage your leads and communications.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               <Button 
                 variant="outline" 
                 onClick={handleSync}
@@ -370,7 +370,7 @@ export default function Leads() {
 
           {/* Unified Filters Row */}
           <div className="flex flex-col gap-3">
-            <div className="flex gap-2 items-center flex-wrap">
+            <div className="flex gap-2 items-center flex-wrap overflow-x-auto pb-2">
               {/* Status Filter */}
               <Popover>
                 <PopoverTrigger asChild>
@@ -569,9 +569,9 @@ export default function Leads() {
           </div>
         </div>
 
-        <div className="flex gap-6 flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
           {/* Lead List */}
-          <div className={`w-full md:w-1/3 flex flex-col gap-4 ${selectedLeadId ? 'hidden md:flex' : 'flex'}`}>
+          <div className={`w-full md:w-1/3 lg:w-2/5 flex flex-col gap-4 ${selectedLeadId ? 'hidden md:flex' : 'flex'}`}>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input

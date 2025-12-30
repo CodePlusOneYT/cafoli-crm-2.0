@@ -165,7 +165,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
     <div className="flex flex-col h-full gap-4">
       {/* Header */}
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label>Campaign Name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Campaign" />
@@ -282,9 +282,9 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
       </div>
 
       {/* Campaign Flow Builder */}
-      <div className="flex-1 flex gap-4">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4">
         {/* Block List */}
-        <div className="w-64 space-y-2">
+        <div className="w-full lg:w-64 space-y-2">
           <Button onClick={() => setShowBlockMenu(!showBlockMenu)} className="w-full">
             <Plus className="mr-2 h-4 w-4" />
             Add Block
@@ -340,7 +340,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
         </div>
 
         {/* Block Editor */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {selectedBlockData ? (
             <Card>
               <CardHeader>
