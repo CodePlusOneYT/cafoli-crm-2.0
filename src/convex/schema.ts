@@ -152,14 +152,74 @@ const schema = defineSchema(
 
     campaigns: defineTable({
       name: v.string(),
-      type: v.string(), // Email, WhatsApp, etc.
-      status: v.string(), // Draft, Active, Completed
+      description: v.optional(v.string()),
+      type: v.string(), // "sequence", "broadcast"
+      status: v.string(), // "draft", "active", "paused", "completed"
+      createdBy: v.id("users"),
+      
+      // Lead selection criteria
+      leadSelection: v.object({
+        type: v.union(v.literal("all"), v.literal("filtered")),
+        tagIds: v.optional(v.array(v.id("tags"))),
+        statuses: v.optional(v.array(v.string())),
+        sources: v.optional(v.array(v.string())),
+        autoEnrollNew: v.optional(v.boolean()),
+      }),
+      
+      // Campaign flow (blocks with IDs and connections)
+      blocks: v.array(v.object({
+        id: v.string(),
+        type: v.string(),
+        data: v.any(), // Block-specific data
+        position: v.optional(v.object({ x: v.number(), y: v.number() })),
+      })),
+      
+      connections: v.array(v.object({
+        from: v.string(), // Block ID
+        to: v.string(), // Block ID
+        label: v.optional(v.string()), // For conditional branches
+      })),
+      
       metrics: v.optional(v.object({
+        enrolled: v.number(),
+        completed: v.number(),
+        active: v.number(),
         sent: v.number(),
         opened: v.number(),
         clicked: v.number(),
+        replied: v.number(),
       })),
-    }),
+    }).index("by_created_by", ["createdBy"]).index("by_status", ["status"]),
+
+    // Campaign enrollments - tracks which leads are in which campaigns
+    campaignEnrollments: defineTable({
+      campaignId: v.id("campaigns"),
+      leadId: v.id("leads"),
+      status: v.string(), // "active", "completed", "failed", "paused"
+      currentBlockId: v.optional(v.string()),
+      enrolledAt: v.number(),
+      completedAt: v.optional(v.number()),
+      pathTaken: v.optional(v.array(v.string())), // Track which blocks were executed
+    })
+    .index("by_campaign", ["campaignId"])
+    .index("by_lead", ["leadId"])
+    .index("by_campaign_and_status", ["campaignId", "status"]),
+
+    // Campaign execution queue
+    campaignExecutions: defineTable({
+      campaignId: v.id("campaigns"),
+      enrollmentId: v.id("campaignEnrollments"),
+      leadId: v.id("leads"),
+      blockId: v.string(),
+      scheduledFor: v.number(),
+      status: v.string(), // "pending", "executing", "completed", "failed"
+      executedAt: v.optional(v.number()),
+      result: v.optional(v.any()),
+      error: v.optional(v.string()),
+    })
+    .index("by_scheduled", ["scheduledFor"])
+    .index("by_enrollment", ["enrollmentId"])
+    .index("by_status", ["status"]),
 
     exportLogs: defineTable({
       userId: v.id("users"),
