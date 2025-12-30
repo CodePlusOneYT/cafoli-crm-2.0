@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ROLES } from "./schema";
 
 // Mark leads unassigned for 24+ hours as cold caller leads
@@ -89,14 +88,13 @@ export const allocateColdCallerLeads = internalMutation({
 
 // Get cold caller leads for current user
 export const getMyColdCallerLeads = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    if (!args.userId) return [];
     
     const leads = await ctx.db
       .query("leads")
-      .withIndex("by_cold_caller_assigned_to", (q) => q.eq("coldCallerAssignedTo", userId))
+      .withIndex("by_cold_caller_assigned_to", (q) => q.eq("coldCallerAssignedTo", args.userId))
       .filter((q) => q.eq(q.field("isColdCallerLead"), true))
       .collect();
     
@@ -106,14 +104,13 @@ export const getMyColdCallerLeads = query({
 
 // Get cold caller leads without follow-up dates
 export const getColdCallerLeadsNeedingFollowUp = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    if (!args.userId) return [];
     
     const leads = await ctx.db
       .query("leads")
-      .withIndex("by_cold_caller_assigned_to", (q) => q.eq("coldCallerAssignedTo", userId))
+      .withIndex("by_cold_caller_assigned_to", (q) => q.eq("coldCallerAssignedTo", args.userId))
       .filter((q) => q.and(
         q.eq(q.field("isColdCallerLead"), true),
         q.eq(q.field("nextFollowUpDate"), undefined)
@@ -126,12 +123,11 @@ export const getColdCallerLeadsNeedingFollowUp = query({
 
 // Get all cold caller leads (admin only)
 export const getAllColdCallerLeads = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    if (!args.userId) return [];
     
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get(args.userId);
     if (user?.role !== ROLES.ADMIN) return [];
     
     const leads = await ctx.db
@@ -160,12 +156,11 @@ export const getAllColdCallerLeads = query({
 
 // Get overdue follow-ups for admin notification (3+ days overdue)
 export const getOverdueColdCallerLeads = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    if (!args.userId) return [];
     
-    const user = await ctx.db.get(userId);
+    const user = await ctx.db.get(args.userId);
     if (user?.role !== ROLES.ADMIN) return [];
     
     const now = Date.now();
