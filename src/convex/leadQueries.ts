@@ -1,0 +1,323 @@
+import { v } from "convex/values";
+import { query } from "./_generated/server";
+import { ROLES } from "./schema";
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { paginationOptsValidator } from "convex/server";
+
+export const getPaginatedLeads = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    filter: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    search: v.optional(v.string()),
+    status: v.optional(v.string()),
+    source: v.optional(v.string()),
+    tags: v.optional(v.array(v.id("tags"))),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
+    
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const user = await ctx.db.get(userId);
+    if (!user) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    // Helper function to enrich leads with assigned user names and tags
+    const enrichLeads = async (leads: any[]) => {
+      return await Promise.all(
+        leads.map(async (lead) => {
+          let enriched = { ...lead };
+          
+          if (lead.assignedTo) {
+            const assignedUser = await ctx.db.get(lead.assignedTo);
+            if (assignedUser && '_id' in assignedUser) {
+              const userName = (assignedUser as any).name || (assignedUser as any).email || "Unknown User";
+              enriched.assignedToName = userName;
+            }
+          }
+
+          if (lead.tags && lead.tags.length > 0) {
+            const tags = [];
+            for (const tagId of lead.tags) {
+              const tag = await ctx.db.get(tagId);
+              if (tag) tags.push(tag);
+            }
+            enriched.tagsData = tags;
+          }
+
+          return enriched;
+        })
+      );
+    };
+
+    // Search logic
+    if (args.search) {
+      let results = await ctx.db
+        .query("leads")
+        .withSearchIndex("search_all", (q) => {
+          let search = q.search("searchText", args.search!);
+          if (args.filter === "mine") {
+            search = search.eq("assignedTo", userId);
+          }
+          return search;
+        })
+        .take(args.paginationOpts.numItems); 
+
+      if (args.status) {
+        results = results.filter(l => l.status === args.status);
+      }
+      if (args.source) {
+        results = results.filter(l => l.source === args.source);
+      }
+      if (args.tags && args.tags.length > 0) {
+        results = results.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
+      }
+
+      const enrichedResults = await enrichLeads(results);
+      return { page: enrichedResults, isDone: true, continueCursor: "" };
+    }
+
+    const applyTagFilter = (leads: any[]) => {
+      if (!args.tags || args.tags.length === 0) return leads;
+      return leads.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
+    };
+
+    if (args.filter === "mine") {
+      const allLeads = await ctx.db
+        .query("leads")
+        .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
+        .collect();
+
+      let activeLeads = allLeads.filter(l => l.type !== "Irrelevant");
+
+      if (args.status) {
+        activeLeads = activeLeads.filter(l => l.status === args.status);
+      }
+      if (args.source) {
+        activeLeads = activeLeads.filter(l => l.source === args.source);
+      }
+      
+      activeLeads = applyTagFilter(activeLeads);
+
+      const sortedLeads = activeLeads.sort((a, b) => {
+        const dateA = a.nextFollowUpDate;
+        const dateB = b.nextFollowUpDate;
+        
+        if (dateA && dateB) {
+          return dateA - dateB;
+        }
+        
+        if (dateA) return -1;
+        if (dateB) return 1;
+        
+        return b.lastActivity - a.lastActivity;
+      });
+
+      const { numItems, cursor } = args.paginationOpts;
+      const offset = cursor ? parseInt(cursor) : 0;
+      const page = sortedLeads.slice(offset, offset + numItems);
+      const isDone = offset + numItems >= sortedLeads.length;
+      const continueCursor = isDone ? "" : (offset + numItems).toString();
+
+      const enrichedPage = await enrichLeads(page);
+      return { page: enrichedPage, isDone, continueCursor };
+    } else {
+      if (args.tags && args.tags.length > 0) {
+         const allLeads = await ctx.db.query("leads").order("desc").collect();
+         let filtered = allLeads.filter(l => {
+            if (args.filter === "unassigned") return !l.assignedTo && l.type !== "Irrelevant";
+            if (args.filter === "irrelevant") return l.type === "Irrelevant";
+            if (args.filter === "all") return l.type !== "Irrelevant";
+            return !l.assignedTo && l.type !== "Irrelevant";
+         });
+
+         if (args.status) filtered = filtered.filter(l => l.status === args.status);
+         if (args.source) filtered = filtered.filter(l => l.source === args.source);
+         filtered = applyTagFilter(filtered);
+
+         const { numItems, cursor } = args.paginationOpts;
+         const offset = cursor ? parseInt(cursor) : 0;
+         const page = filtered.slice(offset, offset + numItems);
+         const isDone = offset + numItems >= filtered.length;
+         const continueCursor = isDone ? "" : (offset + numItems).toString();
+         
+         const enrichedPage = await enrichLeads(page);
+         return { page: enrichedPage, isDone, continueCursor };
+      }
+
+      const result = await ctx.db
+        .query("leads")
+        .withIndex("by_last_activity")
+        .order("desc")
+        .filter((q) => {
+          let predicate;
+          
+          if (args.filter === "unassigned") {
+            predicate = q.and(
+              q.eq(q.field("assignedTo"), undefined),
+              q.neq(q.field("type"), "Irrelevant")
+            );
+          } else if (args.filter === "irrelevant") {
+            predicate = q.eq(q.field("type"), "Irrelevant");
+          } else {
+            predicate = q.neq(q.field("type"), "Irrelevant");
+          }
+
+          if (args.status) {
+            predicate = q.and(predicate, q.eq(q.field("status"), args.status));
+          }
+          if (args.source) {
+            predicate = q.and(predicate, q.eq(q.field("source"), args.source));
+          }
+
+          return predicate;
+        })
+        .paginate(args.paginationOpts);
+
+      const enrichedPage = await enrichLeads(result.page);
+      return { ...result, page: enrichedPage };
+    }
+  },
+});
+
+export const getOverdueLeads = query({
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const now = Date.now();
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
+      .collect();
+    
+    return leads
+      .filter(l => l.type !== "Irrelevant" && l.nextFollowUpDate && l.nextFollowUpDate < now)
+      .sort((a, b) => (a.nextFollowUpDate || 0) - (b.nextFollowUpDate || 0));
+  }
+});
+
+export const getLeads = query({
+  args: {
+    filter: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
+    if (!userId) return [];
+    
+    const user = await ctx.db.get(userId);
+    if (!user) return [];
+
+    let leads;
+
+    if (args.filter === "mine") {
+      leads = await ctx.db
+        .query("leads")
+        .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
+        .order("desc")
+        .collect();
+      leads = leads.filter(l => l.type !== "Irrelevant");
+    } else if (args.filter === "unassigned") {
+      leads = await ctx.db.query("leads").order("desc").collect();
+      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant");
+    } else if (args.filter === "all") {
+      if (user.role !== ROLES.ADMIN) return [];
+      leads = await ctx.db.query("leads").order("desc").collect();
+      leads = leads.filter(l => l.type !== "Irrelevant");
+    } else {
+      leads = await ctx.db.query("leads").order("desc").collect();
+      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant");
+    }
+
+    return leads;
+  },
+});
+
+export const getLead = query({
+  args: { 
+    id: v.id("leads"),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const userId = args.userId || await getAuthUserId(ctx);
+    if (!userId) return null;
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getComments = query({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .order("desc")
+      .collect();
+
+    const commentsWithUser = await Promise.all(
+      comments.map(async (c) => {
+        let userName = "System";
+        let userImage = undefined;
+
+        if (c.userId) {
+          const user = await ctx.db.get(c.userId);
+          userName = user?.name || "Unknown";
+          userImage = user?.image;
+        } else if (c.isSystem) {
+          userName = "System";
+        }
+
+        return { ...c, userName, userImage };
+      })
+    );
+
+    return commentsWithUser;
+  },
+});
+
+export const getAllLeadsForExport = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const userId = args.userId;
+    if (!userId) throw new Error("Unauthorized");
+    
+    const user = await ctx.db.get(userId);
+    if (user?.role !== ROLES.ADMIN) {
+      throw new Error("Only admins can export all leads");
+    }
+
+    const leads = await ctx.db.query("leads").collect();
+    
+    const enrichedLeads = await Promise.all(
+      leads.map(async (lead) => {
+        let assignedToName = "";
+        if (lead.assignedTo) {
+          const assignedUser = await ctx.db.get(lead.assignedTo);
+          assignedToName = assignedUser?.name || "";
+        }
+        
+        return { ...lead, assignedToName };
+      })
+    );
+
+    return enrichedLeads;
+  },
+});
+
+export const getNextDownloadNumber = query({
+  args: {},
+  handler: async (ctx) => {
+    const lastExport = await ctx.db
+      .query("exportLogs")
+      .order("desc")
+      .first();
+    
+    return (lastExport?.downloadNumber || 0) + 1;
+  },
+});
