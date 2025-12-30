@@ -3,8 +3,10 @@ import { query } from "./_generated/server";
 import { ROLES } from "./schema";
 
 export const getCampaigns = query({
-  args: { userId: v.id("users") },
+  args: { userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
+    if (!args.userId) return [];
+    
     const user = await ctx.db.get(args.userId);
     if (!user) return [];
 
@@ -14,7 +16,7 @@ export const getCampaigns = query({
       return await ctx.db.query("campaigns").order("desc").collect();
     } else {
       return await ctx.db.query("campaigns")
-        .withIndex("by_created_by", (q) => q.eq("createdBy", args.userId))
+        .withIndex("by_created_by", (q) => q.eq("createdBy", args.userId!))
         .order("desc")
         .collect();
     }
@@ -22,8 +24,10 @@ export const getCampaigns = query({
 });
 
 export const getCampaign = query({
-  args: { campaignId: v.id("campaigns"), userId: v.id("users") },
+  args: { campaignId: v.id("campaigns"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
+    if (!args.userId) return null;
+    
     const user = await ctx.db.get(args.userId);
     if (!user) return null;
 
@@ -32,8 +36,10 @@ export const getCampaign = query({
 });
 
 export const getCampaignEnrollments = query({
-  args: { campaignId: v.id("campaigns"), userId: v.id("users") },
+  args: { campaignId: v.id("campaigns"), userId: v.optional(v.id("users")) },
   handler: async (ctx, args) => {
+    if (!args.userId) return [];
+    
     const user = await ctx.db.get(args.userId);
     if (!user) return [];
 
