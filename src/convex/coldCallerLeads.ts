@@ -3,12 +3,12 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ROLES } from "./schema";
 
-// Mark leads unassigned for 72+ hours as cold caller leads
+// Mark leads unassigned for 24+ hours as cold caller leads
 export const markColdCallerLeads = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const seventyTwoHoursAgo = now - (72 * 60 * 60 * 1000);
+    const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);
     
     const unassignedLeads = await ctx.db
       .query("leads")
@@ -16,7 +16,7 @@ export const markColdCallerLeads = internalMutation({
         q.eq(q.field("assignedTo"), undefined),
         q.neq(q.field("type"), "Irrelevant"),
         q.neq(q.field("isColdCallerLead"), true),
-        q.lt(q.field("_creationTime"), seventyTwoHoursAgo)
+        q.lt(q.field("_creationTime"), twentyFourHoursAgo)
       ))
       .collect();
     
@@ -28,7 +28,7 @@ export const markColdCallerLeads = internalMutation({
       // Add system comment
       await ctx.db.insert("comments", {
         leadId: lead._id,
-        content: "Lead marked as Cold Caller Lead (unassigned for 72+ hours)",
+        content: "Lead marked as Cold Caller Lead (unassigned for 24+ hours)",
         isSystem: true,
       });
     }
