@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery, usePaginatedQuery, useAction } from "convex/react";
-import { Search, Plus, UserPlus, Loader2, RefreshCw } from "lucide-react";
+import { Search, Plus, UserPlus, Loader2, RefreshCw, X } from "lucide-react";
 import { useState, type FormEvent, useEffect } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
@@ -17,6 +17,10 @@ import { useInView } from "react-intersection-observer";
 import LeadDetails from "@/components/LeadDetails";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { LeadCard } from "@/components/LeadCard";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 
 export default function Leads() {
   const location = useLocation();
@@ -34,6 +38,9 @@ export default function Leads() {
   // New filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]); // Array of tag IDs
+
+  const allTags = useQuery(api.tags.getAllTags) || [];
 
   const manualSync = useAction(api.pharmavends.manualSyncPharmavends);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -71,6 +78,7 @@ export default function Leads() {
       search: debouncedSearch || undefined,
       status: statusFilter !== "all" ? statusFilter : undefined,
       source: sourceFilter !== "all" ? sourceFilter : undefined,
+      tags: selectedTags.length > 0 ? selectedTags as Id<"tags">[] : undefined,
     }, 
     { initialNumItems: 20 }
   );
@@ -337,7 +345,7 @@ export default function Leads() {
           </div>
 
           {/* Filters Row */}
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Filter Status" />
@@ -361,6 +369,61 @@ export default function Leads() {
                 <SelectItem value="IndiaMART">IndiaMART</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Tag Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-[200px] justify-between">
+                  {selectedTags.length > 0 
+                    ? `${selectedTags.length} tags selected` 
+                    : "Filter by Tags"}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-0">
+                <Command>
+                  <CommandInput placeholder="Search tags..." />
+                  <CommandList>
+                    <CommandEmpty>No tags found.</CommandEmpty>
+                    <CommandGroup>
+                      {allTags.map((tag) => (
+                        <CommandItem
+                          key={tag._id}
+                          value={tag.name}
+                          onSelect={() => {
+                            setSelectedTags(prev => 
+                              prev.includes(tag._id) 
+                                ? prev.filter(id => id !== tag._id)
+                                : [...prev, tag._id]
+                            );
+                          }}
+                        >
+                          <div 
+                            className="w-3 h-3 rounded-full mr-2" 
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          <span className="flex-1">{tag.name}</span>
+                          {selectedTags.includes(tag._id) && (
+                            <Check className="h-4 w-4 ml-auto" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {selectedTags.length > 0 && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedTags([])}
+                className="h-8 px-2 lg:px-3"
+              >
+                Reset Tags
+                <X className="ml-2 h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 

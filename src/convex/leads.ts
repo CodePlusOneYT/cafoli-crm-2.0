@@ -90,6 +90,7 @@ export const getPaginatedLeads = query({
     search: v.optional(v.string()),
     status: v.optional(v.string()),
     source: v.optional(v.string()),
+    tags: v.optional(v.array(v.id("tags"))),
   },
   handler: async (ctx, args) => {
     const userId = args.userId || await getAuthUserId(ctx);
@@ -112,22 +113,30 @@ export const getPaginatedLeads = query({
       };
     }
 
-    // Helper function to enrich leads with assigned user names
-    const enrichLeadsWithUserNames = async (leads: any[]) => {
+    // Helper function to enrich leads with assigned user names and tags
+    const enrichLeads = async (leads: any[]) => {
       return await Promise.all(
         leads.map(async (lead) => {
+          let enriched = { ...lead };
+          
           if (lead.assignedTo) {
             const assignedUser = await ctx.db.get(lead.assignedTo);
-            // Type guard to ensure we have a user document
             if (assignedUser && '_id' in assignedUser) {
               const userName = (assignedUser as any).name || (assignedUser as any).email || "Unknown User";
-              return {
-                ...lead,
-                assignedToName: userName,
-              };
+              enriched.assignedToName = userName;
             }
           }
-          return lead;
+
+          if (lead.tags && lead.tags.length > 0) {
+            const tags = [];
+            for (const tagId of lead.tags) {
+              const tag = await ctx.db.get(tagId);
+              if (tag) tags.push(tag);
+            }
+            enriched.tagsData = tags;
+          }
+
+          return enriched;
         })
       );
     };
@@ -152,9 +161,12 @@ export const getPaginatedLeads = query({
       if (args.source) {
         results = results.filter(l => l.source === args.source);
       }
+      if (args.tags && args.tags.length > 0) {
+        results = results.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
+      }
 
-      // Enrich with user names
-      const enrichedResults = await enrichLeadsWithUserNames(results);
+      // Enrich with user names and tags
+      const enrichedResults = await enrichLeads(results);
 
       return {
         page: enrichedResults,
@@ -162,6 +174,12 @@ export const getPaginatedLeads = query({
         continueCursor: "",
       };
     }
+
+    // Helper to apply tag filter in memory since we can't easily index array contains with other filters in Convex yet for complex queries
+    const applyTagFilter = (leads: any[]) => {
+      if (!args.tags || args.tags.length === 0) return leads;
+      return leads.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
+    };
 
     if (args.filter === "mine") {
       // Custom sorting for "mine":
@@ -184,6 +202,9 @@ export const getPaginatedLeads = query({
       if (args.source) {
         activeLeads = activeLeads.filter(l => l.source === args.source);
       }
+      
+      // Apply tag filter
+      activeLeads = applyTagFilter(activeLeads);
 
       const sortedLeads = activeLeads.sort((a, b) => {
         const dateA = a.nextFollowUpDate;
@@ -210,7 +231,7 @@ export const getPaginatedLeads = query({
       const continueCursor = isDone ? "" : (offset + numItems).toString();
 
       // Enrich with user names
-      const enrichedPage = await enrichLeadsWithUserNames(page);
+      const enrichedPage = await enrichLeads(page);
 
       return {
         page: enrichedPage,
@@ -219,6 +240,43 @@ export const getPaginatedLeads = query({
       };
     } else {
       // Database query for other views
+      // Note: We can't efficiently filter by tags in the DB query with pagination if we are also filtering by other things without a specific index.
+      // For now, we will fetch more and filter in memory, or just accept that pagination might be slightly off if we filter heavily.
+      // However, since we are using `paginate`, we can't filter the stream easily.
+      // If tags are provided, we might need to collect and filter manually if the dataset isn't huge, or use a different strategy.
+      // Given the constraints, let's try to use the filter in the query if possible, but `v.array` contains isn't directly supported in `filter` easily for all cases.
+      // Actually, we can use `q.or` with `q.eq` for each tag if we want "any", but `tags` is an array field.
+      // Convex doesn't support `array_contains` in `filter` efficiently without index.
+      // Let's stick to fetching and filtering for now if tags are present, or just ignore tags in the main query and filter in memory (which breaks pagination).
+      // To do this correctly with pagination, we should probably use `collect` and manual pagination if filters are complex.
+      
+      // For this implementation, if tags are present, we'll switch to manual pagination strategy similar to "mine" view to ensure correctness.
+      
+      if (args.tags && args.tags.length > 0) {
+         const allLeads = await ctx.db.query("leads").order("desc").collect();
+         let filtered = allLeads.filter(l => {
+            // Base filters
+            if (args.filter === "unassigned") return !l.assignedTo && l.type !== "Irrelevant";
+            if (args.filter === "irrelevant") return l.type === "Irrelevant";
+            if (args.filter === "all") return l.type !== "Irrelevant"; // Admin check done later or assumed
+            return !l.assignedTo && l.type !== "Irrelevant";
+         });
+
+         if (args.status) filtered = filtered.filter(l => l.status === args.status);
+         if (args.source) filtered = filtered.filter(l => l.source === args.source);
+         filtered = applyTagFilter(filtered);
+
+         // Manual pagination
+         const { numItems, cursor } = args.paginationOpts;
+         const offset = cursor ? parseInt(cursor) : 0;
+         const page = filtered.slice(offset, offset + numItems);
+         const isDone = offset + numItems >= filtered.length;
+         const continueCursor = isDone ? "" : (offset + numItems).toString();
+         
+         const enrichedPage = await enrichLeads(page);
+         return { page: enrichedPage, isDone, continueCursor };
+      }
+
       const result = await ctx.db
         .query("leads")
         .withIndex("by_last_activity")
@@ -252,7 +310,7 @@ export const getPaginatedLeads = query({
         .paginate(args.paginationOpts);
 
       // Enrich with user names
-      const enrichedPage = await enrichLeadsWithUserNames(result.page);
+      const enrichedPage = await enrichLeads(result.page);
 
       return {
         ...result,
@@ -422,6 +480,7 @@ export const updateLead = mutation({
       state: v.optional(v.string()),
       district: v.optional(v.string()),
       station: v.optional(v.string()),
+      tags: v.optional(v.array(v.id("tags"))),
     }),
     userId: v.id("users"),
   },
@@ -448,8 +507,6 @@ export const updateLead = mutation({
       }
 
       // Handle follow-up history
-      // Use the assigned user for the new follow-up, or the current user if not assigned?
-      // Usually follow-ups belong to the assignee.
       const assignee = args.patch.assignedTo || lead.assignedTo || userId;
       await handleFollowUpChange(ctx, args.id, followUpDate, assignee);
     }

@@ -23,6 +23,7 @@ import type * as migrations from "../migrations.js";
 import type * as pharmavends from "../pharmavends.js";
 import type * as pharmavendsMutations from "../pharmavendsMutations.js";
 import type * as reports from "../reports.js";
+import type * as tags from "../tags.js";
 import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as whatsappMutations from "../whatsappMutations.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   pharmavends: typeof pharmavends;
   pharmavendsMutations: typeof pharmavendsMutations;
   reports: typeof reports;
+  tags: typeof tags;
   users: typeof users;
   whatsapp: typeof whatsapp;
   whatsappMutations: typeof whatsappMutations;

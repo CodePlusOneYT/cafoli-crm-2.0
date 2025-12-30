@@ -67,6 +67,8 @@ const schema = defineSchema(
       status: v.optional(v.string()), // Cold, Hot, Mature
       type: v.optional(v.string()), // To be Decided, Relevant, Irrelevant
       
+      tags: v.optional(v.array(v.id("tags"))), // New tags field
+
       nextFollowUpDate: v.optional(v.number()),
       lastActivity: v.number(),
 
@@ -119,6 +121,13 @@ const schema = defineSchema(
       searchField: "searchText",
       filterFields: ["assignedTo"],
     }),
+
+    tags: defineTable({
+      name: v.string(),
+      color: v.string(),
+    })
+    .index("by_name", ["name"])
+    .index("by_color", ["color"]),
 
     comments: defineTable({
       leadId: v.id("leads"),

@@ -10,6 +10,7 @@ import { Calendar, Mail, MapPin, MessageSquare, Phone, Save, User } from "lucide
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { TagManager } from "@/components/TagManager";
 
 interface LeadDetailsProps {
   leadId: Id<"leads">;
@@ -53,6 +54,12 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
     await addComment({ leadId: lead._id, content: newComment, userId: user._id });
     setNewComment("");
     toast.success("Comment added");
+  };
+
+  const handleTagsChange = async (newTags: Id<"tags">[]) => {
+    if (!user) return;
+    await updateLead({ id: lead._id, patch: { tags: newTags }, userId: user._id });
+    toast.success("Tags updated");
   };
 
   const startEditing = () => {
@@ -166,6 +173,14 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
             )}
           </div>
           <p className="text-muted-foreground">{lead.subject}</p>
+          
+          <div className="mt-3">
+            <TagManager 
+              leadId={lead._id} 
+              selectedTagIds={lead.tags || []} 
+              onTagsChange={handleTagsChange} 
+            />
+          </div>
         </div>
         <div className="flex gap-2 flex-wrap">
           {!isEditing && (

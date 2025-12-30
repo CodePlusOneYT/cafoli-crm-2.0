@@ -6,7 +6,7 @@ import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 interface LeadCardProps {
-  lead: Doc<"leads">;
+  lead: Doc<"leads"> & { tagsData?: Doc<"tags">[] };
   isSelected: boolean;
   isUnassignedView: boolean;
   viewIrrelevant: boolean;
@@ -45,6 +45,21 @@ export function LeadCard({
           </span>
         </div>
         <p className="text-sm text-muted-foreground truncate mb-2">{lead.subject}</p>
+        
+        {lead.tagsData && lead.tagsData.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {lead.tagsData.map(tag => (
+              <span 
+                key={tag._id} 
+                className="px-1.5 py-0.5 rounded-full text-[10px] font-medium text-white"
+                style={{ backgroundColor: tag.color }}
+              >
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2 text-xs flex-wrap items-center">
           <span className="bg-secondary px-2 py-0.5 rounded-full">{lead.source}</span>
           <span className={`px-2 py-0.5 rounded-full ${
