@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import type { Id } from "@/convex/_generated/dataModel";
 import JSZip from "jszip";
+import * as Papa from "papaparse";
+import { useRef } from "react";
 
 export default function Admin() {
   const { user: currentUser, signIn } = useAuth();
@@ -24,9 +26,12 @@ export default function Admin() {
   const deleteUser = useMutation(api.users.deleteUser);
   const logExport = useMutation(api.leads.logExport);
   const standardizePhoneNumbers = useMutation(api.leads.standardizeAllPhoneNumbers);
+  const importLeads = useMutation(api.leads.bulkImportLeads);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isStandardizing, setIsStandardizing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [newUserData, setNewUserData] = useState({
     email: "",
     name: "",
@@ -218,6 +223,93 @@ export default function Admin() {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "Name", "Email", "Alt_Email", "Phone No", "Alt Phone No", 
+      "Source", "Assigned To", "Agency Name", "Pincode", 
+      "Station", "State", "District", "Subject", "Message"
+    ];
+    const csvContent = headers.join(",");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "leads_import_template.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!currentUser) {
+      toast.error("You must be logged in");
+      return;
+    }
+
+    setIsImporting(true);
+    
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results: any) => {
+        try {
+          const parsedLeads: any[] = [];
+          
+          // Validate and map rows
+          for (const row of results.data as any[]) {
+            // Skip empty rows or rows without required Name/Phone
+            if (!row["Name"] && !row["Phone No"]) continue;
+
+            parsedLeads.push({
+              name: row["Name"] || "Unknown",
+              email: row["Email"] || undefined,
+              altEmail: row["Alt_Email"] || undefined,
+              mobile: row["Phone No"] || "",
+              altMobile: row["Alt Phone No"] || undefined,
+              source: row["Source"] || undefined,
+              assignedToName: row["Assigned To"] || undefined,
+              agencyName: row["Agency Name"] || undefined,
+              pincode: row["Pincode"] || undefined,
+              station: row["Station"] || undefined,
+              state: row["State"] || undefined,
+              district: row["District"] || undefined,
+              subject: row["Subject"] || undefined,
+              message: row["Message"] || undefined,
+            });
+          }
+
+          if (parsedLeads.length === 0) {
+            toast.error("No valid leads found in CSV");
+            setIsImporting(false);
+            return;
+          }
+
+          const result = await importLeads({
+            leads: parsedLeads,
+            adminId: currentUser._id,
+          });
+
+          toast.success(`Successfully imported ${result.importedCount} leads`);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        } catch (error) {
+          console.error("Import error:", error);
+          toast.error("Failed to import leads. Check console for details.");
+        } finally {
+          setIsImporting(false);
+        }
+      },
+      error: (error: any) => {
+        console.error("CSV Parse error:", error);
+        toast.error("Failed to parse CSV file");
+        setIsImporting(false);
+      }
+    });
+  };
+
   if (currentUser?.role !== "admin") {
     return (
       <AppLayout>
@@ -248,6 +340,29 @@ export default function Admin() {
           </div>
           
           <div className="flex gap-2">
+            {/* Hidden file input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".csv"
+              className="hidden"
+            />
+
+            <Button 
+              variant="outline" 
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+            >
+              <Users className={`mr-2 h-4 w-4 ${isImporting ? 'animate-spin' : ''}`} />
+              {isImporting ? "Importing..." : "Import Leads CSV"}
+            </Button>
+
+            <Button variant="outline" onClick={handleDownloadTemplate}>
+              <Download className="mr-2 h-4 w-4" />
+              Template
+            </Button>
+
             <Button 
               variant="outline" 
               onClick={handleStandardizePhoneNumbers}

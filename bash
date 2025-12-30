@@ -1,1 +1,1 @@
-npx convex run migrations:backfillSearchText
+pnpm add papaparse @types/papaparse
