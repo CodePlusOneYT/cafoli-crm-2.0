@@ -35,12 +35,15 @@ export default function Leads() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [viewIrrelevant, setViewIrrelevant] = useState(false);
   
-  // New filters
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]); // Array of tag IDs
+  // New unified filter states
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedAssignedTo, setSelectedAssignedTo] = useState<string[]>([]);
 
   const allTags = useQuery(api.tags.getAllTags) || [];
+  const uniqueSources = useQuery(api.leads.getUniqueSources) || [];
+  const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];
 
   const manualSync = useAction(api.pharmavends.manualSyncPharmavends);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -76,9 +79,10 @@ export default function Leads() {
       filter: viewIrrelevant ? "irrelevant" : filter, 
       userId: user?._id,
       search: debouncedSearch || undefined,
-      status: statusFilter !== "all" ? statusFilter : undefined,
-      source: sourceFilter !== "all" ? sourceFilter : undefined,
+      statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+      sources: selectedSources.length > 0 ? selectedSources : undefined,
       tags: selectedTags.length > 0 ? selectedTags as Id<"tags">[] : undefined,
+      assignedToUsers: selectedAssignedTo.length > 0 ? selectedAssignedTo as Id<"users">[] : undefined,
     }, 
     { initialNumItems: 20 }
   );
@@ -103,7 +107,6 @@ export default function Leads() {
     }
   }, [inView, status, loadMore]);
 
-  const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];
   const createLead = useMutation(api.leads.createLead);
   const assignLead = useMutation(api.leads.assignLead);
 
@@ -192,6 +195,27 @@ export default function Leads() {
 
   const isAdmin = user?.role === "admin";
   const isUnassignedView = filter === "unassigned";
+
+  const availableStatuses = ["Cold", "Hot", "Mature"];
+
+  // Helper to toggle filter selection
+  const toggleFilter = (value: string, currentFilters: string[], setFilters: (filters: string[]) => void) => {
+    if (currentFilters.includes(value)) {
+      setFilters(currentFilters.filter(f => f !== value));
+    } else {
+      setFilters([...currentFilters, value]);
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSelectedStatuses([]);
+    setSelectedSources([]);
+    setSelectedTags([]);
+    setSelectedAssignedTo([]);
+  };
+
+  const hasActiveFilters = selectedStatuses.length > 0 || selectedSources.length > 0 || 
+                          selectedTags.length > 0 || selectedAssignedTo.length > 0;
 
   return (
     <AppLayout>
@@ -344,85 +368,203 @@ export default function Leads() {
             </div>
           </div>
 
-          {/* Filters Row */}
-          <div className="flex gap-2 items-center flex-wrap">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Filter Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="Cold">Cold</SelectItem>
-                <SelectItem value="Hot">Hot</SelectItem>
-                <SelectItem value="Mature">Mature</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Unified Filters Row */}
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2 items-center flex-wrap">
+              {/* Status Filter */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-between">
+                    Status {selectedStatuses.length > 0 && `(${selectedStatuses.length})`}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search status..." />
+                    <CommandList>
+                      <CommandEmpty>No status found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableStatuses.map((status) => (
+                          <CommandItem
+                            key={status}
+                            value={status}
+                            onSelect={() => toggleFilter(status, selectedStatuses, setSelectedStatuses)}
+                          >
+                            <span className="flex-1">{status}</span>
+                            {selectedStatuses.includes(status) && (
+                              <Check className="h-4 w-4 ml-auto" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
 
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Filter Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="Manual">Manual</SelectItem>
-                <SelectItem value="Pharmavends">Pharmavends</SelectItem>
-                <SelectItem value="IndiaMART">IndiaMART</SelectItem>
-              </SelectContent>
-            </Select>
+              {/* Source Filter */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-between">
+                    Source {selectedSources.length > 0 && `(${selectedSources.length})`}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search source..." />
+                    <CommandList>
+                      <CommandEmpty>No source found.</CommandEmpty>
+                      <CommandGroup>
+                        {uniqueSources.map((source) => (
+                          <CommandItem
+                            key={source}
+                            value={source}
+                            onSelect={() => toggleFilter(source, selectedSources, setSelectedSources)}
+                          >
+                            <span className="flex-1">{source}</span>
+                            {selectedSources.includes(source) && (
+                              <Check className="h-4 w-4 ml-auto" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
 
-            {/* Tag Filter */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-[200px] justify-between">
-                  {selectedTags.length > 0 
-                    ? `${selectedTags.length} tags selected` 
-                    : "Filter by Tags"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              {/* Tag Filter */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-between">
+                    Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Search tags..." />
+                    <CommandList>
+                      <CommandEmpty>No tags found.</CommandEmpty>
+                      <CommandGroup>
+                        {allTags.map((tag) => (
+                          <CommandItem
+                            key={tag._id}
+                            value={tag.name}
+                            onSelect={() => toggleFilter(tag._id, selectedTags, setSelectedTags)}
+                          >
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2" 
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            <span className="flex-1">{tag.name}</span>
+                            {selectedTags.includes(tag._id) && (
+                              <Check className="h-4 w-4 ml-auto" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {/* Assigned To Filter (Admin Only) */}
+              {isAdmin && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="justify-between">
+                      Assigned To {selectedAssignedTo.length > 0 && `(${selectedAssignedTo.length})`}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search users..." />
+                      <CommandList>
+                        <CommandEmpty>No users found.</CommandEmpty>
+                        <CommandGroup>
+                          {allUsers.map((u) => (
+                            <CommandItem
+                              key={u._id}
+                              value={u.name || u.email || ""}
+                              onSelect={() => toggleFilter(u._id, selectedAssignedTo, setSelectedAssignedTo)}
+                            >
+                              <span className="flex-1">{u.name || u.email}</span>
+                              {selectedAssignedTo.includes(u._id) && (
+                                <Check className="h-4 w-4 ml-auto" />
+                              )}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              {/* Clear All Filters */}
+              {hasActiveFilters && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearAllFilters}
+                  className="h-9 px-3"
+                >
+                  Clear All
+                  <X className="ml-2 h-4 w-4" />
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[200px] p-0">
-                <Command>
-                  <CommandInput placeholder="Search tags..." />
-                  <CommandList>
-                    <CommandEmpty>No tags found.</CommandEmpty>
-                    <CommandGroup>
-                      {allTags.map((tag) => (
-                        <CommandItem
-                          key={tag._id}
-                          value={tag.name}
-                          onSelect={() => {
-                            setSelectedTags(prev => 
-                              prev.includes(tag._id) 
-                                ? prev.filter(id => id !== tag._id)
-                                : [...prev, tag._id]
-                            );
-                          }}
-                        >
-                          <div 
-                            className="w-3 h-3 rounded-full mr-2" 
-                            style={{ backgroundColor: tag.color }}
-                          />
-                          <span className="flex-1">{tag.name}</span>
-                          {selectedTags.includes(tag._id) && (
-                            <Check className="h-4 w-4 ml-auto" />
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            {selectedTags.length > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setSelectedTags([])}
-                className="h-8 px-2 lg:px-3"
-              >
-                Reset Tags
-                <X className="ml-2 h-4 w-4" />
-              </Button>
+              )}
+            </div>
+
+            {/* Active Filters Display */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap gap-2">
+                {selectedStatuses.map(status => (
+                  <Badge key={status} variant="secondary" className="gap-1">
+                    {status}
+                    <X 
+                      className="h-3 w-3 cursor-pointer" 
+                      onClick={() => toggleFilter(status, selectedStatuses, setSelectedStatuses)}
+                    />
+                  </Badge>
+                ))}
+                {selectedSources.map(source => (
+                  <Badge key={source} variant="secondary" className="gap-1">
+                    {source}
+                    <X 
+                      className="h-3 w-3 cursor-pointer" 
+                      onClick={() => toggleFilter(source, selectedSources, setSelectedSources)}
+                    />
+                  </Badge>
+                ))}
+                {selectedTags.map(tagId => {
+                  const tag = allTags.find(t => t._id === tagId);
+                  return tag ? (
+                    <Badge key={tagId} variant="secondary" className="gap-1" style={{ backgroundColor: tag.color, color: 'white' }}>
+                      {tag.name}
+                      <X 
+                        className="h-3 w-3 cursor-pointer" 
+                        onClick={() => toggleFilter(tagId, selectedTags, setSelectedTags)}
+                      />
+                    </Badge>
+                  ) : null;
+                })}
+                {selectedAssignedTo.map(userId => {
+                  const u = allUsers.find(user => user._id === userId);
+                  return u ? (
+                    <Badge key={userId} variant="secondary" className="gap-1">
+                      👤 {u.name || u.email}
+                      <X 
+                        className="h-3 w-3 cursor-pointer" 
+                        onClick={() => toggleFilter(userId, selectedAssignedTo, setSelectedAssignedTo)}
+                      />
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
             )}
           </div>
         </div>

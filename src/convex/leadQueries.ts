@@ -10,9 +10,10 @@ export const getPaginatedLeads = query({
     filter: v.optional(v.string()),
     userId: v.optional(v.id("users")),
     search: v.optional(v.string()),
-    status: v.optional(v.string()),
-    source: v.optional(v.string()),
+    statuses: v.optional(v.array(v.string())),
+    sources: v.optional(v.array(v.string())),
     tags: v.optional(v.array(v.id("tags"))),
+    assignedToUsers: v.optional(v.array(v.id("users"))),
   },
   handler: async (ctx, args) => {
     const userId = args.userId || await getAuthUserId(ctx);
@@ -54,6 +55,29 @@ export const getPaginatedLeads = query({
       );
     };
 
+    // Apply multi-filter logic
+    const applyFilters = (leads: any[]) => {
+      let filtered = leads;
+      
+      if (args.statuses && args.statuses.length > 0) {
+        filtered = filtered.filter(l => l.status && args.statuses!.includes(l.status));
+      }
+      
+      if (args.sources && args.sources.length > 0) {
+        filtered = filtered.filter(l => l.source && args.sources!.includes(l.source));
+      }
+      
+      if (args.tags && args.tags.length > 0) {
+        filtered = filtered.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
+      }
+      
+      if (args.assignedToUsers && args.assignedToUsers.length > 0) {
+        filtered = filtered.filter(l => l.assignedTo && args.assignedToUsers!.includes(l.assignedTo));
+      }
+      
+      return filtered;
+    };
+
     // Search logic
     if (args.search) {
       let results = await ctx.db
@@ -67,24 +91,10 @@ export const getPaginatedLeads = query({
         })
         .take(args.paginationOpts.numItems); 
 
-      if (args.status) {
-        results = results.filter(l => l.status === args.status);
-      }
-      if (args.source) {
-        results = results.filter(l => l.source === args.source);
-      }
-      if (args.tags && args.tags.length > 0) {
-        results = results.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
-      }
-
+      results = applyFilters(results);
       const enrichedResults = await enrichLeads(results);
       return { page: enrichedResults, isDone: true, continueCursor: "" };
     }
-
-    const applyTagFilter = (leads: any[]) => {
-      if (!args.tags || args.tags.length === 0) return leads;
-      return leads.filter(l => l.tags && args.tags!.some(t => l.tags!.includes(t)));
-    };
 
     if (args.filter === "mine") {
       const allLeads = await ctx.db
@@ -93,15 +103,7 @@ export const getPaginatedLeads = query({
         .collect();
 
       let activeLeads = allLeads.filter(l => l.type !== "Irrelevant");
-
-      if (args.status) {
-        activeLeads = activeLeads.filter(l => l.status === args.status);
-      }
-      if (args.source) {
-        activeLeads = activeLeads.filter(l => l.source === args.source);
-      }
-      
-      activeLeads = applyTagFilter(activeLeads);
+      activeLeads = applyFilters(activeLeads);
 
       const sortedLeads = activeLeads.sort((a, b) => {
         const dateA = a.nextFollowUpDate;
@@ -126,7 +128,13 @@ export const getPaginatedLeads = query({
       const enrichedPage = await enrichLeads(page);
       return { page: enrichedPage, isDone, continueCursor };
     } else {
-      if (args.tags && args.tags.length > 0) {
+      // Check if any filters are applied
+      const hasFilters = (args.statuses && args.statuses.length > 0) ||
+                        (args.sources && args.sources.length > 0) ||
+                        (args.tags && args.tags.length > 0) ||
+                        (args.assignedToUsers && args.assignedToUsers.length > 0);
+
+      if (hasFilters) {
          const allLeads = await ctx.db.query("leads").order("desc").collect();
          let filtered = allLeads.filter(l => {
             if (args.filter === "unassigned") return !l.assignedTo && l.type !== "Irrelevant";
@@ -135,9 +143,7 @@ export const getPaginatedLeads = query({
             return !l.assignedTo && l.type !== "Irrelevant";
          });
 
-         if (args.status) filtered = filtered.filter(l => l.status === args.status);
-         if (args.source) filtered = filtered.filter(l => l.source === args.source);
-         filtered = applyTagFilter(filtered);
+         filtered = applyFilters(filtered);
 
          const { numItems, cursor } = args.paginationOpts;
          const offset = cursor ? parseInt(cursor) : 0;
@@ -165,13 +171,6 @@ export const getPaginatedLeads = query({
             predicate = q.eq(q.field("type"), "Irrelevant");
           } else {
             predicate = q.neq(q.field("type"), "Irrelevant");
-          }
-
-          if (args.status) {
-            predicate = q.and(predicate, q.eq(q.field("status"), args.status));
-          }
-          if (args.source) {
-            predicate = q.and(predicate, q.eq(q.field("source"), args.source));
           }
 
           return predicate;
@@ -278,6 +277,22 @@ export const getComments = query({
     );
 
     return commentsWithUser;
+  },
+});
+
+export const getUniqueSources = query({
+  args: {},
+  handler: async (ctx) => {
+    const leads = await ctx.db.query("leads").collect();
+    const sources = new Set<string>();
+    
+    for (const lead of leads) {
+      if (lead.source) {
+        sources.add(lead.source);
+      }
+    }
+    
+    return Array.from(sources).sort();
   },
 });
 
