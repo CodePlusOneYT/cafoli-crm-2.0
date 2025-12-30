@@ -29,7 +29,15 @@ export const createCampaign = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    if (!userId) {
+      throw new Error("You must be logged in to create a campaign");
+    }
+
+    // Verify user exists
+    const user = await ctx.db.get(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
 
     const campaignId = await ctx.db.insert("campaigns", {
       name: args.name,
@@ -81,7 +89,9 @@ export const updateCampaign = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    if (!userId) {
+      throw new Error("You must be logged in to update a campaign");
+    }
 
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign) throw new Error("Campaign not found");
