@@ -4,6 +4,11 @@ import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials"
 import { internal } from "../_generated/api";
 import { Id } from "../_generated/dataModel";
 import { hashPassword, verifyPassword } from "../lib/passwordUtils";
+import { Password } from "@convex-dev/auth/providers/Password";
+import { DataModel } from "../_generated/dataModel";
+import { api } from "../_generated/api";
+import { mutation } from "../_generated/server";
+import { v } from "convex/values";
 
 // Hardcoded credentials storage (in-memory for this implementation)
 const HARDCODED_USERS = [
@@ -63,5 +68,44 @@ export const password = ConvexCredentials({
     }
 
     return null;
+  },
+});
+
+export const PasswordProvider = Password<DataModel>({
+  profile(params) {
+    return {
+      email: params.email as string,
+      name: params.name as string,
+    };
+  },
+});
+
+export const { auth, signIn, signOut, store } = PasswordProvider;
+
+export const createAccount = mutation({
+  args: {
+    email: v.string(),
+    password: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check if user already exists
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", args.email))
+      .unique();
+
+    if (existingUser) {
+      throw new Error("User already exists");
+    }
+
+    // Create the user via the auth provider
+    // We need to cast api to any to avoid "Type instantiation is excessively deep" error
+    // This is a known issue with complex Convex schemas
+    await (ctx.auth as any).call((api as any).auth.password.createAccount, {
+      email: args.email,
+      password: args.password,
+      name: args.name,
+    });
   },
 });

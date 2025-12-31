@@ -2,12 +2,16 @@ import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
-import { useMutation, useQuery, usePaginatedQuery, useAction } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
+import { useState, useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { Id } from "@/convex/_generated/dataModel";
+import { useSearchParams } from "react-router";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { Search, Loader2, RefreshCw } from "lucide-react";
-import { useState, useEffect } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
-import { useAuth } from "@/hooks/use-auth";
 import { useInView } from "react-intersection-observer";
 import LeadDetails from "@/components/LeadDetails";
 import { Id, Doc } from "@/convex/_generated/dataModel";
@@ -18,24 +22,22 @@ import { AssignLeadDialog } from "@/components/leads/AssignLeadDialog";
 import { LeadsFilterBar } from "@/components/leads/LeadsFilterBar";
 
 export default function Leads() {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const path = location.pathname;
-  const { user } = useAuth();
   
   // Determine filter based on path
   const filter = path === "/my_leads" ? "mine" : path === "/all_leads" ? "all" : "unassigned";
   const title = path === "/my_leads" ? "My Leads" : path === "/all_leads" ? "All Leads" : "Unassigned Leads";
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [viewIrrelevant, setViewIrrelevant] = useState(false);
-  
-  // New unified filter states
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedAssignedTo, setSelectedAssignedTo] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<string>("newest");
+  const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [leadToAssign, setLeadToAssign] = useState<string | null>(null);
+  const [followUpDate, setFollowUpDate] = useState<string>("");
 
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leads.getUniqueSources) || [];
@@ -57,102 +59,21 @@ export default function Leads() {
     }
   };
 
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const { 
-    results: leads, 
-    status, 
-    loadMore, 
-  } = usePaginatedQuery(
-    api.leads.getPaginatedLeads, 
-    { 
-      filter: viewIrrelevant ? "irrelevant" : filter, 
-      userId: user?._id,
-      search: debouncedSearch || undefined,
-      statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
-      sources: selectedSources.length > 0 ? selectedSources : undefined,
-      tags: selectedTags.length > 0 ? selectedTags as Id<"tags">[] : undefined,
-      assignedToUsers: selectedAssignedTo.length > 0 ? selectedAssignedTo as Id<"users">[] : undefined,
-      sortBy: sortBy,
-    }, 
-    { initialNumItems: 20 }
-  );
-
-  // Overdue Leads Popup Logic
-  const overdueLeads = useQuery(api.leads.getOverdueLeads, filter === "mine" && user ? { userId: user._id } : "skip");
-  const [isOverduePopupOpen, setIsOverduePopupOpen] = useState(false);
-  const [hasShownOverduePopup, setHasShownOverduePopup] = useState(false);
-
-  useEffect(() => {
-    if (filter === "mine" && overdueLeads && overdueLeads.length > 0 && !hasShownOverduePopup) {
-      setIsOverduePopupOpen(true);
-      setHasShownOverduePopup(true);
-    }
-  }, [filter, overdueLeads, hasShownOverduePopup]);
-
-  const { ref, inView } = useInView();
-
-  useEffect(() => {
-    if (inView && status === "CanLoadMore") {
-      loadMore(20);
-    }
-  }, [inView, status, loadMore]);
-
   const assignLead = useMutation(api.leads.assignLead);
 
-  const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [leadToAssign, setLeadToAssign] = useState<string | null>(null);
-  const [followUpDate, setFollowUpDate] = useState<string>("");
+  const handleLeadSelect = (id: Id<"leads">) => {
+    setSelectedLeadId(id);
+  };
 
-  const handleAssignToSelf = async (leadId: string) => {
+  const handleAssignToSelf = async (leadId: Id<"leads">) => {
     if (!user) return;
     setLeadToAssign(leadId);
     setFollowUpDate("");
     setIsAssignDialogOpen(true);
   };
 
-  const confirmAssignToSelf = async () => {
-    if (!user || !leadToAssign) return;
-    
-    if (!followUpDate) {
-      toast.error("Setting follow-up date is compulsory");
-      return;
-    }
-    
-    const followUpTimestamp = new Date(followUpDate).getTime();
-    
-    try {
-      await assignLead({ 
-        leadId: leadToAssign as any, 
-        userId: user._id, 
-        adminId: user._id,
-        nextFollowUpDate: followUpTimestamp
-      });
-      toast.success("Lead assigned to you with follow-up date set");
-      setIsAssignDialogOpen(false);
-      setLeadToAssign(null);
-      setFollowUpDate("");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to assign lead");
-    }
-  };
-
-  const handleAssignToUser = async (leadId: string, userId: string) => {
-    if (!user) return;
-    try {
-      await assignLead({ leadId: leadId as any, userId: userId as any, adminId: user._id });
-      toast.success("Lead assigned successfully");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to assign lead");
-    }
+  const handleAssignToUser = async (leadId: Id<"leads">, userId: Id<"users">) => {
+    await assignLead({ leadId, userId });
   };
 
   const getMinDateTime = () => {
@@ -172,150 +93,96 @@ export default function Leads() {
 
   const availableStatuses = ["Cold", "Hot", "Mature"];
 
+  const sortedLeads = useMemo(() => {
+    if (!leads) return [];
+    return leads.sort((a, b) => {
+      if (sortBy === "newest") return new Date(b.createdAt) - new Date(a.createdAt);
+      if (sortBy === "oldest") return new Date(a.createdAt) - new Date(b.createdAt);
+      return 0;
+    });
+  }, [leads, sortBy]);
+
   return (
-    <AppLayout>
-      <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
-        {/* Overdue Leads Popup */}
-        <OverdueLeadsDialog 
-          open={isOverduePopupOpen} 
-          onOpenChange={setIsOverduePopupOpen} 
-          leads={overdueLeads} 
-          onSelectLead={(id) => {
-            setSelectedLeadId(id);
-            setIsOverduePopupOpen(false);
-          }} 
-        />
-
-        <div className="flex flex-col gap-4 mb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                {viewIrrelevant ? "Irrelevant Leads" : title}
-              </h1>
-              <p className="text-sm sm:text-base text-muted-foreground">Manage your leads and communications.</p>
-            </div>
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-              <Button 
-                variant="outline" 
-                onClick={handleSync}
-                disabled={isSyncing}
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-                Sync Leads
-              </Button>
-
-              <Button 
-                variant={viewIrrelevant ? "secondary" : "outline"}
-                onClick={() => setViewIrrelevant(!viewIrrelevant)}
-              >
-                {viewIrrelevant ? "Show Active Leads" : "Show Irrelevant Leads"}
-              </Button>
-
-              {user && (
-                <CreateLeadDialog 
-                  open={isCreateOpen} 
-                  onOpenChange={setIsCreateOpen} 
-                  userId={user._id} 
-                />
-              )}
-
-              {/* Follow-up Date Assignment Dialog */}
-              <AssignLeadDialog 
-                open={isAssignDialogOpen} 
-                onOpenChange={setIsAssignDialogOpen} 
-                onConfirm={confirmAssignToSelf}
-                onCancel={() => {
-                  setIsAssignDialogOpen(false);
-                  setLeadToAssign(null);
-                  setFollowUpDate("");
-                }}
-                followUpDate={followUpDate}
-                setFollowUpDate={setFollowUpDate}
-                minDateTime={getMinDateTime()}
-                maxDateTime={getMaxDateTime()}
-              />
-            </div>
-          </div>
-
-          {/* Unified Filters Row */}
-          <LeadsFilterBar 
-            selectedStatuses={selectedStatuses}
-            setSelectedStatuses={setSelectedStatuses}
-            selectedSources={selectedSources}
-            setSelectedSources={setSelectedSources}
-            selectedTags={selectedTags}
-            setSelectedTags={setSelectedTags}
-            selectedAssignedTo={selectedAssignedTo}
-            setSelectedAssignedTo={setSelectedAssignedTo}
-            allTags={allTags}
-            uniqueSources={uniqueSources}
-            allUsers={allUsers}
-            isAdmin={isAdmin}
-            availableStatuses={availableStatuses}
-            sortBy={sortBy}
-            setSortBy={setSortBy}
-          />
+    <div className="h-[calc(100vh-4rem)] flex flex-col gap-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
+          <p className="text-muted-foreground">
+            Manage and track your leads
+          </p>
         </div>
-
-        <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
-          {/* Lead List */}
-          <div className={`w-full md:w-1/3 lg:w-2/5 flex flex-col gap-4 ${selectedLeadId ? 'hidden md:flex' : 'flex'}`}>
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search leads..."
-                className="pl-8"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-              {leads?.map((lead: Doc<"leads">) => (
-                <LeadCard
-                  key={lead._id}
-                  lead={lead}
-                  isSelected={selectedLeadId === lead._id}
-                  isUnassignedView={isUnassignedView}
-                  viewIrrelevant={viewIrrelevant}
-                  isAdmin={isAdmin}
-                  allUsers={allUsers}
-                  onSelect={setSelectedLeadId}
-                  onAssignToSelf={(id) => handleAssignToSelf(id)}
-                  onAssignToUser={(leadId, userId) => handleAssignToUser(leadId, userId)}
-                />
-              ))}
-              
-              {/* Loading indicator and infinite scroll trigger */}
-              <div ref={ref} className="py-4 flex justify-center">
-                {status === "LoadingMore" && (
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                )}
-                {status === "Exhausted" && leads?.length > 0 && (
-                  <span className="text-xs text-muted-foreground">No more leads</span>
-                )}
-                {status === "LoadingFirstPage" && (
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                )}
-                {status === "Exhausted" && leads?.length === 0 && (
-                  <span className="text-sm text-muted-foreground">No leads found</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Lead Details */}
-          {selectedLeadId ? (
-            <LeadDetails 
-              leadId={selectedLeadId} 
-              onClose={() => setSelectedLeadId(null)} 
-            />
-          ) : (
-            <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground bg-muted/10 rounded-lg border border-dashed">
-              Select a lead to view details
-            </div>
-          )}
+        <div className="flex gap-2">
+          <CreateLeadDialog />
         </div>
       </div>
-    </AppLayout>
+
+      <LeadsFilterBar 
+        filter={filter} 
+        setFilter={setFilter} 
+        search={search} 
+        setSearch={setSearch} 
+        sortBy={sortBy} 
+        setSortBy={setSortBy} 
+      />
+
+      <div className="flex-1 flex gap-4 min-h-0">
+        {/* Leads List */}
+        <div className={`${selectedLeadId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-1/3 lg:w-1/4 min-w-[300px] border rounded-lg bg-card shadow-sm overflow-hidden`}>
+          <div className="p-2 border-b bg-muted/50 text-sm font-medium text-muted-foreground flex justify-between items-center">
+            <span>{sortedLeads.length} Leads</span>
+            {filter === "all" && (
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                Admin View
+              </span>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {sortedLeads.map((lead) => (
+              <LeadCard
+                key={lead._id}
+                lead={lead}
+                isSelected={selectedLeadId === lead._id}
+                isUnassignedView={filter === "unassigned"}
+                viewIrrelevant={filter === "irrelevant"}
+                isAdmin={user?.role === "admin"}
+                allUsers={allUsers || []}
+                onSelect={handleLeadSelect}
+                onAssignToSelf={handleAssignToSelf}
+                onAssignToUser={handleAssignToUser}
+              />
+            ))}
+            {sortedLeads.length === 0 && (
+              <div className="p-8 text-center text-muted-foreground">
+                No leads found matching your criteria.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Lead Details */}
+        {selectedLeadId ? (
+          <div className="flex-1 min-w-0 h-full">
+            <LeadDetails 
+              leadId={selectedLeadId} 
+              onClose={() => {
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete("leadId");
+                setSearchParams(newParams);
+              }} 
+            />
+          </div>
+        ) : (
+          <div className="hidden md:flex flex-1 items-center justify-center border rounded-lg bg-muted/10 text-muted-foreground">
+            Select a lead to view details
+          </div>
+        )}
+      </div>
+
+      <AssignLeadDialog
+        isOpen={isAssignDialogOpen}
+        onClose={() => setIsAssignDialogOpen(false)}
+        leadId={leadToAssign}
+      />
+    </div>
   );
 }

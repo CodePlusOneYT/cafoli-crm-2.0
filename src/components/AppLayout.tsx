@@ -24,7 +24,7 @@ import { api } from "@/convex/_generated/api";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { LeadReminders } from "./LeadReminders";
-import { ColdCallerPopup } from "./ColdCallerPopup";
+import { ColdCallerPopup } from "@/components/ColdCallerPopup";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -34,54 +34,32 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
   const ensureRole = useMutation(api.users.ensureRole);
   
-  useEffect(() => {
-    if (user && !user.role) {
-      ensureRole({ userId: user._id });
-    }
-  }, [user, ensureRole]);
-
   // Cold Caller Leads Logic
   const coldCallerLeadsNeedingFollowUp = useQuery(
     api.coldCallerLeads.getColdCallerLeadsNeedingFollowUp,
-    user ? { userId: user._id } : "skip"
+    user ? {} : "skip"
   ) || [];
 
   const [isColdCallerPopupOpen, setIsColdCallerPopupOpen] = useState(false);
   const [hasShownColdCallerPopup, setHasShownColdCallerPopup] = useState(false);
 
-  // Show Cold Caller popup for staff
   useEffect(() => {
     if (user?.role === "staff" && coldCallerLeadsNeedingFollowUp.length > 0 && !hasShownColdCallerPopup) {
       setIsColdCallerPopupOpen(true);
       setHasShownColdCallerPopup(true);
     }
   }, [user, coldCallerLeadsNeedingFollowUp, hasShownColdCallerPopup]);
+  
+  useEffect(() => {
+    if (user && !user.role) {
+      ensureRole({ userId: user._id });
+    }
+  }, [user, ensureRole]);
 
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isAdmin = user?.role === "admin";
->>>>>>> REPLACE
-<<<<<<< SEARCH
-  return (
-    <div className="min-h-screen bg-background flex">
-      <LeadReminders />
-      {/* Desktop Sidebar */}
-      <div className="hidden md:block w-64 fixed inset-y-0 z-50">
-=======
-  return (
-    <div className="min-h-screen bg-background flex">
-      <LeadReminders />
-      {user && coldCallerLeadsNeedingFollowUp.length > 0 && (
-        <ColdCallerPopup
-          leads={coldCallerLeadsNeedingFollowUp}
-          isOpen={isColdCallerPopupOpen}
-          onClose={() => setIsColdCallerPopupOpen(false)}
-          userId={user._id}
-        />
-      )}
-      {/* Desktop Sidebar */}
-      <div className="hidden md:block w-64 fixed inset-y-0 z-50">
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -278,6 +256,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex">
       <LeadReminders />
+      {/* Cold Caller Popup */}
+      {user && coldCallerLeadsNeedingFollowUp.length > 0 && (
+        <ColdCallerPopup
+          leads={coldCallerLeadsNeedingFollowUp}
+          isOpen={isColdCallerPopupOpen}
+          onClose={() => setIsColdCallerPopupOpen(false)}
+          userId={user._id}
+        />
+      )}
       {/* Desktop Sidebar */}
       <div className="hidden md:block w-64 fixed inset-y-0 z-50">
         {renderSidebarContent()}
