@@ -1,1 +1,1 @@
-pnpm add papaparse @types/papaparse
+ls src/convex/auth/
