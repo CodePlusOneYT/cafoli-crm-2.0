@@ -9,7 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
-import type * as auth_password from "../auth/password.js";
+import type * as authProviders from "../authProviders.js";
 import type * as brevo from "../brevo.js";
 import type * as brevoMutations from "../brevoMutations.js";
 import type * as brevoQueries from "../brevoQueries.js";
@@ -54,7 +54,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
-  "auth/password": typeof auth_password;
+  authProviders: typeof authProviders;
   brevo: typeof brevo;
   brevoMutations: typeof brevoMutations;
   brevoQueries: typeof brevoQueries;

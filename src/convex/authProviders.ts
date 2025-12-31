@@ -1,11 +1,10 @@
 "use node";
 
 import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
-import { internal } from "../_generated/api";
-import { Id } from "../_generated/dataModel";
-import { hashPassword, verifyPassword } from "../lib/passwordUtils";
+import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
+import { hashPassword, verifyPassword } from "./lib/passwordUtils";
 import { Password } from "@convex-dev/auth/providers/Password";
-import { DataModel } from "../_generated/dataModel";
 
 // Hardcoded credentials storage (in-memory for this implementation)
 const HARDCODED_USERS = [
@@ -30,7 +29,7 @@ export const password = ConvexCredentials({
 
     if (hardcodedUser) {
       // Check if user exists in database
-      let user: { _id: Id<"users">; role?: string; passwordHash?: string } | null = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
+      const user = await ctx.runQuery(internal.users.getUserByEmail, { email: username });
 
       // Create user if doesn't exist OR update role if it's not admin
       if (!user) {
@@ -41,14 +40,13 @@ export const password = ConvexCredentials({
           role: hardcodedUser.role,
           passwordHash,
         });
-        user = { _id: userId, role: hardcodedUser.role, passwordHash };
+        return { userId };
       } else if (user.role !== "admin") {
         // Ensure the owner account always has admin role
         await ctx.runMutation(internal.users.updateUserRole, {
           userId: user._id,
           role: "admin",
         });
-        user = { ...user, role: "admin" };
       }
 
       return { userId: user._id };
@@ -68,7 +66,7 @@ export const password = ConvexCredentials({
   },
 });
 
-export const PasswordProvider = Password<DataModel>({
+export const PasswordProvider = Password({
   profile(params) {
     return {
       email: params.email as string,
@@ -76,5 +74,3 @@ export const PasswordProvider = Password<DataModel>({
     };
   },
 });
-
-export const { auth, signIn, signOut, store } = PasswordProvider;
