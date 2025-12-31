@@ -12,8 +12,9 @@ import { api } from "@/convex/_generated/api";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { Mail, Plus, Trash2, Send, FileText, Edit } from "lucide-react";
+import { Mail, Plus, Trash2, Send, FileText, Edit, Users } from "lucide-react";
 import { Id } from "@/convex/_generated/dataModel";
+import { LeadSelector } from "@/components/LeadSelector";
 
 export default function Emailing() {
   const { user } = useAuth();
@@ -32,8 +33,9 @@ export default function Emailing() {
   
   // Send Email State
   const [senderPrefix, setSenderPrefix] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
-  const [selectedLeadId, setSelectedLeadId] = useState<string>("");
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [isLeadSelectorOpen, setIsLeadSelectorOpen] = useState(false);
+  
   const [emailSubject, setEmailSubject] = useState("");
   const [emailContent, setEmailContent] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -45,33 +47,63 @@ export default function Emailing() {
 
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!senderPrefix || !recipientEmail || !emailSubject || !emailContent) {
-      toast.error("Please fill in all fields");
+    if (!senderPrefix || selectedLeadIds.length === 0 || !emailSubject || !emailContent) {
+      toast.error("Please fill in all fields and select at least one lead");
       return;
     }
 
     setIsSending(true);
-    try {
-      const result = await sendEmailAction({
-        senderPrefix,
-        to: recipientEmail,
-        subject: emailSubject,
-        htmlContent: emailContent,
-      });
+    let successCount = 0;
+    let failCount = 0;
 
-      if (result.success) {
-        toast.success("Email sent successfully!");
+    try {
+      // Get selected leads with emails
+      const recipients = leads.filter(l => selectedLeadIds.includes(l._id) && l.email);
+      
+      if (recipients.length === 0) {
+        toast.error("Selected leads do not have valid email addresses");
+        setIsSending(false);
+        return;
+      }
+
+      toast.info(`Sending emails to ${recipients.length} recipients...`);
+
+      // Send emails sequentially to avoid rate limits and better error tracking
+      // For larger batches, this should be moved to a backend mutation/action that handles batching
+      for (const lead of recipients) {
+        if (!lead.email) continue;
+        
+        const result = await sendEmailAction({
+          senderPrefix,
+          to: lead.email,
+          subject: emailSubject,
+          htmlContent: emailContent,
+        });
+
+        if (result.success) {
+          successCount++;
+        } else {
+          failCount++;
+          console.error(`Failed to send to ${lead.email}:`, result.error);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully sent ${successCount} emails!`);
+        if (failCount > 0) {
+          toast.warning(`Failed to send ${failCount} emails.`);
+        }
+        
         // Clear form
-        setRecipientEmail("");
-        setSelectedLeadId("");
+        setSelectedLeadIds([]);
         setEmailSubject("");
         setEmailContent("");
         setSelectedTemplateId("none");
       } else {
-        toast.error(`Failed to send: ${result.error}`);
+        toast.error("Failed to send emails. Please check logs.");
       }
     } catch (error) {
-      toast.error("An error occurred while sending the email");
+      toast.error("An error occurred while sending emails");
       console.error(error);
     } finally {
       setIsSending(false);
@@ -180,33 +212,24 @@ export default function Emailing() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="recipient">Recipient Lead</Label>
-                      <Select 
-                        value={selectedLeadId} 
-                        onValueChange={(value) => {
-                          setSelectedLeadId(value);
-                          const lead = leads.find(l => l._id === value);
-                          if (lead?.email) {
-                            setRecipientEmail(lead.email);
-                          }
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a lead" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {leads
-                            .filter(l => l.email)
-                            .map((lead) => (
-                              <SelectItem key={lead._id} value={lead._id}>
-                                {lead.name} ({lead.email})
-                              </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {recipientEmail && (
+                      <Label>Recipients</Label>
+                      <div className="flex gap-2">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          className="w-full justify-start text-left font-normal"
+                          onClick={() => setIsLeadSelectorOpen(true)}
+                        >
+                          <Users className="mr-2 h-4 w-4" />
+                          {selectedLeadIds.length === 0 
+                            ? "Select Leads..." 
+                            : `${selectedLeadIds.length} lead(s) selected`}
+                        </Button>
+                      </div>
+                      {selectedLeadIds.length > 0 && (
                         <p className="text-xs text-muted-foreground">
-                          Sending to: {recipientEmail}
+                          Selected: {leads.filter(l => selectedLeadIds.includes(l._id)).map(l => l.name).slice(0, 3).join(", ")}
+                          {selectedLeadIds.length > 3 && ` and ${selectedLeadIds.length - 3} more`}
                         </p>
                       )}
                     </div>
@@ -249,12 +272,12 @@ export default function Emailing() {
                   </div>
 
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={isSending}>
+                    <Button type="submit" disabled={isSending || selectedLeadIds.length === 0}>
                       {isSending ? (
                         <>Sending...</>
                       ) : (
                         <>
-                          <Send className="mr-2 h-4 w-4" /> Send Email
+                          <Send className="mr-2 h-4 w-4" /> Send Email ({selectedLeadIds.length})
                         </>
                       )}
                     </Button>
@@ -346,6 +369,14 @@ export default function Emailing() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <LeadSelector 
+          isOpen={isLeadSelectorOpen}
+          onClose={() => setIsLeadSelectorOpen(false)}
+          leads={leads as any[]}
+          selectedLeadIds={selectedLeadIds}
+          onSelectionChange={setSelectedLeadIds}
+        />
       </div>
     </AppLayout>
   );
