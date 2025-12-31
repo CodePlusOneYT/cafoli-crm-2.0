@@ -140,11 +140,11 @@ export const getPaginatedLeads = query({
             if (args.filter === "unassigned") {
               return !l.assignedTo && 
                      l.type !== "Irrelevant" && 
-                     (!l.isColdCallerLead || l.coldCallerAssignedTo);
+                     !l.isColdCallerLead;
             }
             if (args.filter === "irrelevant") return l.type === "Irrelevant";
             if (args.filter === "all") return l.type !== "Irrelevant";
-            return !l.assignedTo && l.type !== "Irrelevant" && (!l.isColdCallerLead || l.coldCallerAssignedTo);
+            return !l.assignedTo && l.type !== "Irrelevant" && !l.isColdCallerLead;
          });
 
          filtered = applyFilters(filtered);
@@ -172,10 +172,7 @@ export const getPaginatedLeads = query({
               q.neq(q.field("type"), "Irrelevant"),
               q.or(
                 q.eq(q.field("isColdCallerLead"), false),
-                q.and(
-                  q.eq(q.field("isColdCallerLead"), true),
-                  q.neq(q.field("coldCallerAssignedTo"), undefined)
-                )
+                q.eq(q.field("isColdCallerLead"), undefined)
               )
             );
           } else if (args.filter === "irrelevant") {
@@ -235,14 +232,14 @@ export const getLeads = query({
       leads = leads.filter(l => l.type !== "Irrelevant");
     } else if (args.filter === "unassigned") {
       leads = await ctx.db.query("leads").order("desc").collect();
-      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant" && (!l.isColdCallerLead || l.coldCallerAssignedTo));
+      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant" && !l.isColdCallerLead);
     } else if (args.filter === "all") {
       if (user.role !== ROLES.ADMIN) return [];
       leads = await ctx.db.query("leads").order("desc").collect();
       leads = leads.filter(l => l.type !== "Irrelevant");
     } else {
       leads = await ctx.db.query("leads").order("desc").collect();
-      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant" && (!l.isColdCallerLead || l.coldCallerAssignedTo));
+      leads = leads.filter(l => !l.assignedTo && l.type !== "Irrelevant" && !l.isColdCallerLead);
     }
 
     return leads;
