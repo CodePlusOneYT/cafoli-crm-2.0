@@ -15,20 +15,13 @@ import { format } from "date-fns";
 import { AlertTriangle, TrendingUp, X, BellOff, Phone, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { api } from "@/convex/_generated/api";
 
 export function LeadReminders() {
-  // Import api dynamically to avoid circular type issues
-  let apiRef: any = null;
-  try {
-    apiRef = require("@/convex/_generated/api").api;
-  } catch (e) {
-    console.error("Failed to load api", e);
-  }
-
-  const criticalLeads = useQuery(apiRef?.leads?.getCriticalOverdueLeads, {});
-  const coldLeads = useQuery(apiRef?.leads?.getColdOverdueLeads, {});
-  const currentUser = useQuery(apiRef?.users?.currentUser);
-  const updatePreferences = useMutation(apiRef?.users?.updatePreferences);
+  const criticalLeads = useQuery(api.leads.queries.getCriticalOverdueLeads, {});
+  const coldLeads = useQuery(api.leads.queries.getColdOverdueLeads, {});
+  const currentUser = useQuery(api.users.currentUser);
+  const updatePreferences = useMutation(api.users.updatePreferences);
   const navigate = useNavigate();
 
   // Queue state: track which batches have been closed in this session

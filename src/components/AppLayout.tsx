@@ -24,6 +24,7 @@ import JSZip from "jszip";
 import { toast } from "sonner";
 import { LeadReminders } from "./LeadReminders";
 import { ColdCallerPopup } from "@/components/ColdCallerPopup";
+import { api } from "@/convex/_generated/api";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -32,19 +33,11 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
   
-  // Import api dynamically to avoid circular type issues
-  let apiRef: any = null;
-  try {
-    apiRef = require("@/convex/_generated/api").api;
-  } catch (e) {
-    console.error("Failed to load api", e);
-  }
-
-  const ensureRole = useMutation(apiRef?.users?.ensureRole);
+  const ensureRole = useMutation(api.users.ensureRole);
   
   // Cold Caller Leads Logic
   const coldCallerLeadsNeedingFollowUp = useQuery(
-    apiRef?.coldCallerLeads?.getColdCallerLeadsNeedingFollowUp,
+    api.coldCallerLeads.getColdCallerLeadsNeedingFollowUp,
     user ? {} : "skip"
   ) || [];
 
@@ -83,9 +76,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   // Export Logic
   const [isExporting, setIsExporting] = useState(false);
-  const allLeadsForExport = useQuery(apiRef?.leads?.getAllLeadsForExport, isExporting && user ? { userId: user._id } : "skip");
-  const nextDownloadNumber = useQuery(apiRef?.leads?.getNextDownloadNumber);
-  const logExport = useMutation(apiRef?.leads?.logExport);
+  const allLeadsForExport = useQuery(api.leads.queries.getAllLeadsForExport, isExporting && user ? { userId: user._id } : "skip");
+  const nextDownloadNumber = useQuery(api.leads.queries.getNextDownloadNumber);
+  const logExport = useMutation(api.leads.mutations.logExport);
 
   useEffect(() => {
     const performExport = async () => {
