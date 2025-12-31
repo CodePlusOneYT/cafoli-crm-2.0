@@ -1,26 +1,21 @@
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery, usePaginatedQuery, useAction } from "convex/react";
-import { Search, Plus, UserPlus, Loader2, RefreshCw, X } from "lucide-react";
-import { useState, type FormEvent, useEffect } from "react";
+import { Search, Loader2, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useInView } from "react-intersection-observer";
 import LeadDetails from "@/components/LeadDetails";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { LeadCard } from "@/components/LeadCard";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
+import { OverdueLeadsDialog } from "@/components/leads/OverdueLeadsDialog";
+import { CreateLeadDialog } from "@/components/leads/CreateLeadDialog";
+import { AssignLeadDialog } from "@/components/leads/AssignLeadDialog";
+import { LeadsFilterBar } from "@/components/leads/LeadsFilterBar";
 
 export default function Leads() {
   const location = useLocation();
@@ -107,7 +102,6 @@ export default function Leads() {
     }
   }, [inView, status, loadMore]);
 
-  const createLead = useMutation(api.leads.createLead);
   const assignLead = useMutation(api.leads.assignLead);
 
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
@@ -159,28 +153,6 @@ export default function Leads() {
     }
   };
 
-  const handleCreateLead = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!user) return;
-    const formData = new FormData(e.currentTarget);
-    try {
-      await createLead({
-        name: formData.get("name") as string,
-        subject: formData.get("subject") as string,
-        source: "Manual",
-        mobile: formData.get("mobile") as string,
-        email: formData.get("email") as string || undefined,
-        agencyName: formData.get("agencyName") as string || undefined,
-        message: formData.get("message") as string || undefined,
-        userId: user._id,
-      });
-      setIsCreateOpen(false);
-      toast.success("Lead created successfully");
-    } catch (error) {
-      toast.error("Failed to create lead");
-    }
-  };
-
   const getMinDateTime = () => {
     const now = new Date();
     now.setMinutes(now.getMinutes() + 1);
@@ -198,64 +170,19 @@ export default function Leads() {
 
   const availableStatuses = ["Cold", "Hot", "Mature"];
 
-  // Helper to toggle filter selection
-  const toggleFilter = (value: string, currentFilters: string[], setFilters: (filters: string[]) => void) => {
-    if (currentFilters.includes(value)) {
-      setFilters(currentFilters.filter(f => f !== value));
-    } else {
-      setFilters([...currentFilters, value]);
-    }
-  };
-
-  const clearAllFilters = () => {
-    setSelectedStatuses([]);
-    setSelectedSources([]);
-    setSelectedTags([]);
-    setSelectedAssignedTo([]);
-  };
-
-  const hasActiveFilters = selectedStatuses.length > 0 || selectedSources.length > 0 || 
-                          selectedTags.length > 0 || selectedAssignedTo.length > 0;
-
   return (
     <AppLayout>
       <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
         {/* Overdue Leads Popup */}
-        <Dialog open={isOverduePopupOpen} onOpenChange={setIsOverduePopupOpen}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-red-600 flex items-center gap-2">
-                ⚠️ Overdue Follow-ups ({overdueLeads?.length})
-              </DialogTitle>
-              <DialogDescription>
-                You have the following leads with overdue follow-ups. Please take action.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3 mt-4">
-              {overdueLeads?.map((lead: Doc<"leads">) => (
-                <div 
-                  key={lead._id} 
-                  className="p-3 border border-red-200 bg-red-50 rounded-lg flex justify-between items-center cursor-pointer hover:bg-red-100 transition-colors"
-                  onClick={() => {
-                    setSelectedLeadId(lead._id);
-                    setIsOverduePopupOpen(false);
-                  }}
-                >
-                  <div>
-                    <h4 className="font-semibold text-red-900">{lead.name}</h4>
-                    <p className="text-sm text-red-700">{lead.subject}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold text-red-600">
-                      {lead.nextFollowUpDate ? new Date(lead.nextFollowUpDate).toLocaleString() : "Unknown"}
-                    </div>
-                    <div className="text-xs text-red-500">Click to view</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <OverdueLeadsDialog 
+          open={isOverduePopupOpen} 
+          onOpenChange={setIsOverduePopupOpen} 
+          leads={overdueLeads} 
+          onSelectLead={(id) => {
+            setSelectedLeadId(id);
+            setIsOverduePopupOpen(false);
+          }} 
+        />
 
         <div className="flex flex-col gap-4 mb-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -282,291 +209,48 @@ export default function Leads() {
                 {viewIrrelevant ? "Show Active Leads" : "Show Irrelevant Leads"}
               </Button>
 
-              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Lead
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Lead</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleCreateLead} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Name</label>
-                        <Input name="name" required placeholder="John Doe" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Subject</label>
-                        <Input name="subject" required placeholder="Inquiry about..." />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Mobile</label>
-                        <Input name="mobile" required placeholder="+1234567890" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Email</label>
-                        <Input name="email" type="email" placeholder="john@example.com" />
-                      </div>
-                      <div className="col-span-2 space-y-2">
-                        <label className="text-sm font-medium">Agency Name</label>
-                        <Input name="agencyName" placeholder="Company Ltd." />
-                      </div>
-                      <div className="col-span-2 space-y-2">
-                        <label className="text-sm font-medium">Message</label>
-                        <Textarea name="message" placeholder="Initial message..." />
-                      </div>
-                    </div>
-                    <Button type="submit" className="w-full">Create Lead</Button>
-                  </form>
-                </DialogContent>
-              </Dialog>
+              {user && (
+                <CreateLeadDialog 
+                  open={isCreateOpen} 
+                  onOpenChange={setIsCreateOpen} 
+                  userId={user._id} 
+                />
+              )}
 
               {/* Follow-up Date Assignment Dialog */}
-              <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Set Follow-up Date</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="followUpDate">Follow-up Date & Time</Label>
-                      <Input
-                        id="followUpDate"
-                        type="datetime-local"
-                        value={followUpDate}
-                        onChange={(e) => setFollowUpDate(e.target.value)}
-                        min={getMinDateTime()}
-                        max={getMaxDateTime()}
-                        required
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Must be between now and 31 days in the future
-                      </p>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setIsAssignDialogOpen(false);
-                          setLeadToAssign(null);
-                          setFollowUpDate("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button onClick={confirmAssignToSelf}>
-                        Assign Lead
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <AssignLeadDialog 
+                open={isAssignDialogOpen} 
+                onOpenChange={setIsAssignDialogOpen} 
+                onConfirm={confirmAssignToSelf}
+                onCancel={() => {
+                  setIsAssignDialogOpen(false);
+                  setLeadToAssign(null);
+                  setFollowUpDate("");
+                }}
+                followUpDate={followUpDate}
+                setFollowUpDate={setFollowUpDate}
+                minDateTime={getMinDateTime()}
+                maxDateTime={getMaxDateTime()}
+              />
             </div>
           </div>
 
           {/* Unified Filters Row */}
-          <div className="flex flex-col gap-3">
-            <div className="flex gap-2 items-center flex-wrap overflow-x-auto pb-2">
-              {/* Status Filter */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-between">
-                    Status {selectedStatuses.length > 0 && `(${selectedStatuses.length})`}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Search status..." />
-                    <CommandList>
-                      <CommandEmpty>No status found.</CommandEmpty>
-                      <CommandGroup>
-                        {availableStatuses.map((status) => (
-                          <CommandItem
-                            key={status}
-                            value={status}
-                            onSelect={() => toggleFilter(status, selectedStatuses, setSelectedStatuses)}
-                          >
-                            <span className="flex-1">{status}</span>
-                            {selectedStatuses.includes(status) && (
-                              <Check className="h-4 w-4 ml-auto" />
-                            )}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-
-              {/* Source Filter */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-between">
-                    Source {selectedSources.length > 0 && `(${selectedSources.length})`}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Search source..." />
-                    <CommandList>
-                      <CommandEmpty>No source found.</CommandEmpty>
-                      <CommandGroup>
-                        {uniqueSources.map((source) => (
-                          <CommandItem
-                            key={source}
-                            value={source}
-                            onSelect={() => toggleFilter(source, selectedSources, setSelectedSources)}
-                          >
-                            <span className="flex-1">{source}</span>
-                            {selectedSources.includes(source) && (
-                              <Check className="h-4 w-4 ml-auto" />
-                            )}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-
-              {/* Tag Filter */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-between">
-                    Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Search tags..." />
-                    <CommandList>
-                      <CommandEmpty>No tags found.</CommandEmpty>
-                      <CommandGroup>
-                        {allTags.map((tag) => (
-                          <CommandItem
-                            key={tag._id}
-                            value={tag.name}
-                            onSelect={() => toggleFilter(tag._id, selectedTags, setSelectedTags)}
-                          >
-                            <div 
-                              className="w-3 h-3 rounded-full mr-2" 
-                              style={{ backgroundColor: tag.color }}
-                            />
-                            <span className="flex-1">{tag.name}</span>
-                            {selectedTags.includes(tag._id) && (
-                              <Check className="h-4 w-4 ml-auto" />
-                            )}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-
-              {/* Assigned To Filter (Admin Only) */}
-              {isAdmin && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="justify-between">
-                      Assigned To {selectedAssignedTo.length > 0 && `(${selectedAssignedTo.length})`}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[200px] p-0">
-                    <Command>
-                      <CommandInput placeholder="Search users..." />
-                      <CommandList>
-                        <CommandEmpty>No users found.</CommandEmpty>
-                        <CommandGroup>
-                          {allUsers.map((u) => (
-                            <CommandItem
-                              key={u._id}
-                              value={u.name || u.email || ""}
-                              onSelect={() => toggleFilter(u._id, selectedAssignedTo, setSelectedAssignedTo)}
-                            >
-                              <span className="flex-1">{u.name || u.email}</span>
-                              {selectedAssignedTo.includes(u._id) && (
-                                <Check className="h-4 w-4 ml-auto" />
-                              )}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              )}
-
-              {/* Clear All Filters */}
-              {hasActiveFilters && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={clearAllFilters}
-                  className="h-9 px-3"
-                >
-                  Clear All
-                  <X className="ml-2 h-4 w-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* Active Filters Display */}
-            {hasActiveFilters && (
-              <div className="flex flex-wrap gap-2">
-                {selectedStatuses.map(status => (
-                  <Badge key={status} variant="secondary" className="gap-1">
-                    {status}
-                    <X 
-                      className="h-3 w-3 cursor-pointer" 
-                      onClick={() => toggleFilter(status, selectedStatuses, setSelectedStatuses)}
-                    />
-                  </Badge>
-                ))}
-                {selectedSources.map(source => (
-                  <Badge key={source} variant="secondary" className="gap-1">
-                    {source}
-                    <X 
-                      className="h-3 w-3 cursor-pointer" 
-                      onClick={() => toggleFilter(source, selectedSources, setSelectedSources)}
-                    />
-                  </Badge>
-                ))}
-                {selectedTags.map(tagId => {
-                  const tag = allTags.find(t => t._id === tagId);
-                  return tag ? (
-                    <Badge key={tagId} variant="secondary" className="gap-1" style={{ backgroundColor: tag.color, color: 'white' }}>
-                      {tag.name}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => toggleFilter(tagId, selectedTags, setSelectedTags)}
-                      />
-                    </Badge>
-                  ) : null;
-                })}
-                {selectedAssignedTo.map(userId => {
-                  const u = allUsers.find(user => user._id === userId);
-                  return u ? (
-                    <Badge key={userId} variant="secondary" className="gap-1">
-                      👤 {u.name || u.email}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => toggleFilter(userId, selectedAssignedTo, setSelectedAssignedTo)}
-                      />
-                    </Badge>
-                  ) : null;
-                })}
-              </div>
-            )}
-          </div>
+          <LeadsFilterBar 
+            selectedStatuses={selectedStatuses}
+            setSelectedStatuses={setSelectedStatuses}
+            selectedSources={selectedSources}
+            setSelectedSources={setSelectedSources}
+            selectedTags={selectedTags}
+            setSelectedTags={setSelectedTags}
+            selectedAssignedTo={selectedAssignedTo}
+            setSelectedAssignedTo={setSelectedAssignedTo}
+            allTags={allTags}
+            uniqueSources={uniqueSources}
+            allUsers={allUsers}
+            isAdmin={isAdmin}
+            availableStatuses={availableStatuses}
+          />
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
