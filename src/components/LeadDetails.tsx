@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { Calendar, Save, User, X } from "lucide-react";
+import { Calendar, Save, User, X, ThumbsUp } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -84,6 +84,24 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
           </div>
           <p className="text-muted-foreground text-sm mb-3">{lead.subject}</p>
           
+          <div className="flex flex-wrap gap-2 mb-3">
+            {lead.type === 'Relevant' && (
+              <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md flex items-center gap-1 text-sm font-medium border border-emerald-200 w-fit">
+                <ThumbsUp className="h-3 w-3" />
+                Relevant Lead
+              </span>
+            )}
+            
+            <span className={`px-2 py-1 rounded-md text-sm font-medium border ${
+              lead.status === 'Hot' ? 'bg-orange-100 text-orange-700 border-orange-200' :
+              lead.status === 'Mature' ? 'bg-green-100 text-green-700 border-green-200' :
+              lead.status === 'Cold' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+              'bg-gray-100 text-gray-700 border-gray-200'
+            }`}>
+              {lead.status || "Status Not Set"}
+            </span>
+          </div>
+
           <TagManager 
             leadId={lead._id} 
             selectedTagIds={lead.tags || []} 

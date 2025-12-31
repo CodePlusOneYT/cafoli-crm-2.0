@@ -98,8 +98,8 @@ export function LeadReminders() {
     Icon: TrendingUp,
     title: "Boost Your Sales",
     description: leads.length > 1 
-      ? "These are good leads. Let's convert these leads to be good parties."
-      : "This is a good lead. Let's convert this lead to be a good party.",
+      ? "These are good leads. Let's convert these leads to be good parties. Success is just one follow-up away!"
+      : "This is a good lead. Let's convert this lead to be a good party. Success is just one follow-up away!",
     badgeColor: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
     buttonVariant: "default" as const,
   };

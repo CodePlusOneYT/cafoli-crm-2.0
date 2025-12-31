@@ -5,7 +5,6 @@ import { api } from "@/convex/_generated/api";
 import { Users, MessageSquare, BarChart3, Activity } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { ColdCallerPopup } from "@/components/ColdCallerPopup";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function Dashboard() {
@@ -13,29 +12,13 @@ export default function Dashboard() {
   const leads = useQuery(api.leads.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
   const campaigns = useQuery(api.campaigns.getCampaigns, user ? { userId: user._id } : "skip") || [];
   
-  // Cold Caller Leads
-  const coldCallerLeadsNeedingFollowUp = useQuery(
-    api.coldCallerLeads.getColdCallerLeadsNeedingFollowUp,
-    user ? {} : "skip"
-  ) || [];
-  
   const overdueColdCallerLeads = useQuery(
     api.coldCallerLeads.getOverdueColdCallerLeads,
     user?.role === "admin" ? {} : "skip"
   ) || [];
 
-  const [isColdCallerPopupOpen, setIsColdCallerPopupOpen] = useState(false);
   const [isAdminOverduePopupOpen, setIsAdminOverduePopupOpen] = useState(false);
-  const [hasShownColdCallerPopup, setHasShownColdCallerPopup] = useState(false);
   const [hasShownAdminOverduePopup, setHasShownAdminOverduePopup] = useState(false);
-
-  // Show Cold Caller popup for staff
-  useEffect(() => {
-    if (user?.role === "staff" && coldCallerLeadsNeedingFollowUp.length > 0 && !hasShownColdCallerPopup) {
-      setIsColdCallerPopupOpen(true);
-      setHasShownColdCallerPopup(true);
-    }
-  }, [user, coldCallerLeadsNeedingFollowUp, hasShownColdCallerPopup]);
 
   // Show overdue popup for admin
   useEffect(() => {
@@ -46,6 +29,27 @@ export default function Dashboard() {
   }, [user, overdueColdCallerLeads, hasShownAdminOverduePopup]);
 
   // Memoize computed stats to avoid recalculation on every render
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+  return (
+    <AppLayout>
+      {/* Cold Caller Popup for Staff */}
+      {user && coldCallerLeadsNeedingFollowUp.length > 0 && (
+        <ColdCallerPopup
+          leads={coldCallerLeadsNeedingFollowUp}
+          isOpen={isColdCallerPopupOpen}
+          onClose={() => setIsColdCallerPopupOpen(false)}
+          userId={user._id}
+        />
+      )}
+
+      {/* Admin Overdue Notification */}
+      <Dialog open={isAdminOverduePopupOpen} onOpenChange={setIsAdminOverduePopupOpen}>
+=======
+  return (
+    <AppLayout>
+      {/* Admin Overdue Notification */}
+      <Dialog open={isAdminOverduePopupOpen} onOpenChange={setIsAdminOverduePopupOpen}>
   const stats = useMemo(() => {
     const now = Date.now();
     const oneDayAgo = now - 86400000;
