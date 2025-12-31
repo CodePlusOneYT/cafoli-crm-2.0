@@ -85,6 +85,7 @@ export const getLeadsWithChatStatus = query({
     );
 
     // 3. Sort by lastMessageAt (descending) or creation time for new leads
+    // This ensures new leads (high creation time) or leads with new messages appear at the top
     return leadsWithChat.sort((a, b) => {
       const timeA = Math.max(a.lastMessageAt || 0, a._creationTime);
       const timeB = Math.max(b.lastMessageAt || 0, b._creationTime);

@@ -55,6 +55,7 @@ export const createLead = mutation({
       }
     }
     
+    // Send welcome WhatsApp message
     try {
       await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
         phoneNumber: mobile,

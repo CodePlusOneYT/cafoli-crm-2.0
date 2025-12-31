@@ -6,9 +6,6 @@ import { Id } from "../_generated/dataModel";
 import { hashPassword, verifyPassword } from "../lib/passwordUtils";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { DataModel } from "../_generated/dataModel";
-import { api } from "../_generated/api";
-import { mutation } from "../_generated/server";
-import { v } from "convex/values";
 
 // Hardcoded credentials storage (in-memory for this implementation)
 const HARDCODED_USERS = [
