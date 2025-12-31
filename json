@@ -1,3 +1,5 @@
-{
-  "plan": "1. Verify the infinite scrolling functionality in the Leads page.\n2. Check if any other pages need pagination optimization.\n3. Ensure the search functionality works correctly with the new pagination logic."
-}
+  "dependencies": {
+    "@convex-dev/auth": "^0.0.90",
+    ...
+    "zod": "^4.1.13"
+  },
