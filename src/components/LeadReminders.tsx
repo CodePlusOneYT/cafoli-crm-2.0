@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +14,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router";
 import { format } from "date-fns";
 import { AlertTriangle, TrendingUp, X, BellOff, Phone, Mail } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export function LeadReminders() {
@@ -25,8 +23,8 @@ export function LeadReminders() {
   const updatePreferences = useMutation(api.users.updatePreferences);
   const navigate = useNavigate();
 
-  const [showCritical, setShowCritical] = useState(false);
-  const [showCold, setShowCold] = useState(false);
+  // Queue state: track which batches have been closed in this session
+  const [closedBatches, setClosedBatches] = useState<string[]>([]);
   const [dismissedLeadIds, setDismissedLeadIds] = useState<string[]>([]);
 
   // Check user preference
@@ -35,37 +33,26 @@ export function LeadReminders() {
   const activeCriticalLeads = criticalLeads?.filter(l => !dismissedLeadIds.includes(l._id)) || [];
   const activeColdLeads = coldLeads?.filter(l => !dismissedLeadIds.includes(l._id)) || [];
 
-  useEffect(() => {
-    if (remindersEnabled && activeCriticalLeads.length > 0) {
-      setShowCritical(true);
-    } else {
-      setShowCritical(false);
-    }
-  }, [activeCriticalLeads.length, remindersEnabled]);
-
-  useEffect(() => {
-    if (remindersEnabled && activeColdLeads.length > 0 && activeCriticalLeads.length === 0) {
-      setShowCold(true);
-    } else {
-      setShowCold(false);
-    }
-  }, [activeColdLeads.length, activeCriticalLeads.length, remindersEnabled]);
+  // Derived visibility state - Priority Queue: Critical -> Cold
+  // Only show if enabled, has leads, and batch not closed
+  const showCritical = remindersEnabled && activeCriticalLeads.length > 0 && !closedBatches.includes('critical');
+  
+  // Show cold only if critical is NOT showing (either empty or closed) AND cold has leads AND cold not closed
+  const showCold = remindersEnabled && !showCritical && activeColdLeads.length > 0 && !closedBatches.includes('cold');
 
   const handleCloseCritical = () => {
-    setShowCritical(false);
-    if (remindersEnabled && activeColdLeads.length > 0) {
-      setShowCold(true);
-    }
+    setClosedBatches(prev => [...prev, 'critical']);
   };
 
   const handleCloseCold = () => {
-    setShowCold(false);
+    setClosedBatches(prev => [...prev, 'cold']);
   };
 
   const navigateToLead = (leadId: string) => {
     navigate(`/leads?leadId=${leadId}`);
-    setShowCritical(false);
-    setShowCold(false);
+    // Close the current batch to allow viewing the page
+    if (showCritical) handleCloseCritical();
+    if (showCold) handleCloseCold();
   };
 
   const handleDismiss = (leadId: string, e: React.MouseEvent) => {
@@ -79,8 +66,6 @@ export function LeadReminders() {
         preferences: { leadRemindersEnabled: false }
       });
       toast.success("Reminders disabled");
-      setShowCritical(false);
-      setShowCold(false);
     } catch (error) {
       toast.error("Failed to update preferences");
     }
@@ -88,7 +73,7 @@ export function LeadReminders() {
 
   if (!remindersEnabled) return null;
 
-  if (showCritical && activeCriticalLeads.length > 0) {
+  if (showCritical) {
     return (
       <Dialog open={showCritical} onOpenChange={(open) => !open && handleCloseCritical()}>
         <DialogContent className="sm:max-w-[600px] border-red-200 bg-red-50 dark:bg-red-950/20">
@@ -184,7 +169,7 @@ export function LeadReminders() {
     );
   }
 
-  if (showCold && activeColdLeads.length > 0) {
+  if (showCold) {
     const isPlural = activeColdLeads.length > 1;
     const description = isPlural 
       ? "These are good leads. Let's convert these leads to be good parties."
