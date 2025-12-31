@@ -9,8 +9,8 @@ import { api } from "@/convex/_generated/api";
 export default function Dashboard() {
   const { user } = useAuth();
   
-  const leads = useQuery(api.leads.queries.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
-  const campaigns = useQuery(api.campaigns.getCampaigns, user ? { userId: user._id } : "skip") || [];
+  const leads = useQuery(api.leads.queries.getLeads, user ? { filter: "all" } : "skip") || [];
+  const campaigns = useQuery(api.campaigns.getCampaigns, user ? {} : "skip") || [];
   
   // Memoize computed stats to avoid recalculation on every render
   const stats = useMemo(() => {
