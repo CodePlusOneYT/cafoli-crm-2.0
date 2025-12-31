@@ -19,6 +19,7 @@ const Campaigns = lazy(() => import("./pages/Campaigns.tsx"));
 const CampaignBuilder = lazy(() => import("./pages/CampaignBuilderPage.tsx"));
 const Reports = lazy(() => import("./pages/Reports.tsx"));
 const WhatsApp = lazy(() => import("./pages/WhatsApp.tsx"));
+const Emailing = lazy(() => import("./pages/Emailing.tsx"));
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
@@ -118,6 +119,10 @@ const router = createBrowserRouter([
   {
     path: "/whatsapp",
     element: <WhatsApp />,
+  },
+  {
+    path: "/emailing",
+    element: <Emailing />,
   },
   {
     path: "/admin",

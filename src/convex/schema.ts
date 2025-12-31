@@ -240,6 +240,14 @@ const schema = defineSchema(
       order: v.number(), // For rotation order
     }).index("by_active", ["isActive"]).index("by_order", ["order"]),
 
+    emailTemplates: defineTable({
+      name: v.string(),
+      subject: v.string(),
+      content: v.string(), // HTML content
+      createdBy: v.id("users"),
+      lastModifiedAt: v.number(),
+    }).index("by_name", ["name"]),
+
     // WhatsApp Templates
     templates: defineTable({
       name: v.string(),
