@@ -49,7 +49,7 @@ async function sendTemplateMessageHelper(
     }
 
     // Store message in database
-    await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+    await ctx.runMutation("whatsappMutations:storeMessage" as any, {
       leadId: leadId,
       phoneNumber: phoneNumber,
       content: `[Template: ${templateName}]`,
@@ -112,7 +112,7 @@ export const syncTemplates = action({
       const templates = data.data || [];
       
       for (const template of templates) {
-        await ctx.runMutation(internal.whatsappTemplatesMutations.upsertTemplate, {
+        await ctx.runMutation("whatsappTemplatesMutations:upsertTemplate" as any, {
           name: template.name,
           language: template.language,
           category: template.category,
@@ -217,7 +217,7 @@ export const createTemplate = action({
       }
 
       // Store in database
-      await ctx.runMutation(internal.whatsappTemplatesMutations.upsertTemplate, {
+      await ctx.runMutation("whatsappTemplatesMutations:upsertTemplate" as any, {
         name: args.name,
         language: args.language,
         category: args.category,
@@ -272,7 +272,7 @@ export const deleteTemplate = action({
       }
 
       // Delete from database
-      await ctx.runMutation(internal.whatsappTemplatesMutations.deleteTemplate, {
+      await ctx.runMutation("whatsappTemplatesMutations:deleteTemplate" as any, {
         templateId: args.templateId,
       });
 

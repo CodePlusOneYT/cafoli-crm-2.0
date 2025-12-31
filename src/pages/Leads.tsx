@@ -16,6 +16,8 @@ import { LeadCard } from "@/components/LeadCard";
 import { CreateLeadDialog } from "@/components/leads/CreateLeadDialog";
 import { AssignLeadDialog } from "@/components/leads/AssignLeadDialog";
 import { LeadsFilterBar } from "@/components/leads/LeadsFilterBar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ChatWindow } from "@/components/whatsapp/ChatWindow";
 
 export default function Leads() {
   const { user } = useAuth();
@@ -38,6 +40,8 @@ export default function Leads() {
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedAssignedTo, setSelectedAssignedTo] = useState<string[]>([]);
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
+  const [whatsAppLeadId, setWhatsAppLeadId] = useState<Id<"leads"> | null>(null);
 
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leads.getUniqueSources) || [];
@@ -104,6 +108,52 @@ export default function Leads() {
       return 0;
     });
   }, [leadsData, sortBy]);
+
+  const filteredLeads = leadsData?.filter((lead: any) => {
+    // Search filter
+    if (search) {
+      const query = search.toLowerCase();
+      const matchesSearch = 
+        lead.name?.toLowerCase().includes(query) ||
+        lead.email?.toLowerCase().includes(query) ||
+        lead.mobile?.toLowerCase().includes(query) ||
+        lead.company?.toLowerCase().includes(query);
+      if (!matchesSearch) return false;
+    }
+
+    // Tag filter - fix type issue
+    if (selectedTags && selectedTags.length > 0) {
+      const hasTag = selectedTags.some(tag => lead.tags?.includes(tag));
+      if (!hasTag) return false;
+    }
+
+    // Status filter
+    if (selectedStatuses && selectedStatuses.length > 0) {
+      if (selectedStatuses.includes(lead.status)) return true;
+      return false;
+    }
+
+    // Source filter
+    if (selectedSources && selectedSources.length > 0) {
+      if (selectedSources.includes(lead.source)) return true;
+      return false;
+    }
+
+    // Assigned filter - fix type issue
+    if (selectedAssignedTo && selectedAssignedTo.length > 0) {
+      if (selectedAssignedTo.includes(lead.assignedTo)) return true;
+      return false;
+    }
+
+    return true;
+  }) || [];
+
+  const handleOpenWhatsApp = (leadId: Id<"leads">) => {
+    setWhatsAppLeadId(leadId);
+    setWhatsAppDialogOpen(true);
+  };
+
+  const whatsAppLead = whatsAppLeadId && sortedLeads ? sortedLeads.find(l => l._id === whatsAppLeadId) : null;
 
   return (
     <AppLayout>
@@ -195,6 +245,41 @@ export default function Leads() {
             </div>
           )}
         </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredLeads.map((lead) => (
+            <LeadCard
+              key={lead._id}
+              lead={lead}
+              isSelected={selectedLeadId === lead._id}
+              isUnassignedView={filter === "unassigned"}
+              viewIrrelevant={false}
+              isAdmin={user?.role === "admin"}
+              allUsers={allUsers || []}
+              onSelect={setSelectedLeadId}
+              onAssignToSelf={handleAssignToSelf}
+              onAssignToUser={handleAssignToUser}
+              onOpenWhatsApp={handleOpenWhatsApp}
+            />
+          ))}
+        </div>
+
+        {/* WhatsApp Dialog */}
+        <Dialog open={whatsAppDialogOpen} onOpenChange={setWhatsAppDialogOpen}>
+          <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
+            <DialogHeader className="px-6 py-4 border-b">
+              <DialogTitle>WhatsApp Chat - {whatsAppLead?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden">
+              {whatsAppLeadId && whatsAppLead && (
+                <ChatWindow 
+                  selectedLeadId={whatsAppLeadId} 
+                  selectedLead={whatsAppLead}
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <AssignLeadDialog
           open={isAssignDialogOpen}

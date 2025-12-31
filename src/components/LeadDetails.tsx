@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/convex/_generated/api";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { Calendar, Save, User, X, ThumbsUp } from "lucide-react";
@@ -21,8 +20,17 @@ interface LeadDetailsProps {
 
 export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
   const { user } = useAuth();
-  const lead = useQuery(api.leads.getLead, { id: leadId, userId: user?._id });
-  const comments = useQuery(api.leads.getComments, { leadId });
+  
+  // Import api dynamically to avoid circular type issues
+  let apiRef: any = null;
+  try {
+    apiRef = require("@/convex/_generated/api").api;
+  } catch (e) {
+    console.error("Failed to load api", e);
+  }
+  
+  const lead = useQuery(apiRef?.leads?.getLead, { id: leadId, userId: user?._id });
+  const comments = useQuery(apiRef?.leads?.getComments, { leadId });
   
   const {
     isEditing,

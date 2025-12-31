@@ -2,6 +2,7 @@
 
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 
 // Process pending campaign executions
 export const processCampaignExecutions = internalAction({
@@ -52,7 +53,7 @@ export const processCampaignExecutions = internalAction({
         let result: any = null;
         
         if (block.type === "send_whatsapp") {
-          result = await executeWhatsAppBlock(ctx, execution.leadId, block.data);
+          result = await executeWhatsAppBlock(ctx, block, execution.leadId, execution.campaignId);
         } else if (block.type === "send_email") {
           result = await executeEmailBlock(ctx, execution.leadId, block.data);
         } else if (block.type === "wait") {
@@ -83,37 +84,42 @@ export const processCampaignExecutions = internalAction({
   },
 });
 
-async function executeWhatsAppBlock(ctx: any, leadId: string, blockData: any) {
-  const lead = await ctx.runQuery(
-    "campaignExecutorMutations:getLead" as any,
-    { leadId }
-  );
-  
-  if (!lead || !lead.mobile) {
-    throw new Error("Lead not found or missing mobile number");
+async function executeWhatsAppBlock(
+  ctx: any,
+  block: any,
+  lead: any,
+  campaignId: Id<"campaigns">
+) {
+  try {
+    // Get template
+    const template = await ctx.db.get(block.templateId);
+    
+    if (!template) {
+      throw new Error(`Template ${block.templateId} not found`);
+    }
+
+    // Replace variables in template
+    let message = template.content;
+    message = message.replace(/\{\{name\}\}/g, lead.name || "");
+    message = message.replace(/\{\{company\}\}/g, lead.company || "");
+    message = message.replace(/\{\{subject\}\}/g, lead.subject || "");
+
+    // Send WhatsApp message using the template action
+    const result = await ctx.scheduler.runAfter(
+      0,
+      "whatsappTemplatesActions:sendTemplateToLead" as any,
+      {
+        leadId: lead._id,
+        templateId: block.templateId,
+      }
+    );
+
+    console.log(`WhatsApp sent to ${lead.name} (${lead.mobile}) for campaign ${campaignId}`);
+    return { success: true };
+  } catch (error) {
+    console.error("Error executing WhatsApp block:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
-  
-  // Get template
-  const template = await ctx.runQuery(
-    "campaignExecutorMutations:getTemplate" as any,
-    { templateId: blockData.templateId }
-  );
-  
-  if (!template) {
-    throw new Error("Template not found");
-  }
-  
-  // Extract template body text
-  const bodyComponent = template.components.find((c: any) => c.type === "BODY");
-  const message = bodyComponent?.text || "Hello!";
-  
-  // Send WhatsApp message
-  await ctx.runMutation(
-    "campaignExecutorMutations:sendWhatsAppForCampaign" as any,
-    { phoneNumber: lead.mobile, message, leadId }
-  );
-  
-  return { success: true, message: "WhatsApp sent" };
 }
 
 async function executeEmailBlock(ctx: any, leadId: string, blockData: any) {

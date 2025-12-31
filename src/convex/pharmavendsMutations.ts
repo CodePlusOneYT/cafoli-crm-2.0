@@ -206,7 +206,7 @@ export const createPharmavendsLead = internalMutation({
     // Send welcome email
     if (args.email) {
       try {
-        await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+        await ctx.scheduler.runAfter(0, "brevo:sendWelcomeEmail" as any, {
           leadName: args.name,
           leadEmail: args.email,
           source: "Website and Pharmavends",

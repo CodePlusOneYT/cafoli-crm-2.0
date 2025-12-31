@@ -1,7 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
-import { internal } from "./_generated/api";
 
 const http = httpRouter();
 
@@ -70,7 +69,7 @@ http.route({
         const statuses = body.entry[0].changes[0].value.statuses;
         
         for (const statusUpdate of statuses) {
-          await ctx.runAction(internal.whatsapp.handleStatusUpdate, {
+          await ctx.runAction("whatsapp:handleStatusUpdate" as any, {
             messageId: statusUpdate.id,
             status: statusUpdate.status, // "sent", "delivered", "read", "failed"
           });
@@ -112,7 +111,7 @@ http.route({
             mediaMimeType = message.audio.mime_type;
           }
 
-          await ctx.runAction(internal.whatsapp.handleIncomingMessage, {
+          await ctx.runAction("whatsapp:handleIncomingMessage" as any, {
             from: message.from,
             messageId: message.id,
             timestamp: message.timestamp,
@@ -164,14 +163,14 @@ http.route({
       const uniqueQueryId = response.UNIQUE_QUERY_ID;
 
       // Check if lead already exists by mobile number (primary) or unique query ID (fallback)
-      const existing = await ctx.runQuery(internal.indiamartMutations.checkIndiamartLeadExists, {
+      const existing = await ctx.runQuery("indiamartMutations:checkIndiamartLeadExists" as any, {
         uniqueQueryId,
         mobile: response.SENDER_MOBILE || "",
       });
 
       if (existing) {
         if (existing.type === "Irrelevant") {
-          await ctx.runMutation(internal.indiamartMutations.reactivateLead, {
+          await ctx.runMutation("indiamartMutations:reactivateLead" as any, {
             id: existing._id,
           });
           console.log(`Reactivated irrelevant IndiaMART lead: ${uniqueQueryId}`);
@@ -182,7 +181,7 @@ http.route({
         }
 
         // Merge duplicate lead
-        await ctx.runMutation(internal.indiamartMutations.mergeIndiamartLead, {
+        await ctx.runMutation("indiamartMutations:mergeIndiamartLead" as any, {
           id: existing._id,
           uniqueQueryId,
           name: response.SENDER_NAME,
@@ -217,7 +216,7 @@ http.route({
       }
 
       // Create the lead
-      await ctx.runMutation(internal.indiamartMutations.createIndiamartLead, {
+      await ctx.runMutation("indiamartMutations:createIndiamartLead" as any, {
         uniqueQueryId,
         name: response.SENDER_NAME,
         subject: response.SUBJECT,

@@ -1,7 +1,6 @@
 "use node";
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 
 export const sendEmail = action({
   args: {
@@ -14,8 +13,8 @@ export const sendEmail = action({
     // 1. Get an active API key (using the existing logic in brevo.ts if possible, or re-implementing rotation here)
     // Since brevo.ts might be complex, I'll use a simple rotation here by calling the internal query to get keys
     
-    // Explicitly typing keys as any to avoid circular inference issues with internal
-    const keys: any = await ctx.runQuery(internal.brevoQueries.getActiveKeys, {});
+    // Explicitly typing keys as any to avoid circular inference issues
+    const keys: any = await ctx.runQuery("brevoQueries:getActiveKeys" as any, {});
     
     if (!keys || keys.length === 0) {
       return { success: false, error: "No active Brevo API keys found" };
@@ -50,7 +49,7 @@ export const sendEmail = action({
       }
 
       // Increment usage
-      await ctx.runMutation(internal.brevoQueries.incrementUsage, { keyId: apiKey._id });
+      await ctx.runMutation("brevoQueries:incrementUsage" as any, { keyId: apiKey._id });
 
       return { success: true, messageId: data.messageId };
     } catch (error) {

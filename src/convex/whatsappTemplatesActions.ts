@@ -1,8 +1,9 @@
 "use node";
 
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Doc } from "./_generated/dataModel";
+import { v } from "convex/values";
 
 // Send welcome messages to leads created in the past 150 hours that haven't received it
 export const sendWelcomeToRecentLeads = action({
@@ -12,7 +13,7 @@ export const sendWelcomeToRecentLeads = action({
     const cutoffTime = now - (150 * 60 * 60 * 1000); // 150 hours ago
     
     // Get all leads created in the past 150 hours
-    const allLeads: Doc<"leads">[] = await ctx.runQuery(internal.whatsappMutations.getLeadsForMatching);
+    const allLeads: Doc<"leads">[] = await ctx.runQuery("whatsappMutations:getLeadsForMatching" as any);
     const recentLeads: Doc<"leads">[] = allLeads.filter((lead: Doc<"leads">) => lead._creationTime >= cutoffTime);
     
     let sentCount = 0;
@@ -20,7 +21,7 @@ export const sendWelcomeToRecentLeads = action({
     
     for (const lead of recentLeads) {
       // Check if welcome message was already sent to this lead
-      const existingChats = await ctx.runQuery(internal.whatsappQueries.getChatsByLeadId, {
+      const existingChats = await ctx.runQuery("whatsappQueries:getChatsByLeadId" as any, {
         leadId: lead._id,
       });
       
@@ -35,7 +36,7 @@ export const sendWelcomeToRecentLeads = action({
         // Send to primary mobile
         if (lead.mobile) {
           try {
-            await ctx.runAction(internal.whatsappTemplates.sendWelcomeMessage, {
+            await ctx.runAction("whatsappTemplates:sendWelcomeMessage" as any, {
               phoneNumber: lead.mobile,
               leadId: lead._id,
             });
@@ -49,7 +50,7 @@ export const sendWelcomeToRecentLeads = action({
         // Send to alternate mobile if exists
         if (lead.altMobile) {
           try {
-            await ctx.runAction(internal.whatsappTemplates.sendWelcomeMessage, {
+            await ctx.runAction("whatsappTemplates:sendWelcomeMessage" as any, {
               phoneNumber: lead.altMobile,
               leadId: lead._id,
             });
@@ -68,5 +69,75 @@ export const sendWelcomeToRecentLeads = action({
       messagesSent: sentCount,
       errors: errorCount,
     };
+  },
+});
+
+export const sendTemplateToLead = internalAction({
+  args: {
+    leadId: v.id("leads"),
+    templateId: v.id("whatsappTemplates"),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; messageId?: string }> => {
+    const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+
+    if (!accessToken || !phoneNumberId) {
+      throw new Error("WhatsApp API not configured");
+    }
+
+    // Get lead and template
+    const lead: any = await ctx.runQuery("whatsappTemplatesQueries:getLeadForTemplate" as any, {
+      leadId: args.leadId,
+    });
+
+    const template: any = await ctx.runQuery("whatsappTemplatesQueries:getTemplate" as any, {
+      templateId: args.templateId,
+    });
+
+    if (!lead || !template) {
+      throw new Error("Lead or template not found");
+    }
+
+    // Replace variables
+    let message: string = template.content;
+    message = message.replace(/\{\{name\}\}/g, lead.name || "");
+    message = message.replace(/\{\{company\}\}/g, lead.company || "");
+    message = message.replace(/\{\{subject\}\}/g, lead.subject || "");
+
+    // Send via WhatsApp API
+    const response: Response = await fetch(
+      `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: lead.mobile,
+          type: "text",
+          text: { body: message },
+        }),
+      }
+    );
+
+    const data: any = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
+    }
+
+    // Store message
+    await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+      leadId: args.leadId,
+      phoneNumber: lead.mobile,
+      content: message,
+      direction: "outbound",
+      status: "sent",
+      externalId: data.messages?.[0]?.id || "",
+    });
+
+    return { success: true, messageId: data.messages?.[0]?.id };
   },
 });

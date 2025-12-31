@@ -113,7 +113,7 @@ export const markChatAsRead = mutation({
 
         // Schedule action to mark as read on WhatsApp
         if (messageIds.length > 0) {
-          await ctx.scheduler.runAfter(0, internal.whatsapp.markMessagesAsRead, {
+          await ctx.scheduler.runAfter(0, "whatsapp:markMessagesAsRead" as any, {
             messageIds,
           });
         }

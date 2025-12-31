@@ -20,7 +20,6 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { LeadReminders } from "./LeadReminders";
@@ -32,11 +31,20 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
-  const ensureRole = useMutation(api.users.ensureRole);
+  
+  // Import api dynamically to avoid circular type issues
+  let apiRef: any = null;
+  try {
+    apiRef = require("@/convex/_generated/api").api;
+  } catch (e) {
+    console.error("Failed to load api", e);
+  }
+
+  const ensureRole = useMutation(apiRef?.users?.ensureRole);
   
   // Cold Caller Leads Logic
   const coldCallerLeadsNeedingFollowUp = useQuery(
-    api.coldCallerLeads.getColdCallerLeadsNeedingFollowUp,
+    apiRef?.coldCallerLeads?.getColdCallerLeadsNeedingFollowUp,
     user ? {} : "skip"
   ) || [];
 
@@ -75,9 +83,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   // Export Logic
   const [isExporting, setIsExporting] = useState(false);
-  const allLeadsForExport = useQuery(api.leads.getAllLeadsForExport, isExporting && user ? { userId: user._id } : "skip");
-  const nextDownloadNumber = useQuery(api.leads.getNextDownloadNumber);
-  const logExport = useMutation(api.leads.logExport);
+  const allLeadsForExport = useQuery(apiRef?.leads?.getAllLeadsForExport, isExporting && user ? { userId: user._id } : "skip");
+  const nextDownloadNumber = useQuery(apiRef?.leads?.getNextDownloadNumber);
+  const logExport = useMutation(apiRef?.leads?.logExport);
 
   useEffect(() => {
     const performExport = async () => {
@@ -100,7 +108,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             'Pharmavends UID', 'IndiaMART Unique ID', 'Created At'
           ];
 
-          const rows = allLeadsForExport.map((lead: any) => [
+          const rows = allLeadsForExport.map((lead: any): any[] => [
             lead.name || '',
             lead.subject || '',
             lead.source || '',
@@ -133,7 +141,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
           const csvContent = [
             headers.map(escapeCsvValue).join(','),
-            ...rows.map(row => row.map((cell: any) => escapeCsvValue(String(cell))).join(','))
+            ...rows.map((row: any[]) => row.map((cell: any) => escapeCsvValue(String(cell))).join(','))
           ].join('\n');
 
           const zip = new JSZip();

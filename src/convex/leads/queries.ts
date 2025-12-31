@@ -422,3 +422,37 @@ export const getNextDownloadNumber = query({
     return (lastExport?.downloadNumber || 0) + 1;
   },
 });
+
+export const getLeadsWithUnreadCounts = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", identity.email || ""))
+      .first();
+
+    if (!user) return [];
+
+    const leads = await ctx.db.query("leads").collect();
+    
+    // Get unread counts for each lead
+    const leadsWithUnread = await Promise.all(
+      leads.map(async (lead) => {
+        const chat = await ctx.db
+          .query("chats")
+          .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
+          .first();
+        
+        return {
+          ...lead,
+          unreadCount: chat?.unreadCount ?? 0,
+        };
+      })
+    );
+
+    return leadsWithUnread;
+  },
+});

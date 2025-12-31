@@ -85,7 +85,7 @@ export const fetchPharmavendsLeads = internalAction({
         const standardizedMobile = standardizePhoneNumber(rawMobile);
 
         // Check if lead already exists by mobile number (primary) or uid (fallback)
-        const existing = await ctx.runQuery(internal.pharmavendsMutations.checkLeadExists, {
+        const existing = await ctx.runQuery("pharmavendsMutations:checkLeadExists" as any, {
           uid: uid,
           mobile: standardizedMobile,
         });
@@ -93,14 +93,14 @@ export const fetchPharmavendsLeads = internalAction({
         if (existing) {
           // If lead exists but is Irrelevant, reactivate it
           if (existing.type === "Irrelevant") {
-            await ctx.runMutation(internal.pharmavendsMutations.reactivateLead, {
+            await ctx.runMutation("pharmavendsMutations:reactivateLead" as any, {
               id: existing._id,
             });
             console.log(`Reactivated irrelevant lead: ${uid}`);
             newLeadsCount++; 
           } else {
             // Merge duplicate lead
-            await ctx.runMutation(internal.pharmavendsMutations.mergePharmavendsLead, {
+            await ctx.runMutation("pharmavendsMutations:mergePharmavendsLead" as any, {
               id: existing._id,
               uid: uid,
               name: cleanValue(item["Column C"] || item["Query_Name"] || item["Name"] || "Unknown"),
@@ -123,7 +123,7 @@ export const fetchPharmavendsLeads = internalAction({
         }
         
         // Create the lead
-        await ctx.runMutation(internal.pharmavendsMutations.createPharmavendsLead, {
+        await ctx.runMutation("pharmavendsMutations:createPharmavendsLead" as any, {
           uid: uid,
           name: cleanValue(item["Column C"] || item["Query_Name"] || item["Name"] || "Unknown"),
           subject: String(item["Column D"] || item["Subject"] || "No Subject"),
@@ -175,7 +175,7 @@ export const manualSyncPharmavends = action({
     // Since we are in "use node", we can call other actions.
     
     // For simplicity, let's just return success and trigger the internal action in background
-    await ctx.scheduler.runAfter(0, internal.pharmavends.fetchPharmavendsLeads, {});
+    await ctx.scheduler.runAfter(0, "pharmavends:fetchPharmavendsLeads" as any, {});
     return { success: true, message: "Sync started in background" };
   }
 });

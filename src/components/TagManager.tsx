@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Plus, Tag as TagIcon, X } from "lucide-react";
@@ -31,8 +30,16 @@ const PRESET_COLORS = [
 ];
 
 export function TagManager({ leadId, selectedTagIds, onTagsChange }: TagManagerProps) {
-  const allTags = useQuery(api.tags.getAllTags) || [];
-  const createTag = useMutation(api.tags.createTag);
+  // Import api dynamically to avoid circular type issues
+  let apiRef: any = null;
+  try {
+    apiRef = require("@/convex/_generated/api").api;
+  } catch (e) {
+    console.error("Failed to load api", e);
+  }
+
+  const allTags = useQuery(apiRef?.tags?.getAllTags) || [];
+  const createTag = useMutation(apiRef?.tags?.createTag);
   
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -82,7 +89,7 @@ export function TagManager({ leadId, selectedTagIds, onTagsChange }: TagManagerP
   return (
     <div className="flex flex-wrap gap-2 items-center">
       {selectedTagIds.map(tagId => {
-        const tag = allTags.find(t => t._id === tagId);
+        const tag = allTags.find((t: any) => t._id === tagId);
         if (!tag) return null;
         return (
           <div 
@@ -127,7 +134,7 @@ export function TagManager({ leadId, selectedTagIds, onTagsChange }: TagManagerP
                 </div>
               </CommandEmpty>
               <CommandGroup>
-                {allTags.map(tag => (
+                {allTags.map((tag: any) => (
                   <CommandItem
                     key={tag._id}
                     value={tag.name}

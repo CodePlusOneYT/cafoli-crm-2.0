@@ -46,7 +46,7 @@ export const createLead = mutation({
     
     if (args.email) {
       try {
-        await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+        await ctx.scheduler.runAfter(0, "brevo:sendWelcomeEmail" as any, {
           leadName: args.name,
           leadEmail: args.email,
           source: args.source,
@@ -58,7 +58,7 @@ export const createLead = mutation({
     
     // Send welcome WhatsApp message to primary mobile
     try {
-      await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+      await ctx.scheduler.runAfter(0, "whatsappTemplates:sendWelcomeMessage" as any, {
         phoneNumber: mobile,
         leadId: leadId,
       });
@@ -70,7 +70,7 @@ export const createLead = mutation({
     if (args.altMobile) {
       const altMobile = standardizePhoneNumber(args.altMobile);
       try {
-        await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+        await ctx.scheduler.runAfter(0, "whatsappTemplates:sendWelcomeMessage" as any, {
           phoneNumber: altMobile,
           leadId: leadId,
         });

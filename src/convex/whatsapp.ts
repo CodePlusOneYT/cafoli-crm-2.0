@@ -57,7 +57,7 @@ export const sendWhatsAppMessage = action({
       }
 
       // Store message in database
-      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message,
@@ -133,7 +133,7 @@ export const sendWhatsAppMedia = action({
       }
 
       // Store message in database
-      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message || "",
@@ -259,7 +259,7 @@ export const handleIncomingMessage = internalAction({
   handler: async (ctx, args) => {
     try {
       // Find lead by phone number
-      const allLeads = await ctx.runQuery(internal.whatsappMutations.getLeadsForMatching, {});
+      const allLeads = await ctx.runQuery("whatsappMutations:getLeadsForMatching" as any, {});
       
       // Clean phone number (remove + and spaces)
       const cleanPhone = args.from.replace(/[\s+]/g, "");
@@ -275,7 +275,7 @@ export const handleIncomingMessage = internalAction({
         leadId = matchingLeads[0]._id;
       } else {
         console.log(`No lead found for phone number: ${args.from}. Creating new lead.`);
-        leadId = await ctx.runMutation(internal.whatsappMutations.createLeadFromWhatsApp, {
+        leadId = await ctx.runMutation("whatsappMutations:createLeadFromWhatsApp" as any, {
           phoneNumber: args.from,
           name: args.senderName,
           message: args.text,
@@ -329,7 +329,7 @@ export const handleIncomingMessage = internalAction({
         }
 
         // Store incoming message
-        await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+        await ctx.runMutation("whatsappMutations:storeMessage" as any, {
           leadId,
           phoneNumber: args.from,
           content: args.text,
@@ -362,7 +362,7 @@ export const handleStatusUpdate = internalAction({
   },
   handler: async (ctx, args) => {
     try {
-      await ctx.runMutation(internal.whatsappMutations.updateMessageStatus, {
+      await ctx.runMutation("whatsappMutations:updateMessageStatus" as any, {
         externalId: args.messageId,
         status: args.status,
       });
@@ -418,7 +418,7 @@ export const sendWhatsAppMessageInternal = internalAction({
       }
 
       // Store message in database
-      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message,

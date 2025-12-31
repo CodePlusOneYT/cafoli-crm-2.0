@@ -2,11 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Doc, Id } from "@/convex/_generated/dataModel";
-import { UserPlus, ThumbsUp } from "lucide-react";
+import { UserPlus, ThumbsUp, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface LeadCardProps {
-  lead: Doc<"leads"> & { tagsData?: Doc<"tags">[] };
+  lead: Doc<"leads"> & { tagsData?: Doc<"tags">[]; unreadCount?: number };
   isSelected: boolean;
   isUnassignedView: boolean;
   viewIrrelevant: boolean;
@@ -15,6 +15,7 @@ interface LeadCardProps {
   onSelect: (id: Id<"leads">) => void;
   onAssignToSelf: (id: Id<"leads">) => void;
   onAssignToUser: (leadId: Id<"leads">, userId: Id<"users">) => void;
+  onOpenWhatsApp?: (leadId: Id<"leads">) => void;
 }
 
 export function LeadCard({
@@ -27,19 +28,31 @@ export function LeadCard({
   onSelect,
   onAssignToSelf,
   onAssignToUser,
+  onOpenWhatsApp,
 }: LeadCardProps) {
+  const hasUnreadMessages = (lead.unreadCount ?? 0) > 0;
+  
   return (
     <Card
       className={`cursor-pointer transition-colors hover:bg-accent/50 ${
         isSelected ? "border-primary bg-accent/50" : ""
       } ${
         lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() ? "border-red-300 bg-red-50/50" : ""
+      } ${
+        hasUnreadMessages ? "border-green-500 bg-green-50/30 shadow-lg" : ""
       }`}
       onClick={() => onSelect(lead._id)}
     >
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-semibold truncate">{lead.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold truncate">{lead.name}</h3>
+            {hasUnreadMessages && (
+              <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full font-bold animate-pulse">
+                {lead.unreadCount} new
+              </span>
+            )}
+          </div>
           <span className="text-xs text-muted-foreground">
             {new Date(lead._creationTime).toLocaleString()}
           </span>
@@ -93,6 +106,22 @@ export function LeadCard({
               👤 {(lead as any).assignedToName}
             </span>
           )}
+          
+          {onOpenWhatsApp && (
+            <Button
+              size="sm"
+              variant={hasUnreadMessages ? "default" : "outline"}
+              className={`h-6 text-xs ${hasUnreadMessages ? 'bg-green-600 hover:bg-green-700 animate-pulse' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenWhatsApp(lead._id);
+              }}
+            >
+              <MessageCircle className="h-3 w-3 mr-1" />
+              WhatsApp
+            </Button>
+          )}
+          
           {isUnassignedView && !lead.assignedTo && !viewIrrelevant && (
             <>
               {!isAdmin ? (

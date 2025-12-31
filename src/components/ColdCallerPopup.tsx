@@ -5,7 +5,6 @@ import { Label } from "@/components/ui/label";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { toast } from "sonner";
 
 interface ColdCallerPopupProps {
@@ -16,8 +15,16 @@ interface ColdCallerPopupProps {
 }
 
 export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPopupProps) {
+  // Import api dynamically to avoid circular type issues
+  let apiRef: any = null;
+  try {
+    apiRef = require("@/convex/_generated/api").api;
+  } catch (e) {
+    console.error("Failed to load api", e);
+  }
+
   const [followUpDates, setFollowUpDates] = useState<Record<string, string>>({});
-  const updateLead = useMutation(api.leads.updateLead);
+  const updateLead = useMutation(apiRef?.leads?.updateLead);
 
   const handleDateChange = (leadId: string, date: string) => {
     setFollowUpDates(prev => ({ ...prev, [leadId]: date }));

@@ -230,7 +230,7 @@ export const createIndiamartLead = internalMutation({
     // Send welcome email if email is provided
     if (args.email) {
       try {
-        await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+        await ctx.scheduler.runAfter(0, "brevo:sendWelcomeEmail" as any, {
           leadName: args.name,
           leadEmail: args.email,
           source: "IndiaMART",

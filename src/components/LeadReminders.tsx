@@ -1,5 +1,4 @@
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { useState } from "react";
 import {
   Dialog,
@@ -18,10 +17,18 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export function LeadReminders() {
-  const criticalLeads = useQuery(api.leads.getCriticalOverdueLeads, {});
-  const coldLeads = useQuery(api.leads.getColdOverdueLeads, {});
-  const currentUser = useQuery(api.users.currentUser);
-  const updatePreferences = useMutation(api.users.updatePreferences);
+  // Import api dynamically to avoid circular type issues
+  let apiRef: any = null;
+  try {
+    apiRef = require("@/convex/_generated/api").api;
+  } catch (e) {
+    console.error("Failed to load api", e);
+  }
+
+  const criticalLeads = useQuery(apiRef?.leads?.getCriticalOverdueLeads, {});
+  const coldLeads = useQuery(apiRef?.leads?.getColdOverdueLeads, {});
+  const currentUser = useQuery(apiRef?.users?.currentUser);
+  const updatePreferences = useMutation(apiRef?.users?.updatePreferences);
   const navigate = useNavigate();
 
   // Queue state: track which batches have been closed in this session
@@ -31,8 +38,8 @@ export function LeadReminders() {
   // Check user preference
   const remindersEnabled = currentUser?.preferences?.leadRemindersEnabled !== false;
 
-  const activeCriticalLeads = criticalLeads?.filter(l => !dismissedLeadIds.includes(l._id)) || [];
-  const activeColdLeads = coldLeads?.filter(l => !dismissedLeadIds.includes(l._id)) || [];
+  const activeCriticalLeads = criticalLeads?.filter((l: any) => !dismissedLeadIds.includes(l._id)) || [];
+  const activeColdLeads = coldLeads?.filter((l: any) => !dismissedLeadIds.includes(l._id)) || [];
 
   // Determine current mode
   let mode: 'critical' | 'cold' | null = null;
@@ -120,7 +127,7 @@ export function LeadReminders() {
         </DialogHeader>
         <ScrollArea className="max-h-[60vh] mt-4">
           <div className="space-y-4 pr-4">
-            {leads.map((lead) => (
+            {leads.map((lead: any) => (
               <div
                 key={lead._id}
                 className="bg-white dark:bg-card p-4 rounded-lg border shadow-sm flex flex-col gap-3 relative group"

@@ -49,7 +49,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
 
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leads.getUniqueSources) || [];
-  const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) || [];
+  const templates = useQuery((api as any).whatsappTemplatesQueries?.getTemplates) || [];
 
   const createCampaign = useMutation(api.campaigns.createCampaign);
   const updateCampaign = useMutation(api.campaigns.updateCampaign);
@@ -409,7 +409,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
                     <Select
                       value={selectedBlockData.data.templateId}
                       onValueChange={(v) => {
-                        const template = templates.find(t => t._id === v);
+                        const template = templates.find((t: any) => t._id === v);
                         updateBlockData(selectedBlockData.id, { templateId: v, templateName: template?.name });
                       }}
                     >
@@ -417,7 +417,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
                         <SelectValue placeholder="Select template..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {templates.filter(t => t.status === "APPROVED").map(template => (
+                        {templates.filter((t: any) => t.status === "APPROVED").map((template: any) => (
                           <SelectItem key={template._id} value={template._id}>{template.name}</SelectItem>
                         ))}
                       </SelectContent>
