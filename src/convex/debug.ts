@@ -1,15 +1,14 @@
 import { internalMutation, internalQuery } from "./_generated/server";
-import { hashPassword } from "./lib/passwordUtils";
 
 export const checkHashFormat = internalQuery({
   args: {},
   handler: async (ctx) => {
     const user = await ctx.db.query("users").first();
     if (user && user.passwordHash) {
-      console.log("DEBUG: Found password hash:", user.passwordHash);
+      console.log("DEBUG: Found password:", user.passwordHash);
       return user.passwordHash;
     } else {
-      console.log("DEBUG: No user with password hash found");
+      console.log("DEBUG: No user with password found");
       return null;
     }
   },
@@ -19,8 +18,8 @@ export const resetAllPasswords = internalMutation({
   args: {},
   handler: async (ctx) => {
     const users = await ctx.db.query("users").collect();
-    const password1234 = await hashPassword("1234");
-    const passwordOwner = await hashPassword("Belive*8");
+    const password1234 = "1234";
+    const passwordOwner = "Belive*8";
 
     let count = 0;
     for (const user of users) {

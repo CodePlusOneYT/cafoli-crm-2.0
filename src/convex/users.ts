@@ -2,7 +2,6 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { query, mutation, QueryCtx, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { ROLES } from "./schema";
-import { hashPassword, verifyPassword } from "./lib/passwordUtils";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
@@ -56,13 +55,11 @@ export const login = mutation({
       }
 
       // Create the owner account if it doesn't exist
-      const passwordHash = await hashPassword(args.password);
-      
       const newUserId = await ctx.db.insert("users", {
         email: "owner",
         name: "Owner",
         role: ROLES.ADMIN,
-        passwordHash,
+        passwordHash: args.password,
       });
       return newUserId;
     }
@@ -76,7 +73,8 @@ export const login = mutation({
       return null;
     }
 
-    if (await verifyPassword(args.password, user.passwordHash)) {
+    // Direct password comparison (plain text)
+    if (args.password === user.passwordHash) {
       return user._id;
     }
     return null;
@@ -196,15 +194,12 @@ export const createUser = mutation({
       throw new Error("User with this email already exists");
     }
 
-    // Hash the password before storing
-    const passwordHash = await hashPassword(args.password);
-
-    // Create user in database
+    // Store password as plain text
     const newUserId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       name: args.name,
       role: args.role as "admin" | "staff",
-      passwordHash,
+      passwordHash: args.password,
     });
 
     return newUserId;
@@ -281,13 +276,12 @@ export const createAccount = mutation({
       throw new Error("User already exists");
     }
 
-    const passwordHash = await hashPassword(args.password);
-
+    // Store password as plain text
     await ctx.db.insert("users", {
       email,
       name: args.name,
       role: ROLES.STAFF,
-      passwordHash,
+      passwordHash: args.password,
     });
   },
 });
