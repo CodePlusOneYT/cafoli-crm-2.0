@@ -14,16 +14,20 @@ import { useAuth } from "@/hooks/use-auth";
 import { Loader2, User, Lock } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { toast } from "sonner";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
 
 function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const login = useMutation(api.users.login);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -39,18 +43,21 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     
     try {
       const formData = new FormData(event.currentTarget);
-      const username = (formData.get("email") as string).toLowerCase();
+      const email = (formData.get("email") as string).toLowerCase();
+      const password = formData.get("password") as string;
       
-      // Create new FormData with lowercase username
-      const authData = new FormData();
-      authData.append("email", username);
-      authData.append("password", formData.get("password") as string);
-      authData.append("flow", "signIn");
+      const userId = await login({ email, password });
       
-      await signIn("password", authData);
+      if (!userId) {
+        setError("Invalid username or password");
+        setIsLoading(false);
+        return;
+      }
+      
+      toast.success("Login successful!");
       
       // Wait a moment for auth state to update
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const redirect = redirectAfterAuth || "/dashboard";
       navigate(redirect, { replace: true });
