@@ -7,6 +7,7 @@ import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider, Route, Routes } from "react-router";
 import AppLayout from "@/components/AppLayout";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import "./index.css";
 import "./types/global.d.ts";
 
@@ -77,60 +78,65 @@ const convex = new ConvexReactClient(convexUrl);
 
 const router = createBrowserRouter([
   {
-    path: "/",
-    element: <Landing />,
-  },
-  {
-    path: "/auth",
-    element: <AuthPage redirectAfterAuth="/dashboard" />,
-  },
-  {
-    path: "/dashboard",
-    element: <Dashboard />,
-  },
-  {
-    path: "/leads",
-    element: <Leads />,
-  },
-  {
-    path: "/all_leads",
-    element: <Leads />,
-  },
-  {
-    path: "/my_leads",
-    element: <Leads />,
-  },
-  {
-    path: "/campaigns",
-    element: <Campaigns />,
-  },
-  {
-    path: "/campaigns/new",
-    element: <CampaignBuilder />,
-  },
-  {
-    path: "/campaigns/edit/:campaignId",
-    element: <CampaignBuilder />,
-  },
-  {
-    path: "/reports",
-    element: <Reports />,
-  },
-  {
-    path: "/whatsapp",
-    element: <WhatsApp />,
-  },
-  {
-    path: "/emailing",
-    element: <Emailing />,
-  },
-  {
-    path: "/admin",
-    element: <Admin />,
-  },
-  {
-    path: "*",
-    element: <NotFound />,
+    errorElement: <ErrorBoundary />,
+    children: [
+      {
+        path: "/",
+        element: <Landing />,
+      },
+      {
+        path: "/auth",
+        element: <AuthPage redirectAfterAuth="/dashboard" />,
+      },
+      {
+        path: "/dashboard",
+        element: <Dashboard />,
+      },
+      {
+        path: "/leads",
+        element: <Leads />,
+      },
+      {
+        path: "/all_leads",
+        element: <Leads />,
+      },
+      {
+        path: "/my_leads",
+        element: <Leads />,
+      },
+      {
+        path: "/campaigns",
+        element: <Campaigns />,
+      },
+      {
+        path: "/campaigns/new",
+        element: <CampaignBuilder />,
+      },
+      {
+        path: "/campaigns/edit/:campaignId",
+        element: <CampaignBuilder />,
+      },
+      {
+        path: "/reports",
+        element: <Reports />,
+      },
+      {
+        path: "/whatsapp",
+        element: <WhatsApp />,
+      },
+      {
+        path: "/emailing",
+        element: <Emailing />,
+      },
+      {
+        path: "/admin",
+        element: <Admin />,
+      },
+      {
+        path: "*",
+        element: <NotFound />,
+      },
+    ],
   },
 ]);
 
