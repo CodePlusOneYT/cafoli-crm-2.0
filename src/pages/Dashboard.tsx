@@ -1,14 +1,22 @@
 import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
-import { Users, MessageSquare, BarChart3, Activity } from "lucide-react";
+import { Users, MessageSquare, BarChart3, Activity, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/convex/_generated/api";
-import { Loader2 } from "lucide-react";
+import { useNavigate } from "react-router";
+import { useEffect } from "react";
 
 export default function Dashboard() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate("/auth");
+    }
+  }, [authLoading, isAuthenticated, navigate]);
   
   const leads = useQuery(api.leadQueries.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
   const campaigns = useQuery(api.campaignQueries.getCampaigns, user ? { userId: user._id } : "skip") || [];

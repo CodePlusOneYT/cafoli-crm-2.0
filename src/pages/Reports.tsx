@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -31,6 +31,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { useAuth } from "@/hooks/use-auth";
+import AppLayout from "@/components/AppLayout";
+import { useNavigate } from "react-router";
 
 // Colors for charts
 const COLORS = [
@@ -38,7 +40,15 @@ const COLORS = [
 ];
 
 export default function Reports() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate("/auth");
+    }
+  }, [authLoading, isAuthenticated, navigate]);
+
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date(),
@@ -73,12 +83,28 @@ export default function Reports() {
     } : "skip"
   );
 
+  if (authLoading || !user) {
+    return (
+      <AppLayout>
+        <div className="p-8 text-center">Loading...</div>
+      </AppLayout>
+    );
+  }
+
   if (stats === undefined) {
-    return <div className="p-8 text-center">Loading reports...</div>;
+    return (
+      <AppLayout>
+        <div className="p-8 text-center">Loading reports...</div>
+      </AppLayout>
+    );
   }
 
   if (stats === null) {
-    return <div className="p-8 text-center">Unable to load reports. Please try refreshing the page.</div>;
+    return (
+      <AppLayout>
+        <div className="p-8 text-center">Unable to load reports. Please try refreshing the page.</div>
+      </AppLayout>
+    );
   }
 
   // Filter data based on checkboxes
@@ -146,164 +172,166 @@ export default function Reports() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">
-            Daily performance metrics and analytics.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                id="date"
-                variant={"outline"}
-                className={cn(
-                  "w-[300px] justify-start text-left font-normal",
-                  !date && "text-muted-foreground"
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {date?.from ? (
-                  date.to ? (
-                    <>
-                      {format(date.from, "LLL dd, y")} -{" "}
-                      {format(date.to, "LLL dd, y")}
-                    </>
-                  ) : (
-                    format(date.from, "LLL dd, y")
-                  )
-                ) : (
-                  <span>Pick a date</span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <Calendar
-                initialFocus
-                mode="range"
-                defaultMonth={date?.from}
-                selected={date}
-                onSelect={setDate}
-                numberOfMonths={2}
-                disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-              />
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <CustomPieChart 
-          data={filteredSources} 
-          type="source" 
-          title="Lead Source" 
-          filterState={enabledSources}
-          setFilterState={setEnabledSources}
-        />
-        <CustomPieChart 
-          data={filteredStatus} 
-          type="status" 
-          title="Lead Status" 
-          filterState={enabledStatuses}
-          setFilterState={setEnabledStatuses}
-        />
-        <CustomPieChart 
-          data={filteredRelevancy} 
-          type="type" 
-          title="Lead Relevancy" 
-          filterState={enabledTypes}
-          setFilterState={setEnabledTypes}
-        />
-        
-        {stats.assignment.length > 0 && (
-          <CustomPieChart 
-            data={stats.assignment} 
-            type="assignedTo" 
-            title="Lead Assignment" 
-          />
-        )}
-
-        <Card className="flex flex-col col-span-1 md:col-span-2 lg:col-span-1">
-          <CardHeader className="items-center pb-0">
-            <CardTitle>Follow-up Punctuality</CardTitle>
-            <CardDescription>Timeliness of follow-ups</CardDescription>
-          </CardHeader>
-          <CardContent className="flex-1 pb-0">
-             <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.punctuality}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={2}
-                    dataKey="count"
-                  >
-                    {stats.punctuality.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={
-                        entry.name === "Timely-Completed" ? "#4ade80" : 
-                        entry.name === "Overdue-Completed" ? "#facc15" : 
-                        "#f87171"
-                      } />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Dialog open={!!selectedSlice} onOpenChange={(open) => !open && setSelectedSlice(null)}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Leads: {selectedSlice?.type} - {selectedSlice?.value}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="mt-4">
-            {detailsLeads ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Mobile</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {detailsLeads.length > 0 ? (
-                    detailsLeads.map((lead) => (
-                      <TableRow key={lead._id}>
-                        <TableCell className="font-medium">{lead.name}</TableCell>
-                        <TableCell>{lead.mobile}</TableCell>
-                        <TableCell>{lead.status}</TableCell>
-                        <TableCell>{lead.source}</TableCell>
-                        <TableCell>{format(lead._creationTime, "MMM d, yyyy")}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center">No leads found</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="p-4 text-center">Loading details...</div>
-            )}
+    <AppLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
+            <p className="text-muted-foreground">
+              Daily performance metrics and analytics.
+            </p>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+          <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  id="date"
+                  variant={"outline"}
+                  className={cn(
+                    "w-[300px] justify-start text-left font-normal",
+                    !date && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date?.from ? (
+                    date.to ? (
+                      <>
+                        {format(date.from, "LLL dd, y")} -{" "}
+                        {format(date.to, "LLL dd, y")}
+                      </>
+                    ) : (
+                      format(date.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span>Pick a date</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={date?.from}
+                  selected={date}
+                  onSelect={setDate}
+                  numberOfMonths={2}
+                  disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <CustomPieChart 
+            data={filteredSources} 
+            type="source" 
+            title="Lead Source" 
+            filterState={enabledSources}
+            setFilterState={setEnabledSources}
+          />
+          <CustomPieChart 
+            data={filteredStatus} 
+            type="status" 
+            title="Lead Status" 
+            filterState={enabledStatuses}
+            setFilterState={setEnabledStatuses}
+          />
+          <CustomPieChart 
+            data={filteredRelevancy} 
+            type="type" 
+            title="Lead Relevancy" 
+            filterState={enabledTypes}
+            setFilterState={setEnabledTypes}
+          />
+          
+          {stats.assignment.length > 0 && (
+            <CustomPieChart 
+              data={stats.assignment} 
+              type="assignedTo" 
+              title="Lead Assignment" 
+            />
+          )}
+
+          <Card className="flex flex-col col-span-1 md:col-span-2 lg:col-span-1">
+            <CardHeader className="items-center pb-0">
+              <CardTitle>Follow-up Punctuality</CardTitle>
+              <CardDescription>Timeliness of follow-ups</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 pb-0">
+               <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={stats.punctuality}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="count"
+                    >
+                      {stats.punctuality.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={
+                          entry.name === "Timely-Completed" ? "#4ade80" : 
+                          entry.name === "Overdue-Completed" ? "#facc15" : 
+                          "#f87171"
+                        } />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Dialog open={!!selectedSlice} onOpenChange={(open) => !open && setSelectedSlice(null)}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Leads: {selectedSlice?.type} - {selectedSlice?.value}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="mt-4">
+              {detailsLeads ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Mobile</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {detailsLeads.length > 0 ? (
+                      detailsLeads.map((lead) => (
+                        <TableRow key={lead._id}>
+                          <TableCell className="font-medium">{lead.name}</TableCell>
+                          <TableCell>{lead.mobile}</TableCell>
+                          <TableCell>{lead.status}</TableCell>
+                          <TableCell>{lead.source}</TableCell>
+                          <TableCell>{format(lead._creationTime, "MMM d, yyyy")}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center">No leads found</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-4 text-center">Loading details...</div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AppLayout>
   );
 }
