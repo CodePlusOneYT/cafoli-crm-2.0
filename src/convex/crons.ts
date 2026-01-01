@@ -38,4 +38,44 @@ crons.interval(
   {}
 );
 
+// Daily report at 12 AM IST (6:30 PM UTC previous day)
+crons.cron(
+  "daily_report_email",
+  "30 18 * * *",
+  internal.reportPdfGenerator.sendScheduledReports,
+  { reportType: "daily" }
+);
+
+// Weekly report every Sunday at 12 AM IST (Saturday 6:30 PM UTC)
+crons.cron(
+  "weekly_report_email",
+  "30 18 * * 6",
+  internal.reportPdfGenerator.sendScheduledReports,
+  { reportType: "weekly" }
+);
+
+// Monthly report on 2nd of every month at 12 AM IST (1st 6:30 PM UTC)
+crons.cron(
+  "monthly_report_email",
+  "30 18 1 * *",
+  internal.reportPdfGenerator.sendScheduledReports,
+  { reportType: "monthly" }
+);
+
+// Quarterly report on 2nd of Jan, Apr, Jul, Oct at 12 AM IST
+crons.cron(
+  "quarterly_report_email",
+  "30 18 1 1,4,7,10 *",
+  internal.reportPdfGenerator.sendScheduledReports,
+  { reportType: "quarterly" }
+);
+
+// Yearly report on January 2nd at 12 AM IST
+crons.cron(
+  "yearly_report_email",
+  "30 18 1 1 *",
+  internal.reportPdfGenerator.sendScheduledReports,
+  { reportType: "yearly" }
+);
+
 export default crons;

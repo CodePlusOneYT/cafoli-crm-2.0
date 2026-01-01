@@ -37,6 +37,7 @@ import type * as lib_passwordUtils from "../lib/passwordUtils.js";
 import type * as migrations from "../migrations.js";
 import type * as pharmavends from "../pharmavends.js";
 import type * as pharmavendsMutations from "../pharmavendsMutations.js";
+import type * as reportPdfGenerator from "../reportPdfGenerator.js";
 import type * as reports from "../reports.js";
 import type * as tags from "../tags.js";
 import type * as users from "../users.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   pharmavends: typeof pharmavends;
   pharmavendsMutations: typeof pharmavendsMutations;
+  reportPdfGenerator: typeof reportPdfGenerator;
   reports: typeof reports;
   tags: typeof tags;
   users: typeof users;

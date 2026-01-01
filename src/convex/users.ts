@@ -147,15 +147,23 @@ export const updateUserRole = internalMutation({
 });
 
 export const getAllUsers = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    const userId = args.userId || await getAuthUserId(ctx);
-    if (!userId) return [];
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Unauthorized");
     
     const currentUser = await ctx.db.get(userId);
-    // Only admins can see all users
-    if (currentUser?.role !== ROLES.ADMIN) return [];
+    if (currentUser?.role !== ROLES.ADMIN) {
+      throw new Error("Only admins can view all users");
+    }
     
+    return await ctx.db.query("users").collect();
+  },
+});
+
+export const getAllUsersInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
     return await ctx.db.query("users").collect();
   },
 });

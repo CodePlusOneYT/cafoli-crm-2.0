@@ -58,7 +58,7 @@ export default function Reports() {
   const startDate = date?.from ? startOfDay(date.from).getTime() : startOfDay(new Date()).getTime();
   const endDate = date?.to ? endOfDay(date.to).getTime() : (date?.from ? endOfDay(date.from).getTime() : endOfDay(new Date()).getTime());
 
-  const stats = useQuery(api.reports.getReportStats, 
+  const stats = useQuery(api.reports.getReportStatsPublic, 
     user?._id ? { startDate, endDate, userId: user._id } : "skip"
   );
   
