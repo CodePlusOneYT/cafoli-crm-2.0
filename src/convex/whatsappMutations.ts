@@ -76,6 +76,35 @@ export const storeMessage = internalMutation({
   },
 });
 
+export const ensureChatExists = internalMutation({
+  args: {
+    leadId: v.id("leads"),
+    phoneNumber: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check if chat already exists
+    let chat = await ctx.db
+      .query("chats")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    if (!chat) {
+      // Create new chat
+      const chatId = await ctx.db.insert("chats", {
+        leadId: args.leadId,
+        platform: "whatsapp",
+        externalId: args.phoneNumber,
+        lastMessageAt: Date.now(),
+        unreadCount: 0,
+      });
+      chat = await ctx.db.get(chatId);
+      console.log(`Created WhatsApp chat for lead ${args.leadId}`);
+    }
+
+    return chat;
+  },
+});
+
 export const markChatAsRead = mutation({
   args: {
     leadId: v.id("leads"),

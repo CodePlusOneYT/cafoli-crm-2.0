@@ -386,6 +386,13 @@ export const sendWelcomeMessage = internalAction({
     leadId: v.id("leads"),
   },
   handler: async (ctx, args) => {
+    // Step 1: Ensure WhatsApp chat/contact exists for this lead
+    await ctx.runMutation(internal.whatsappMutations.ensureChatExists, {
+      leadId: args.leadId,
+      phoneNumber: args.phoneNumber,
+    });
+
+    // Step 2: Send the welcome message template
     return await sendTemplateMessageHelper(
       args.phoneNumber,
       "cafoliwelcomemessage",
