@@ -313,7 +313,7 @@ export const sendWelcomeMessage = internalAction({
     return await sendTemplateMessageHelper(
       args.phoneNumber,
       "cafoliwelcomemessage",
-      "en_US",
+      "en",
       args.leadId,
       ctx
     );

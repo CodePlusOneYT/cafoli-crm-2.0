@@ -57,11 +57,6 @@ export const createLead = mutation({
       }
     }
     
-    // NOTE: WhatsApp welcome messages are disabled until template 'cafoliwelcomemessage' 
-    // is created in Meta WhatsApp Business API with language 'en_US'
-    // Uncomment the code below once the template is created:
-    
-    /*
     // Send welcome WhatsApp message to primary mobile
     try {
       await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
@@ -84,7 +79,6 @@ export const createLead = mutation({
         console.error("Failed to schedule welcome WhatsApp template to alternate mobile:", error);
       }
     }
-    */
     
     return leadId;
   },
