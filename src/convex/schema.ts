@@ -285,6 +285,21 @@ const schema = defineSchema(
     .index("by_chat", ["chatId"])
     .index("by_chat_status", ["chatId", "status"])
     .index("by_external_id", ["externalId"]),
+
+    activityLogs: defineTable({
+      userId: v.optional(v.id("users")),
+      category: v.string(),
+      action: v.string(),
+      details: v.optional(v.string()),
+      metadata: v.optional(v.any()),
+      leadId: v.optional(v.id("leads")),
+      ipAddress: v.optional(v.string()),
+      timestamp: v.number(),
+    })
+    .index("by_timestamp", ["timestamp"])
+    .index("by_category", ["category"])
+    .index("by_user", ["userId"])
+    .index("by_lead", ["leadId"]),
   },
   {
     schemaValidation: false,

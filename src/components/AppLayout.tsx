@@ -12,7 +12,8 @@ import {
   X,
   PieChart,
   Download,
-  Mail
+  Mail,
+  FileText
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -62,16 +63,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const isAdmin = user?.role === "admin";
 
-  const navigation = [
+  const adminNavItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Unassigned Leads", href: "/leads", icon: Users },
-    ...(isAdmin ? [{ name: "All Leads", href: "/all_leads", icon: Users }] : []),
+    { name: "All Leads", href: "/all_leads", icon: Users },
     { name: "My Leads", href: "/my_leads", icon: UserSquare2 },
     { name: "WhatsApp", href: "/whatsapp", icon: MessageSquare },
     { name: "Emailing", href: "/emailing", icon: Mail },
     { name: "Campaigns", href: "/campaigns", icon: BarChart3 },
     { name: "Reports", href: "/reports", icon: PieChart },
-    ...(isAdmin ? [{ name: "Admin", href: "/admin", icon: Settings }] : []),
+    { name: "Activity Logs", href: "/logs", icon: FileText },
+    { name: "Admin", href: "/admin", icon: Settings },
+  ];
+
+  const navigation = [
+    ...(isAdmin ? adminNavItems : []),
   ];
 
   // Export Logic

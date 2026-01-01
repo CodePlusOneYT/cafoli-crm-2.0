@@ -15,18 +15,46 @@ export function useAuth() {
   );
 
   const login = useMutation(api.users.login);
+  const createLog = useMutation(api.activityLogs.createLog);
 
   const signIn = async (email: string, password: string) => {
     const result = await login({ email, password });
     if (result) {
       setUserId(result);
       localStorage.setItem("cafoli_user_id", result);
+      
+      // Log login activity
+      try {
+        await createLog({
+          userId: result,
+          category: "Login/Logout",
+          action: "User logged in",
+          details: `User ${email} logged in successfully`,
+        });
+      } catch (error) {
+        console.error("Failed to log login activity:", error);
+      }
+      
       return result;
     }
     return null;
   };
 
   const signOut = async () => {
+    // Log logout activity
+    if (userId) {
+      try {
+        await createLog({
+          userId: userId,
+          category: "Login/Logout",
+          action: "User logged out",
+          details: `User logged out`,
+        });
+      } catch (error) {
+        console.error("Failed to log logout activity:", error);
+      }
+    }
+    
     setUserId(null);
     localStorage.removeItem("cafoli_user_id");
   };

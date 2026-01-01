@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activityLogs from "../activityLogs.js";
 import type * as auth from "../auth.js";
 import type * as authProviders from "../authProviders.js";
 import type * as brevo from "../brevo.js";
@@ -56,6 +57,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activityLogs: typeof activityLogs;
   auth: typeof auth;
   authProviders: typeof authProviders;
   brevo: typeof brevo;

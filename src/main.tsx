@@ -23,6 +23,7 @@ const WhatsApp = lazy(() => import("./pages/WhatsApp.tsx"));
 const Emailing = lazy(() => import("./pages/Emailing.tsx"));
 const Admin = lazy(() => import("./pages/Admin.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const Logs = lazy(() => import("./pages/Logs.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -115,6 +116,10 @@ const router = createBrowserRouter([
       {
         path: "/admin",
         element: <Admin />,
+      },
+      {
+        path: "/logs",
+        element: <Logs />,
       },
       {
         path: "*",
