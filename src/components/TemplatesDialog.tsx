@@ -169,6 +169,11 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       return;
     }
 
+    if (!lead.mobile || lead.mobile.trim() === "") {
+      toast.error("Contact has no phone number");
+      return;
+    }
+
     try {
       await sendTemplateMessage({
         phoneNumber: lead.mobile,
@@ -206,6 +211,11 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
     if (!lead) {
       console.error("Lead not found:", { targetLeadId, availableLeads: leads.map((l: any) => l._id) });
       toast.error("Contact not found. Please try again.");
+      return;
+    }
+
+    if (!lead.mobile || lead.mobile.trim() === "") {
+      toast.error("Contact has no phone number");
       return;
     }
 

@@ -19,6 +19,11 @@ async function sendTemplateMessageHelper(
     throw new Error("WhatsApp API not configured.");
   }
 
+  // Validate phone number
+  if (!phoneNumber || phoneNumber.trim() === "") {
+    throw new Error("Phone number is required to send template message.");
+  }
+
   try {
     const response = await fetch(
       `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
