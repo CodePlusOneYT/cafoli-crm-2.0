@@ -50,7 +50,7 @@ export default function Leads() {
 
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leadQueries.getUniqueSources) || [];
-  const allUsers = useQuery(api.users.getAllUsers, user ? {} : "skip") || [];
+  const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];
 
   const assignLead = useMutation(api.leads.standard.assignLead);
 

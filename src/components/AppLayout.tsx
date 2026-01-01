@@ -78,8 +78,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const staffNavItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Unassigned Leads", href: "/leads", icon: Users },
     { name: "My Leads", href: "/my_leads", icon: UserSquare2 },
     { name: "WhatsApp", href: "/whatsapp", icon: MessageSquare },
+    { name: "Emailing", href: "/emailing", icon: Mail },
+    { name: "Campaigns", href: "/campaigns", icon: BarChart3 },
     { name: "Reports", href: "/reports", icon: PieChart },
   ];
 

@@ -153,8 +153,9 @@ export const getAllUsers = query({
     if (!userId) throw new Error("Unauthorized");
     
     const currentUser = await ctx.db.get(userId);
-    if (currentUser?.role !== ROLES.ADMIN) {
-      throw new Error("Only admins can view all users");
+    // Allow all authenticated users to view the user list (needed for assignment dropdowns)
+    if (!currentUser) {
+      throw new Error("User not found");
     }
     
     return await ctx.db.query("users").collect();
