@@ -76,9 +76,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: "Admin", href: "/admin", icon: Settings },
   ];
 
-  const navigation = [
-    ...(isAdmin ? adminNavItems : []),
+  const staffNavItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "My Leads", href: "/my_leads", icon: UserSquare2 },
+    { name: "WhatsApp", href: "/whatsapp", icon: MessageSquare },
+    { name: "Reports", href: "/reports", icon: PieChart },
   ];
+
+  const navigation = isAdmin ? adminNavItems : staffNavItems;
 
   // Export Logic
   const [isExporting, setIsExporting] = useState(false);

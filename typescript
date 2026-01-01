@@ -1,1 +1,3 @@
-const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];
+const navigation = [
+  ...(isAdmin ? adminNavItems : []),
+];
