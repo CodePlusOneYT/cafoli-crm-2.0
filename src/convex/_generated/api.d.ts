@@ -40,6 +40,7 @@ import type * as reports from "../reports.js";
 import type * as tags from "../tags.js";
 import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
+import type * as whatsappBulk from "../whatsappBulk.js";
 import type * as whatsappMutations from "../whatsappMutations.js";
 import type * as whatsappQueries from "../whatsappQueries.js";
 import type * as whatsappStorage from "../whatsappStorage.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   tags: typeof tags;
   users: typeof users;
   whatsapp: typeof whatsapp;
+  whatsappBulk: typeof whatsappBulk;
   whatsappMutations: typeof whatsappMutations;
   whatsappQueries: typeof whatsappQueries;
   whatsappStorage: typeof whatsappStorage;
