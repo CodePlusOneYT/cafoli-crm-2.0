@@ -84,6 +84,23 @@ http.route({
           const contact = contacts.find((c: any) => c.wa_id === message.from);
           const senderName = contact?.profile?.name;
 
+          // Extract text content - handle button replies and regular text
+          let textContent = "";
+          if (message.type === "button" && message.button) {
+            // Button reply - extract the button text/payload
+            textContent = message.button.text || message.button.payload || "";
+          } else if (message.type === "interactive" && message.interactive) {
+            // Interactive button reply
+            if (message.interactive.type === "button_reply") {
+              textContent = message.interactive.button_reply?.title || "";
+            } else if (message.interactive.type === "list_reply") {
+              textContent = message.interactive.list_reply?.title || "";
+            }
+          } else if (message.text?.body) {
+            // Regular text message
+            textContent = message.text.body;
+          }
+
           // Extract media information based on message type
           let mediaId = null;
           let mediaCaption = null;
@@ -94,25 +111,30 @@ http.route({
             mediaId = message.image.id;
             mediaCaption = message.image.caption;
             mediaMimeType = message.image.mime_type;
+            textContent = textContent || mediaCaption || "";
           } else if (message.type === "document" && message.document) {
             mediaId = message.document.id;
             mediaCaption = message.document.caption;
             mediaMimeType = message.document.mime_type;
             mediaFilename = message.document.filename;
+            textContent = textContent || mediaCaption || "";
           } else if (message.type === "video" && message.video) {
             mediaId = message.video.id;
             mediaCaption = message.video.caption;
             mediaMimeType = message.video.mime_type;
+            textContent = textContent || mediaCaption || "";
           } else if (message.type === "audio" && message.audio) {
             mediaId = message.audio.id;
             mediaMimeType = message.audio.mime_type;
           }
 
+          console.log(`Processing incoming message - Type: ${message.type}, Text: "${textContent}"`);
+
           await ctx.runAction("whatsapp:handleIncomingMessage" as any, {
             from: message.from,
             messageId: message.id,
             timestamp: message.timestamp,
-            text: message.text?.body || mediaCaption || "",
+            text: textContent,
             type: message.type,
             mediaId: mediaId || undefined,
             mediaMimeType: mediaMimeType || undefined,

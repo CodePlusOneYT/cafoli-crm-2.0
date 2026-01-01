@@ -4,23 +4,29 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
-// Helper function to send template message
+// Helper function to send template message with variable substitution
 async function sendTemplateMessageHelper(
   phoneNumber: string,
   templateName: string,
   languageCode: string,
   leadId: string,
-  ctx: any
+  ctx: any,
+  variables?: Record<string, string>
 ) {
   const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
   const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
   
   if (!accessToken || !phoneNumberId) {
+    console.error("WhatsApp API configuration missing", {
+      hasAccessToken: !!accessToken,
+      hasPhoneNumberId: !!phoneNumberId
+    });
     throw new Error("WhatsApp API not configured.");
   }
 
   // Validate phone number
   if (!phoneNumber || phoneNumber.trim() === "") {
+    console.error("Template send failed: Phone number is empty", { leadId, templateName });
     throw new Error("Phone number is required to send template message.");
   }
 
@@ -30,6 +36,18 @@ async function sendTemplateMessageHelper(
     const template = templates.find((t: any) => 
       t.name === templateName && t.language === languageCode
     );
+
+    if (!template) {
+      console.error("Template not found in database", { templateName, languageCode });
+      throw new Error(`Template ${templateName} (${languageCode}) not found. Please sync templates first.`);
+    }
+
+    // Get lead data for variable substitution
+    const lead = await ctx.runQuery("whatsappTemplatesQueries:getLeadForTemplate" as any, {
+      leadId: leadId,
+    });
+
+    console.log(`Sending template ${templateName} to ${phoneNumber} for lead ${leadId}`);
 
     const response = await fetch(
       `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
@@ -56,15 +74,38 @@ async function sendTemplateMessageHelper(
     const data = await response.json();
     
     if (!response.ok) {
+      console.error("WhatsApp API error response", {
+        status: response.status,
+        data: data,
+        phoneNumber,
+        templateName
+      });
       throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
     }
 
-    // Extract template content from components
+    // Extract template content from components and substitute variables
     let templateContent = `Template: ${templateName}`;
     if (template && template.components) {
       const bodyComponent = template.components.find((c: any) => c.type === "BODY");
       if (bodyComponent && bodyComponent.text) {
         templateContent = bodyComponent.text;
+        
+        // Substitute variables if lead data is available
+        if (lead) {
+          templateContent = templateContent
+            .replace(/\{\{1\}\}/g, lead.name || "")
+            .replace(/\{\{name\}\}/gi, lead.name || "")
+            .replace(/\{\{company\}\}/gi, lead.agencyName || lead.company || "")
+            .replace(/\{\{subject\}\}/gi, lead.subject || "");
+        }
+        
+        // Apply custom variables if provided
+        if (variables) {
+          Object.entries(variables).forEach(([key, value]) => {
+            const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+            templateContent = templateContent.replace(regex, value);
+          });
+        }
       }
     }
 
@@ -78,9 +119,22 @@ async function sendTemplateMessageHelper(
       externalId: data.messages?.[0]?.id || "",
     });
 
+    console.log(`Template message sent successfully`, {
+      messageId: data.messages?.[0]?.id,
+      phoneNumber,
+      templateName
+    });
+
     return { success: true, messageId: data.messages?.[0]?.id };
   } catch (error) {
-    console.error("Template send error:", error);
+    console.error("Template send error - Full details:", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      phoneNumber,
+      templateName,
+      languageCode,
+      leadId
+    });
     throw new Error(`Failed to send template: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 }
@@ -311,6 +365,7 @@ export const sendTemplateMessage = action({
     templateName: v.string(),
     languageCode: v.string(),
     leadId: v.id("leads"),
+    variables: v.optional(v.record(v.string(), v.string())),
   },
   handler: async (ctx, args) => {
     return await sendTemplateMessageHelper(
@@ -318,7 +373,8 @@ export const sendTemplateMessage = action({
       args.templateName,
       args.languageCode,
       args.leadId,
-      ctx
+      ctx,
+      args.variables
     );
   },
 });
