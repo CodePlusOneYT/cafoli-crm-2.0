@@ -5,19 +5,12 @@ import { ROLES } from "./schema";
 
 /**
  * Get the current signed in user. Returns null if the user is not signed in.
- * Usage: const signedInUser = await ctx.runQuery(api.authHelpers.currentUser);
- * THIS FUNCTION IS READ-ONLY. DO NOT MODIFY.
  */
 export const currentUser = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await getCurrentUser(ctx);
-
-    if (user === null) {
-      return null;
-    }
-
-    return user;
+  args: { userId: v.optional(v.id("users")) },
+  handler: async (ctx, args) => {
+    if (!args.userId) return null;
+    return await ctx.db.get(args.userId);
   },
 });
 

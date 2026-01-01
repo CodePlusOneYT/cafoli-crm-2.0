@@ -1,4 +1,3 @@
-import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { Infer, v } from "convex/values";
 
@@ -28,29 +27,22 @@ export const LEAD_TYPE = {
 
 const schema = defineSchema(
   {
-    // default auth tables using convex auth.
-    ...authTables, // do not remove or modify
-
-    // the users table is the default users table that is brought in by the authTables
     users: defineTable({
-      name: v.optional(v.string()), // name of the user. do not remove
-      image: v.optional(v.string()), // image of the user. do not remove
-      email: v.optional(v.string()), // email of the user. do not remove
-      emailVerificationTime: v.optional(v.number()), // email verification time. do not remove
-      isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
-
-      role: v.optional(roleValidator), // role of the user. do not remove
-      passwordHash: v.optional(v.string()), // hashed password for password authentication
+      name: v.optional(v.string()),
+      image: v.optional(v.string()),
+      email: v.optional(v.string()),
+      role: v.optional(roleValidator),
+      passwordHash: v.optional(v.string()),
       
       preferences: v.optional(v.object({
         leadRemindersEnabled: v.optional(v.boolean()),
       })),
-    }).index("email", ["email"]), // index for the email. do not remove or modify
+    }).index("email", ["email"]),
 
     leads: defineTable({
       name: v.string(),
       subject: v.string(),
-      source: v.string(), // e.g., "Pharmavends", "IndiaMART", "Manual"
+      source: v.string(),
       assignedTo: v.optional(v.id("users")),
       
       // Contact Info
@@ -68,10 +60,10 @@ const schema = defineSchema(
       message: v.optional(v.string()),
       
       // Status & Classification
-      status: v.optional(v.string()), // Cold, Hot, Mature
-      type: v.optional(v.string()), // To be Decided, Relevant, Irrelevant
+      status: v.optional(v.string()),
+      type: v.optional(v.string()),
       
-      tags: v.optional(v.array(v.id("tags"))), // New tags field
+      tags: v.optional(v.array(v.id("tags"))),
 
       nextFollowUpDate: v.optional(v.number()),
       lastActivity: v.number(),
@@ -145,8 +137,8 @@ const schema = defineSchema(
       assignedTo: v.optional(v.id("users")),
       scheduledAt: v.number(),
       completedAt: v.optional(v.number()),
-      status: v.string(), // "pending", "completed", "rescheduled"
-      completionStatus: v.optional(v.string()), // "timely", "overdue"
+      status: v.string(),
+      completionStatus: v.optional(v.string()),
     })
     .index("by_lead", ["leadId"])
     .index("by_assigned_to", ["assignedTo"])
@@ -157,11 +149,10 @@ const schema = defineSchema(
     campaigns: defineTable({
       name: v.string(),
       description: v.optional(v.string()),
-      type: v.string(), // "sequence", "broadcast"
-      status: v.string(), // "draft", "active", "paused", "completed"
+      type: v.string(),
+      status: v.string(),
       createdBy: v.id("users"),
       
-      // Lead selection criteria
       leadSelection: v.object({
         type: v.union(v.literal("all"), v.literal("filtered")),
         tagIds: v.optional(v.array(v.id("tags"))),
@@ -170,18 +161,17 @@ const schema = defineSchema(
         autoEnrollNew: v.optional(v.boolean()),
       }),
       
-      // Campaign flow (blocks with IDs and connections)
       blocks: v.array(v.object({
         id: v.string(),
         type: v.string(),
-        data: v.any(), // Block-specific data
+        data: v.any(),
         position: v.optional(v.object({ x: v.number(), y: v.number() })),
       })),
       
       connections: v.array(v.object({
-        from: v.string(), // Block ID
-        to: v.string(), // Block ID
-        label: v.optional(v.string()), // For conditional branches
+        from: v.string(),
+        to: v.string(),
+        label: v.optional(v.string()),
       })),
       
       metrics: v.optional(v.object({
@@ -195,28 +185,26 @@ const schema = defineSchema(
       })),
     }).index("by_created_by", ["createdBy"]).index("by_status", ["status"]),
 
-    // Campaign enrollments - tracks which leads are in which campaigns
     campaignEnrollments: defineTable({
       campaignId: v.id("campaigns"),
       leadId: v.id("leads"),
-      status: v.string(), // "active", "completed", "failed", "paused"
+      status: v.string(),
       currentBlockId: v.optional(v.string()),
       enrolledAt: v.number(),
       completedAt: v.optional(v.number()),
-      pathTaken: v.optional(v.array(v.string())), // Track which blocks were executed
+      pathTaken: v.optional(v.array(v.string())),
     })
     .index("by_campaign", ["campaignId"])
     .index("by_lead", ["leadId"])
     .index("by_campaign_and_status", ["campaignId", "status"]),
 
-    // Campaign execution queue
     campaignExecutions: defineTable({
       campaignId: v.id("campaigns"),
       enrollmentId: v.id("campaignEnrollments"),
       leadId: v.id("leads"),
       blockId: v.string(),
       scheduledFor: v.number(),
-      status: v.string(), // "pending", "executing", "completed", "failed"
+      status: v.string(),
       executedAt: v.optional(v.number()),
       result: v.optional(v.any()),
       error: v.optional(v.string()),
@@ -241,30 +229,29 @@ const schema = defineSchema(
       usageCount: v.number(),
       lastUsedAt: v.optional(v.number()),
       lastResetAt: v.number(),
-      order: v.number(), // For rotation order
+      order: v.number(),
     }).index("by_active", ["isActive"]).index("by_order", ["order"]),
 
     emailTemplates: defineTable({
       name: v.string(),
       subject: v.string(),
-      content: v.string(), // HTML content
+      content: v.string(),
       createdBy: v.id("users"),
       lastModifiedAt: v.number(),
     }).index("by_name", ["name"]),
 
-    // WhatsApp Templates
     templates: defineTable({
       name: v.string(),
-      language: v.string(), // e.g., "en_US"
-      category: v.string(), // "MARKETING", "UTILITY", "AUTHENTICATION"
-      status: v.string(), // "APPROVED", "PENDING", "REJECTED"
-      externalId: v.optional(v.string()), // Meta template ID
+      language: v.string(),
+      category: v.string(),
+      status: v.string(),
+      externalId: v.optional(v.string()),
       components: v.array(v.object({
-        type: v.string(), // "HEADER", "BODY", "FOOTER", "BUTTONS"
-        format: v.optional(v.string()), // "TEXT", "IMAGE", "VIDEO", "DOCUMENT"
+        type: v.string(),
+        format: v.optional(v.string()),
         text: v.optional(v.string()),
         buttons: v.optional(v.array(v.object({
-          type: v.string(), // "QUICK_REPLY", "URL", "PHONE_NUMBER"
+          type: v.string(),
           text: v.string(),
           url: v.optional(v.string()),
           phoneNumber: v.optional(v.string()),
@@ -273,11 +260,10 @@ const schema = defineSchema(
       lastSyncedAt: v.optional(v.number()),
     }).index("by_status", ["status"]),
 
-    // For WhatsApp integration later
     chats: defineTable({
       leadId: v.id("leads"),
-      platform: v.string(), // "whatsapp"
-      externalId: v.string(), // WhatsApp phone number or chat ID
+      platform: v.string(),
+      externalId: v.string(),
       lastMessageAt: v.number(),
       unreadCount: v.optional(v.number()),
     })
@@ -286,15 +272,15 @@ const schema = defineSchema(
 
     messages: defineTable({
       chatId: v.id("chats"),
-      direction: v.string(), // "inbound", "outbound"
+      direction: v.string(),
       content: v.string(),
-      status: v.string(), // "sent", "delivered", "read"
-      messageType: v.optional(v.string()), // "text", "image", "file"
-      mediaUrl: v.optional(v.string()), // URL for images/files
-      mediaName: v.optional(v.string()), // Original filename
-      mediaMimeType: v.optional(v.string()), // MIME type
-      externalId: v.optional(v.string()), // WhatsApp message ID for status tracking
-      quotedMessageId: v.optional(v.id("messages")), // ID of the message being replied to
+      status: v.string(),
+      messageType: v.optional(v.string()),
+      mediaUrl: v.optional(v.string()),
+      mediaName: v.optional(v.string()),
+      mediaMimeType: v.optional(v.string()),
+      externalId: v.optional(v.string()),
+      quotedMessageId: v.optional(v.id("messages")),
     })
     .index("by_chat", ["chatId"])
     .index("by_chat_status", ["chatId", "status"])

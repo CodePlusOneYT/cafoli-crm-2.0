@@ -9,36 +9,32 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, User, Lock } from "lucide-react";
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
 
-function Auth({ redirectAfterAuth }: AuthProps = {}) {
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+export default function Auth({ redirectAfterAuth }: AuthProps = {}) {
+  const { isLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const login = useMutation(api.users.login);
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated) {
       const redirect = redirectAfterAuth || "/dashboard";
       navigate(redirect, { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
+  }, [isLoading, isAuthenticated, navigate, redirectAfterAuth]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setIsLoading(true);
+    setIsSubmitting(true);
     setError(null);
     
     try {
@@ -46,22 +42,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       const email = (formData.get("email") as string).toLowerCase();
       const password = formData.get("password") as string;
       
-      // Use custom login mutation
-      const userId = await login({ email, password });
+      const userId = await signIn(email, password);
       
       if (!userId) {
         setError("Invalid username or password");
-        setIsLoading(false);
+        setIsSubmitting(false);
         return;
       }
       
       toast.success("Login successful!");
-      
-      // Navigation will happen via useEffect when isAuthenticated becomes true
     } catch (error: any) {
       console.error("Sign-in error:", error);
       setError(error?.message || "Invalid username or password");
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -97,7 +90,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         placeholder="Enter username"
                         type="text"
                         className="pl-9"
-                        disabled={isLoading}
+                        disabled={isSubmitting}
                         required
                       />
                     </div>
@@ -112,7 +105,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         placeholder="Enter password"
                         type="password"
                         className="pl-9"
-                        disabled={isLoading}
+                        disabled={isSubmitting}
                         required
                       />
                     </div>
@@ -126,9 +119,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 >
-                  {isLoading ? (
+                  {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Signing in...
@@ -147,13 +140,5 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function AuthPage(props: AuthProps) {
-  return (
-    <Suspense>
-      <Auth {...props} />
-    </Suspense>
   );
 }

@@ -86,14 +86,14 @@ export default function Admin() {
 
   const handleLoginAs = async (email: string) => {
     try {
-      // For simplicity, we'll use the email as both username and password
-      // In production, you'd want a more secure approach
-      const formData = new FormData();
-      formData.append("email", email.toLowerCase());
-      formData.append("password", email); // Using email as password for demo
-      formData.append("flow", "signIn");
+      // Get the user's actual password from the database
+      const userToLogin = allUsers.find((u: any) => u.email === email);
+      if (!userToLogin || !userToLogin.passwordHash) {
+        toast.error("Cannot log in as this user - no password set");
+        return;
+      }
       
-      await signIn("password", formData);
+      await signIn(email.toLowerCase(), userToLogin.passwordHash);
       toast.success(`Logged in as ${email}`);
     } catch (error) {
       toast.error("Failed to log in as user. Please use their actual credentials.");

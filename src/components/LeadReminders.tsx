@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ import { api } from "@/convex/_generated/api";
 export function LeadReminders() {
   const criticalLeads = useQuery(api.leads.queries.getCriticalOverdueLeads, {});
   const coldLeads = useQuery(api.leads.queries.getColdOverdueLeads, {});
-  const currentUser = useQuery(api.users.currentUser);
+  const { user: currentUser } = useAuth();
   const updatePreferences = useMutation(api.users.updatePreferences);
   const navigate = useNavigate();
 

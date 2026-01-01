@@ -16,3 +16,24 @@ const password = Password<DataModel>({
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [password],
 });
+
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+
+// Simple session storage
+export const createSession = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    // In a simple system, we just return the userId
+    // The frontend will store this in localStorage
+    return args.userId;
+  },
+});
+
+export const validateSession = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    return user || null;
+  },
+});

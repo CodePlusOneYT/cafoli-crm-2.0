@@ -1,11 +1,11 @@
 import { Toaster } from "@/components/ui/sonner";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { InstrumentationProvider } from "@/instrumentation.tsx";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import { StrictMode, useEffect, lazy, Suspense } from "react";
+import { ConvexProvider } from "convex/react";
+import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider, Route, Routes } from "react-router";
+import { createBrowserRouter, RouterProvider } from "react-router";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import "./index.css";
@@ -34,23 +34,16 @@ function RouteLoading() {
 }
 
 // WORKAROUND: Fallback to hardcoded URL if env var is missing or empty
-// This fixes the issue where Cloudflare Pages build environment variables are sometimes empty
 const convexUrl = import.meta.env.VITE_CONVEX_URL || "https://polished-marmot-96.convex.cloud";
 
-// Debug logging to help troubleshoot
 console.log("Environment check:", {
   convexUrl,
-  convexUrlType: typeof convexUrl,
-  convexUrlValue: JSON.stringify(convexUrl),
-  allEnvVars: import.meta.env,
   mode: import.meta.env.MODE,
   prod: import.meta.env.PROD,
 });
 
 if (!convexUrl || convexUrl === 'undefined' || convexUrl === '') {
   console.error("VITE_CONVEX_URL is not set or is empty. Value:", convexUrl);
-  console.error("Available env vars:", Object.keys(import.meta.env));
-  console.error("Full env object:", import.meta.env);
   document.getElementById("root")!.innerHTML = `
     <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
       <div style="max-width: 500px; text-align: center;">
@@ -59,15 +52,6 @@ if (!convexUrl || convexUrl === 'undefined' || convexUrl === '') {
           The VITE_CONVEX_URL environment variable is not set. 
           Please configure it in your Cloudflare Pages dashboard.
         </p>
-        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; text-align: left;">
-          <p style="font-weight: 600; margin-bottom: 8px;">To fix this:</p>
-          <ol style="margin: 0; padding-left: 20px; color: #374151;">
-            <li>Go to your Cloudflare Pages dashboard</li>
-            <li>Navigate to Settings → Environment Variables</li>
-            <li>Add VITE_CONVEX_URL with your Convex deployment URL</li>
-            <li>Redeploy your application</li>
-          </ol>
-        </div>
       </div>
     </div>
   `;
@@ -144,10 +128,12 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <VlyToolbar />
     <InstrumentationProvider>
-      <ConvexAuthProvider client={convex}>
-        <RouterProvider router={router} />
+      <ConvexProvider client={convex}>
+        <Suspense fallback={<RouteLoading />}>
+          <RouterProvider router={router} />
+        </Suspense>
         <Toaster />
-      </ConvexAuthProvider>
+      </ConvexProvider>
     </InstrumentationProvider>
   </StrictMode>,
 );
