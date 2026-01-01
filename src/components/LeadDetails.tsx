@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { Calendar, Save, User, X, ThumbsUp } from "lucide-react";
+import { Calendar, Save, User, X, ThumbsUp, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -13,6 +13,17 @@ import { LeadInfo } from "@/components/leads/LeadInfo";
 import { LeadActivity } from "@/components/leads/LeadActivity";
 import { useLeadEditor } from "@/hooks/useLeadEditor";
 import { api } from "@/convex/_generated/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface LeadDetailsProps {
   leadId: Id<"leads">;
@@ -24,6 +35,7 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
   
   const lead = useQuery(api.leadQueries.getLead, { id: leadId, userId: user?._id });
   const comments = useQuery(api.leadQueries.getComments, { leadId });
+  const deleteLead = useMutation(api.leads.admin.deleteLead);
   
   const {
     isEditing,
@@ -39,6 +51,18 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
     cancelEditing,
     saveEdits,
   } = useLeadEditor({ lead, user });
+
+  const handleDelete = async () => {
+    if (!user || !lead) return;
+    try {
+      await deleteLead({ leadId: lead._id, adminId: user._id });
+      toast.success("Lead deleted successfully");
+      onClose();
+    } catch (error) {
+      toast.error("Failed to delete lead");
+      console.error(error);
+    }
+  };
 
   if (lead === undefined) {
     return <div className="flex-1 flex items-center justify-center h-full">Loading...</div>;
@@ -111,10 +135,37 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           {!isEditing && (
-            <Button variant="outline" size="sm" onClick={startEditing}>
-              <Save className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
+            <>
+              {user?.role === "admin" && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the lead
+                        and remove their data from our servers.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              <Button variant="outline" size="sm" onClick={startEditing}>
+                <Save className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+            </>
           )}
           {isEditing && (
             <>

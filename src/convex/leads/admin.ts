@@ -168,3 +168,17 @@ export const bulkImportLeads = mutation({
     return { importedCount };
   },
 });
+
+export const deleteLead = mutation({
+  args: {
+    leadId: v.id("leads"),
+    adminId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const admin = await ctx.db.get(args.adminId);
+    if (!admin || admin.role !== ROLES.ADMIN) {
+      throw new Error("Unauthorized: Only admins can delete leads");
+    }
+    await ctx.db.delete(args.leadId);
+  },
+});
