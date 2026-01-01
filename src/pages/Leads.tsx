@@ -16,7 +16,6 @@ import LeadDetails from "@/components/LeadDetails";
 import { LeadCard } from "@/components/LeadCard";
 import { CreateLeadDialog } from "@/components/leads/CreateLeadDialog";
 import { AssignLeadDialog } from "@/components/leads/AssignLeadDialog";
-import { LeadsFilterBar } from "@/components/leads/LeadsFilterBar";
 import { LeadsFilterSidebar } from "@/components/leads/LeadsFilterSidebar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -86,6 +85,7 @@ export default function Leads() {
 
   const availableStatuses = ["Cold", "Hot", "Mature"];
 
+  // Use client-side filtering for now
   const leadsData = useQuery(
     api.leads.queries.getLeads, 
     user ? { userId: user._id, filter } : "skip"
@@ -108,7 +108,9 @@ export default function Leads() {
         lead.name?.toLowerCase().includes(query) ||
         lead.email?.toLowerCase().includes(query) ||
         lead.mobile?.toLowerCase().includes(query) ||
-        lead.company?.toLowerCase().includes(query);
+        lead.company?.toLowerCase().includes(query) ||
+        lead.subject?.toLowerCase().includes(query) ||
+        lead.message?.toLowerCase().includes(query);
       if (!matchesSearch) return false;
     }
 
