@@ -17,8 +17,8 @@ export function useLeadEditor({ lead, user }: UseLeadEditorProps) {
     console.error("Failed to load api", e);
   }
 
-  const updateLead = useMutation(apiRef?.leads?.updateLead);
-  const addComment = useMutation(apiRef?.leads?.addComment);
+  const updateLead = useMutation(apiRef?.leads?.standard?.updateLead);
+  const addComment = useMutation(apiRef?.leads?.standard?.addComment);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedLead, setEditedLead] = useState<Partial<Doc<"leads">>>({});

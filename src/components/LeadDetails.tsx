@@ -29,8 +29,8 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
     console.error("Failed to load api", e);
   }
   
-  const lead = useQuery(apiRef?.leads?.getLead, { id: leadId, userId: user?._id });
-  const comments = useQuery(apiRef?.leads?.getComments, { leadId });
+  const lead = useQuery(apiRef?.leadQueries?.getLead, { id: leadId, userId: user?._id });
+  const comments = useQuery(apiRef?.leadQueries?.getComments, { leadId });
   
   const {
     isEditing,
