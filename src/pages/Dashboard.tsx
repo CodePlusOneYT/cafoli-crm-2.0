@@ -5,12 +5,23 @@ import { Users, MessageSquare, BarChart3, Activity } from "lucide-react";
 import { useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { api } from "@/convex/_generated/api";
+import { Loader2 } from "lucide-react";
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   
   const leads = useQuery(api.leadQueries.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
   const campaigns = useQuery(api.campaignQueries.getCampaigns, user ? { userId: user._id } : "skip") || [];
+
+  if (authLoading || !user) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
   
   // Memoize computed stats to avoid recalculation on every render
   const stats = useMemo(() => {
