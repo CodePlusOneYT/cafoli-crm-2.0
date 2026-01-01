@@ -1,5 +1,1 @@
-const ensureRole = useMutation(apiRef?.users?.ensureRole);
-const coldCallerLeadsNeedingFollowUp = useQuery(
-  apiRef?.coldCallerLeads?.getColdCallerLeadsNeedingFollowUp,
-  user ? {} : "skip"
-) || [];
+const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];

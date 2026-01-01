@@ -47,7 +47,7 @@ export default function Leads() {
   const [filterSidebarOpen, setFilterSidebarOpen] = useState(false);
 
   const allTags = useQuery(api.tags.getAllTags) || [];
-  const uniqueSources = useQuery(api.leads.queries.getUniqueSources) || [];
+  const uniqueSources = useQuery(api.leadQueries.getUniqueSources) || [];
   const allUsers = useQuery(api.users.getAllUsers, user ? { userId: user._id } : "skip") || [];
 
   const assignLead = useMutation(api.leads.standard.assignLead);
@@ -87,7 +87,7 @@ export default function Leads() {
 
   // Use client-side filtering for now
   const leadsData = useQuery(
-    api.leads.queries.getLeads, 
+    api.leadQueries.getLeads, 
     user ? { userId: user._id, filter } : "skip"
   ) || [];
 
