@@ -34,6 +34,7 @@ export default function Admin() {
   const manualAllocateColdCallerLeads = useMutation(api.coldCallerLeads.manualAllocateColdCallerLeads);
   const sendWelcomeToRecentLeads = useAction(api.whatsappTemplatesActions.sendWelcomeToRecentLeads);
   const autoAssignUnassignedLeads = useMutation(api.leads.autoAssign.autoAssignUnassignedLeads);
+  const syncPharmavends = useAction(api.pharmavends.manualSyncPharmavends);
 
   const [isStandardizing, setIsStandardizing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -41,6 +42,7 @@ export default function Admin() {
   const [isSendingWelcome, setIsSendingWelcome] = useState(false);
   const [isAllocatingColdCaller, setIsAllocatingColdCaller] = useState(false);
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+  const [isSyncingPharmavends, setIsSyncingPharmavends] = useState(false);
 
   const handleCreateUser = async (userData: {
     email: string;
@@ -102,6 +104,23 @@ export default function Admin() {
       toast.error(error instanceof Error ? error.message : "Failed to standardize phone numbers");
     } finally {
       setIsStandardizing(false);
+    }
+  };
+
+  const handleSyncPharmavends = async () => {
+    if (!currentUser) {
+      toast.error("You must be logged in");
+      return;
+    }
+
+    setIsSyncingPharmavends(true);
+    try {
+      const result = await syncPharmavends({});
+      toast.success(result.message);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to sync Pharmavends leads");
+    } finally {
+      setIsSyncingPharmavends(false);
     }
   };
 
@@ -402,11 +421,13 @@ export default function Admin() {
               onSendWelcomeMessages={handleSendWelcomeToRecentLeads}
               onDownloadAllLeads={handleDownloadCSV}
               onAutoAssignLeads={handleAutoAssignLeads}
+              onSyncPharmavends={handleSyncPharmavends}
               isImporting={isImporting}
               isStandardizing={isStandardizing}
               isMarkingColdCaller={isMarkingColdCaller}
               isSendingWelcome={isSendingWelcome}
               isAutoAssigning={isAutoAssigning}
+              isSyncingPharmavends={isSyncingPharmavends}
             />
             <AllocateColdCallerDialog
               availableLeads={unallocatedColdCallerCount ?? 0}

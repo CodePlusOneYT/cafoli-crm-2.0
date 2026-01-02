@@ -10,11 +10,13 @@ interface AdminActionsProps {
   onSendWelcomeMessages: () => void;
   onDownloadAllLeads: () => void;
   onAutoAssignLeads: () => void;
+  onSyncPharmavends: () => void;
   isImporting: boolean;
   isStandardizing: boolean;
   isMarkingColdCaller: boolean;
   isSendingWelcome: boolean;
   isAutoAssigning: boolean;
+  isSyncingPharmavends: boolean;
 }
 
 export default function AdminActions({
@@ -24,10 +26,14 @@ export default function AdminActions({
   onMarkColdCallerLeads,
   onSendWelcomeMessages,
   onDownloadAllLeads,
+  onAutoAssignLeads,
+  onSyncPharmavends,
   isImporting,
   isStandardizing,
   isMarkingColdCaller,
   isSendingWelcome,
+  isAutoAssigning,
+  isSyncingPharmavends,
 }: AdminActionsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +66,15 @@ export default function AdminActions({
       <Button variant="outline" onClick={onDownloadTemplate}>
         <Download className="mr-2 h-4 w-4" />
         Template
+      </Button>
+
+      <Button 
+        variant="outline" 
+        onClick={onSyncPharmavends}
+        disabled={isSyncingPharmavends}
+      >
+        <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingPharmavends ? 'animate-spin' : ''}`} />
+        {isSyncingPharmavends ? "Syncing PW..." : "Sync PW Leads"}
       </Button>
 
       <Button 
