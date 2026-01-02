@@ -42,6 +42,14 @@ export const getPaginatedLeads = query({
             }
           }
 
+          if (lead.coldCallerAssignedTo) {
+            const assignedUser = await ctx.db.get(lead.coldCallerAssignedTo);
+            if (assignedUser && '_id' in assignedUser) {
+              const userName = (assignedUser as any).name || (assignedUser as any).email || "Unknown User";
+              enriched.coldCallerAssignedToName = userName;
+            }
+          }
+
           if (lead.tags && lead.tags.length > 0) {
             const tags = [];
             for (const tagId of lead.tags) {
@@ -175,6 +183,7 @@ export const getPaginatedLeads = query({
             }
             if (args.filter === "irrelevant") return l.type === "Irrelevant";
             if (args.filter === "all") return l.type !== "Irrelevant";
+            if (args.filter === "cold_caller") return l.isColdCallerLead === true;
             return !l.assignedTo && l.type !== "Irrelevant" && !l.isColdCallerLead;
          });
 
@@ -209,6 +218,8 @@ export const getPaginatedLeads = query({
             );
           } else if (args.filter === "irrelevant") {
             predicate = q.eq(q.field("type"), "Irrelevant");
+          } else if (args.filter === "cold_caller") {
+            predicate = q.eq(q.field("isColdCallerLead"), true);
           } else {
             predicate = q.neq(q.field("type"), "Irrelevant");
           }

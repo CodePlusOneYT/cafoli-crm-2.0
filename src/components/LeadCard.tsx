@@ -6,7 +6,12 @@ import { UserPlus, ThumbsUp, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface LeadCardProps {
-  lead: Doc<"leads"> & { tagsData?: Doc<"tags">[]; unreadCount?: number };
+  lead: Doc<"leads"> & { 
+    tagsData?: Doc<"tags">[]; 
+    unreadCount?: number;
+    assignedToName?: string;
+    coldCallerAssignedToName?: string;
+  };
   isSelected: boolean;
   isUnassignedView: boolean;
   viewIrrelevant: boolean;
@@ -39,7 +44,7 @@ export function LeadCard({
       } ${
         lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() ? "border-red-300 bg-red-50/50" : ""
       } ${
-        hasUnreadMessages ? "border-green-500 bg-green-50/30 shadow-lg" : ""
+        hasUnreadMessages ? "border-green-500 bg-green-0/30 shadow-lg" : ""
       }`}
       onClick={() => onSelect(lead._id)}
     >
@@ -104,6 +109,12 @@ export function LeadCard({
           {(lead as any).assignedToName && (
             <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">
               👤 {(lead as any).assignedToName}
+            </span>
+          )}
+
+          {(lead as any).coldCallerAssignedToName && (
+            <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs border border-indigo-200">
+              📞 {(lead as any).coldCallerAssignedToName}
             </span>
           )}
           

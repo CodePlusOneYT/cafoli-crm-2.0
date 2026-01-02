@@ -47,6 +47,7 @@ export default function Leads() {
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
   const [whatsAppLeadId, setWhatsAppLeadId] = useState<Id<"leads"> | null>(null);
   const [filterSidebarOpen, setFilterSidebarOpen] = useState(false);
+  const [viewColdCallerLeads, setViewColdCallerLeads] = useState(false);
 
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leadQueries.getUniqueSources) || [];
@@ -95,7 +96,7 @@ export default function Leads() {
     api.leadQueries.getPaginatedLeads,
     user ? {
       userId: user._id,
-      filter,
+      filter: viewColdCallerLeads ? "cold_caller" : filter,
       search: search || undefined,
       statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
       sources: selectedSources.length > 0 ? selectedSources : undefined,
@@ -112,7 +113,7 @@ export default function Leads() {
   useMemo(() => {
     setAllLoadedLeads([]);
     setPaginationOpts({ numItems: ITEMS_PER_PAGE, cursor: null });
-  }, [filter, search, selectedStatuses, selectedSources, selectedTags, selectedAssignedTo, sortBy]);
+  }, [filter, search, selectedStatuses, selectedSources, selectedTags, selectedAssignedTo, sortBy, viewColdCallerLeads]);
 
   // Append new leads when pagination result changes
   useMemo(() => {
@@ -159,12 +160,23 @@ export default function Leads() {
       <div className="h-[calc(100vh-4rem)] flex flex-col gap-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {viewColdCallerLeads ? "Cold Caller Leads" : title}
+            </h1>
             <p className="text-muted-foreground">
               Manage and track your leads
             </p>
           </div>
           <div className="flex gap-2 w-full md:w-auto">
+            {isAdmin && filter === "all" && (
+              <Button
+                variant={viewColdCallerLeads ? "default" : "outline"}
+                onClick={() => setViewColdCallerLeads(!viewColdCallerLeads)}
+                className="gap-2"
+              >
+                {viewColdCallerLeads ? "Show All Leads" : "Show Cold Caller Leads"}
+              </Button>
+            )}
             <CreateLeadDialog 
               open={isCreateOpen} 
               onOpenChange={setIsCreateOpen} 
