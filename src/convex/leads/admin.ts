@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { ROLES } from "../schema";
 import { standardizePhoneNumber } from "../leadUtils";
 
@@ -141,7 +142,7 @@ export const bulkImportLeads = mutation({
         leadData.state
       ].filter(Boolean).join(" ");
 
-      await ctx.db.insert("leads", {
+      const leadId = await ctx.db.insert("leads", {
         name: leadData.name,
         email: leadData.email,
         altEmail: leadData.altEmail,
@@ -161,6 +162,42 @@ export const bulkImportLeads = mutation({
         lastActivity: Date.now(),
         searchText,
       });
+
+      // Send welcome email if email exists
+      if (leadData.email) {
+        try {
+          await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+            leadName: leadData.name,
+            leadEmail: leadData.email,
+            source: source,
+          });
+        } catch (error) {
+          console.error("Failed to schedule welcome email:", error);
+        }
+      }
+
+      // Send welcome WhatsApp message to primary mobile
+      try {
+        await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+          phoneNumber: mobile,
+          leadId: leadId,
+        });
+      } catch (error) {
+        console.error("Failed to schedule welcome WhatsApp template to primary mobile:", error);
+      }
+
+      // Send welcome WhatsApp message to alternate mobile if exists
+      if (leadData.altMobile) {
+        const altMobile = standardizePhoneNumber(leadData.altMobile);
+        try {
+          await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+            phoneNumber: altMobile,
+            leadId: leadId,
+          });
+        } catch (error) {
+          console.error("Failed to schedule welcome WhatsApp template to alternate mobile:", error);
+        }
+      }
 
       importedCount++;
     }

@@ -230,13 +230,35 @@ export const createIndiamartLead = internalMutation({
     // Send welcome email if email is provided
     if (args.email) {
       try {
-        await ctx.scheduler.runAfter(0, "brevo:sendWelcomeEmail" as any, {
+        await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
           leadName: args.name,
           leadEmail: args.email,
           source: "IndiaMART",
         });
       } catch (error) {
         console.error("Failed to schedule welcome email:", error);
+      }
+    }
+    
+    // Send welcome WhatsApp message to primary mobile
+    try {
+      await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+        phoneNumber: standardizedMobile,
+        leadId: leadId,
+      });
+    } catch (error) {
+      console.error("Failed to schedule welcome WhatsApp template to primary mobile:", error);
+    }
+    
+    // Send welcome WhatsApp message to alternate mobile if exists
+    if (standardizedAltMobile) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+          phoneNumber: standardizedAltMobile,
+          leadId: leadId,
+        });
+      } catch (error) {
+        console.error("Failed to schedule welcome WhatsApp template to alternate mobile:", error);
       }
     }
     
