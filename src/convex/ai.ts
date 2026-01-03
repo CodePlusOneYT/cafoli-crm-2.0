@@ -34,51 +34,71 @@ export const generateContent = action({
 
     // Try keys sequentially until one works
     for (const key of allKeys) {
-      try {
-        const genAI = new GoogleGenerativeAI(key.apiKey);
-        
-        // Use JSON mode for structured data requests
-        const isJsonMode = args.type === "follow_up_suggestion";
-        const model = genAI.getGenerativeModel({ 
-          model: "gemini-1.5-flash",
-          generationConfig: isJsonMode ? { responseMimeType: "application/json" } : undefined
-        });
+      const genAI = new GoogleGenerativeAI(key.apiKey);
+      
+      // List of models to try in order of preference
+      // Including user requested "gemini-3-flash" and other fallbacks
+      const modelsToTry = [
+        "gemini-3-flash", 
+        "gemini-2.0-flash-exp", 
+        "gemini-1.5-flash", 
+        "gemini-1.5-flash-001", 
+        "gemini-1.5-pro", 
+        "gemini-pro"
+      ];
 
-        let systemPrompt = "";
-        if (args.type === "chat_reply") {
-          systemPrompt = "You are a helpful sales assistant. Draft a professional and friendly reply to the customer based on the context provided. Keep it concise and relevant to the conversation history.";
-        } else if (args.type === "lead_analysis") {
-          systemPrompt = "Analyze the following lead information and provide insights on lead quality, potential needs, and recommended next steps. Be brief and actionable.";
-        } else if (args.type === "follow_up_suggestion") {
-          systemPrompt = "Suggest a follow-up date (in days from now) and a message based on the last interaction. Return JSON format: { \"days\": number, \"message\": string }.";
-        } else if (args.type === "campaign_email_content") {
-          systemPrompt = "You are an expert email marketing copywriter. Write a professional, engaging, and concise email body based on the provided subject and context. Do not include the subject line in the body. Use placeholders like {{Name}} if appropriate.";
+      for (const modelName of modelsToTry) {
+        try {
+          // Use JSON mode for structured data requests if supported by the model
+          // Gemini 1.0 (gemini-pro) does not support responseMimeType
+          const isJsonMode = args.type === "follow_up_suggestion";
+          const supportsJson = modelName.includes("1.5") || modelName.includes("2.0") || modelName.includes("3") || modelName.includes("flash");
+          
+          const model = genAI.getGenerativeModel({ 
+            model: modelName,
+            generationConfig: (isJsonMode && supportsJson) ? { responseMimeType: "application/json" } : undefined
+          });
+
+          let systemPrompt = "";
+          if (args.type === "chat_reply") {
+            systemPrompt = "You are a helpful sales assistant. Draft a professional and friendly reply to the customer based on the context provided. Keep it concise and relevant to the conversation history.";
+          } else if (args.type === "lead_analysis") {
+            systemPrompt = "Analyze the following lead information and provide insights on lead quality, potential needs, and recommended next steps. Be brief and actionable.";
+          } else if (args.type === "follow_up_suggestion") {
+            systemPrompt = "Suggest a follow-up date (in days from now) and a message based on the last interaction. Return JSON format: { \"days\": number, \"message\": string }.";
+          } else if (args.type === "campaign_email_content") {
+            systemPrompt = "You are an expert email marketing copywriter. Write a professional, engaging, and concise email body based on the provided subject and context. Do not include the subject line in the body. Use placeholders like {{Name}} if appropriate.";
+          }
+
+          const fullPrompt = `${systemPrompt}\n\nContext: ${JSON.stringify(args.context)}\n\nPrompt: ${args.prompt}`;
+
+          console.log(`Attempting to generate content with model: ${modelName} using key: ${key.label || "..."}`);
+          const result = await model.generateContent(fullPrompt);
+          const response = result.response;
+          generatedText = response.text();
+
+          // Increment usage if we used a DB key
+          if (key.keyId) {
+            // @ts-ignore
+            await ctx.runMutation(internal.geminiMutations.incrementUsage, { keyId: key.keyId });
+          }
+
+          success = true;
+          console.log(`Successfully generated content with model: ${modelName}`);
+          break; // Exit model loop on success
+        } catch (error) {
+          console.warn(`Model ${modelName} failed with key ${key.label || "..."}:`, error);
+          lastError = error;
+          // Continue to next model
         }
-
-        const fullPrompt = `${systemPrompt}\n\nContext: ${JSON.stringify(args.context)}\n\nPrompt: ${args.prompt}`;
-
-        const result = await model.generateContent(fullPrompt);
-        const response = result.response;
-        generatedText = response.text();
-
-        // Increment usage if we used a DB key
-        if (key.keyId) {
-          // @ts-ignore
-          await ctx.runMutation(internal.geminiMutations.incrementUsage, { keyId: key.keyId });
-        }
-
-        success = true;
-        break; // Exit loop on success
-      } catch (error) {
-        console.warn(`Gemini API key ${key.label || key.apiKey.substring(0, 5)}... failed:`, error);
-        lastError = error;
-        // Continue to next key
       }
+      
+      if (success) break; // Exit key loop on success
     }
 
     if (!success) {
-      console.error("All Gemini API keys failed.");
-      throw lastError || new Error("Failed to generate AI content with any available key");
+      console.error("All Gemini API keys and models failed.");
+      throw lastError || new Error("Failed to generate AI content with any available key or model");
     }
 
     // Log the generation
