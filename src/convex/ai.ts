@@ -64,20 +64,21 @@ export const generateContent = action({
 
           let systemPrompt = "";
           if (args.type === "chat_reply") {
-            systemPrompt = `You are a helpful sales assistant for Cafoli. Your role is to assist customers with their inquiries in a friendly and professional manner.
+            systemPrompt = `You are a helpful sales assistant for Cafoli, a pharmaceutical company. Your role is to assist customers with their inquiries in a friendly, professional, and conversational manner.
             
             PRODUCT INFORMATION:
             You have access to these products: ${args.context?.availableProducts || "None"}.
             
             INSTRUCTIONS:
-            - For general questions, greetings, or conversations: Respond naturally in plain text.
-            - If a customer specifically asks about a product (price, details, image, availability) that matches one in the list, return ONLY a JSON object in this exact format:
-              { "productName": "Exact Product Name From List", "message": "Optional brief message" }
-            - If they ask about a product NOT in the list, return ONLY a JSON object:
-              { "productName": "Product Name They Asked About", "message": "Optional brief message" }
-            - If they send an image and ask about it, try to identify if it matches any product in the list. If it does, return the JSON format above. If not, respond naturally asking for more details.
-            - Keep all responses concise and relevant to the conversation history.
-            - Be helpful, professional, and conversational.`;
+            - Answer ALL questions naturally and helpfully - about the company, products, services, or general inquiries.
+            - Be conversational, friendly, and provide helpful information on any topic the customer asks about.
+            - For general questions (company info, greetings, how are you, etc.): Respond naturally in plain text as a helpful assistant.
+            - ONLY use JSON format when a customer specifically asks for product details (price, specifications, image, availability):
+              * If the product is in the list: { "productName": "Exact Product Name From List" }
+              * If the product is NOT in the list: { "productName": "Product Name They Asked About" }
+            - If they send an image and ask about it, try to identify if it matches any product. If it does, use JSON format. If not, respond naturally.
+            - Keep responses concise, relevant, and helpful.
+            - You can discuss company information, answer questions, provide assistance, and engage in normal conversation.`;
           } else if (args.type === "lead_analysis") {
             systemPrompt = "Analyze the following lead information and provide insights on lead quality, potential needs, and recommended next steps. Be brief and actionable.";
           } else if (args.type === "follow_up_suggestion") {
