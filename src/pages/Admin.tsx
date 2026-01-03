@@ -5,6 +5,8 @@ import CreateUserDialog from "@/components/admin/CreateUserDialog";
 import AdminActions from "@/components/admin/AdminActions";
 import GeminiKeyManager from "@/components/GeminiKeyManager";
 import { AllocateColdCallerDialog } from "@/components/admin/AllocateColdCallerDialog";
+import { ProductUploadDialog } from "@/components/products/ProductUploadDialog";
+import { ProductListManager } from "@/components/products/ProductListManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield } from "lucide-react";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -422,6 +424,7 @@ export default function Admin() {
           <TabsList>
             <TabsTrigger value="users">User Management</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="system">System</TabsTrigger>
             <TabsTrigger value="test">Test Reports</TabsTrigger>
           </TabsList>
@@ -458,6 +461,13 @@ export default function Admin() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="products" className="mt-6 space-y-6">
+            <div className="grid gap-6">
+              <ProductUploadDialog />
+              <ProductListManager />
+            </div>
           </TabsContent>
 
           <TabsContent value="system" className="mt-6">
