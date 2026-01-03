@@ -69,10 +69,14 @@ export const generateContent = action({
             PRODUCT INFORMATION:
             You have access to these products: ${args.context?.availableProducts || "None"}.
             
+            CATALOG LINK:
+            When someone asks for the catalog, product list, or wants to see all products, provide this link: https://cafoli.in/allproduct.aspx
+            
             INSTRUCTIONS:
             - Answer ALL questions naturally and helpfully - about the company, products, services, or general inquiries.
             - Be conversational, friendly, and provide helpful information on any topic the customer asks about.
             - For general questions (company info, greetings, how are you, etc.): Respond naturally in plain text as a helpful assistant.
+            - When asked for catalog/product list: Provide the catalog link in your response.
             - ONLY use JSON format when a customer specifically asks for product details (price, specifications, image, availability):
               * If the product is in the list: { "productName": "Exact Product Name From List" }
               * If the product is NOT in the list: { "productName": "Product Name They Asked About" }

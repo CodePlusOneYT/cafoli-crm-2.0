@@ -21,11 +21,19 @@ export const sendWhatsAppMessage = action({
       throw new Error("WhatsApp API not configured. Please set CLOUD_API_ACCESS_TOKEN and WA_PHONE_NUMBER_ID in backend environment variables.");
     }
 
+    // Validate phone number
+    if (!args.phoneNumber || args.phoneNumber.trim() === "") {
+      throw new Error("Phone number is required and cannot be empty");
+    }
+
     try {
+      // Clean phone number (remove spaces, dashes, but keep + if present)
+      const cleanedPhone = args.phoneNumber.replace(/[\s-]/g, "");
+      
       // Prepare message payload
       const payload: any = {
         messaging_product: "whatsapp",
-        to: args.phoneNumber,
+        to: cleanedPhone,
         type: "text",
         text: { body: args.message },
       };
@@ -53,6 +61,7 @@ export const sendWhatsAppMessage = action({
       const data = await response.json();
       
       if (!response.ok) {
+        console.error("WhatsApp API error details:", JSON.stringify(data));
         throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
       }
 
