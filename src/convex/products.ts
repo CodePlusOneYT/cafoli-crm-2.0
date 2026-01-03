@@ -10,6 +10,7 @@ export const createProduct = mutation({
     packaging: v.string(),
     images: v.array(v.id("_storage")),
     description: v.optional(v.string()),
+    pageLink: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const productId = await ctx.db.insert("products", {
@@ -20,6 +21,7 @@ export const createProduct = mutation({
       packaging: args.packaging,
       images: args.images,
       description: args.description,
+      pageLink: args.pageLink,
     });
     return productId;
   },
@@ -46,5 +48,22 @@ export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const deleteProduct = mutation({
+  args: { id: v.id("products") },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.id);
+    if (!product) {
+      throw new Error("Product not found");
+    }
+    
+    // Delete associated images from storage
+    for (const imageId of product.images) {
+      await ctx.storage.delete(imageId);
+    }
+    
+    await ctx.db.delete(args.id);
   },
 });

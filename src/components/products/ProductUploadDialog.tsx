@@ -30,6 +30,7 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
   const [mrp, setMrp] = useState("");
   const [packaging, setPackaging] = useState("");
   const [description, setDescription] = useState("");
+  const [pageLink, setPageLink] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   
   const generateUploadUrl = useMutation(api.products.generateUploadUrl);
@@ -80,6 +81,7 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
         packaging,
         images: imageStorageIds,
         description,
+        pageLink,
       });
 
       toast.success("Product uploaded successfully");
@@ -91,6 +93,7 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
       setMrp("");
       setPackaging("");
       setDescription("");
+      setPageLink("");
       setSelectedFiles([]);
     } catch (error) {
       console.error(error);
@@ -150,6 +153,17 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="pageLink">Page Link (Optional)</Label>
+            <Input 
+              id="pageLink" 
+              type="url"
+              value={pageLink} 
+              onChange={(e) => setPageLink(e.target.value)} 
+              placeholder="https://example.com/product-page"
+            />
           </div>
 
           <div className="space-y-2">
