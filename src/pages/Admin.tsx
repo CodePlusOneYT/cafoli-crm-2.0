@@ -211,11 +211,14 @@ export default function Admin() {
       return;
     }
 
+    const emailToSend = currentUser.email.trim();
+    console.log("Sending test report to:", emailToSend);
+
     setIsSendingReport(true);
     try {
-      const result = await sendTestReport({ email: currentUser.email.trim() });
+      const result = await sendTestReport({ email: emailToSend });
       if (result.success) {
-        toast.success(`Test report sent to ${currentUser.email}`);
+        toast.success(`Test report sent to ${emailToSend}`);
       } else {
         toast.error(`Failed to send report: ${result.error}`);
       }

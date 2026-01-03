@@ -213,6 +213,9 @@ export const sendTestReport = action({
     email: v.string(),
   },
   handler: async (ctx, args) => {
+    const cleanEmail = args.email.trim();
+    console.log(`Generating test report for: "${cleanEmail}"`);
+
     const now = Date.now();
     const startDate = now - 24 * 60 * 60 * 1000; // Last 24 hours for test
     const dateRangeLabel = "TEST REPORT (Last 24h)";
@@ -234,7 +237,7 @@ export const sendTestReport = action({
 
     try {
       await ctx.runAction(internal.brevo.sendEmailInternal, {
-        to: args.email.trim(),
+        to: cleanEmail,
         toName: "Admin",
         subject: `Cafoli CRM - Test Report - ${dateRangeLabel}`,
         htmlContent: html,

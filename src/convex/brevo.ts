@@ -61,12 +61,35 @@ export const sendEmailInternal = internalAction({
       throw new Error("No available Brevo API keys. Please add keys in Admin panel.");
     }
 
-    const cleanEmail = args.to.trim();
-    if (!cleanEmail) {
-      throw new Error("Email address is required");
+    // Stricter email cleaning: remove all whitespace and ensure lowercase
+    const cleanEmail = args.to.trim().toLowerCase().replace(/\s/g, "");
+    
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      throw new Error(`Invalid email address format: "${args.to}"`);
     }
 
+    console.log(`Attempting to send email to: ${cleanEmail}`);
+
     try {
+      const body = {
+        sender: {
+          name: "Cafoli Connect",
+          email: "welcome@mail.skinticals.com",
+        },
+        to: [
+          {
+            email: cleanEmail,
+            name: args.toName,
+          },
+        ],
+        subject: args.subject,
+        htmlContent: args.htmlContent,
+        textContent: args.textContent || args.htmlContent.replace(/<[^>]*>/g, ""),
+      };
+
+      // Log body for debugging (excluding full content for brevity if needed, but helpful here)
+      console.log("Brevo Request Payload (partial):", JSON.stringify({ ...body, htmlContent: "..." }));
+
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
@@ -74,21 +97,7 @@ export const sendEmailInternal = internalAction({
           "api-key": keyData.key,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          sender: {
-            name: "Cafoli Connect",
-            email: "welcome@mail.skinticals.com",
-          },
-          to: [
-            {
-              email: cleanEmail,
-              name: args.toName,
-            },
-          ],
-          subject: args.subject,
-          htmlContent: args.htmlContent,
-          textContent: args.textContent || args.htmlContent.replace(/<[^>]*>/g, ""),
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -126,7 +135,7 @@ export const sendEmailInternal = internalAction({
 
 // Helper function to send email with a specific key
 async function sendEmailWithKey(ctx: ActionCtx, args: any, keyData: { key: string; keyId: Id<"brevoApiKeys"> }) {
-  const cleanEmail = args.to.trim();
+  const cleanEmail = args.to.trim().toLowerCase().replace(/\s/g, "");
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -163,7 +172,7 @@ async function sendEmailWithKey(ctx: ActionCtx, args: any, keyData: { key: strin
 
 // Helper for welcome email with specific key
 async function sendWelcomeEmailWithKey(ctx: ActionCtx, args: any, keyData: { key: string; keyId: Id<"brevoApiKeys"> }, htmlContent: string) {
-  const cleanEmail = args.leadEmail.trim();
+  const cleanEmail = args.leadEmail.trim().toLowerCase().replace(/\s/g, "");
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
