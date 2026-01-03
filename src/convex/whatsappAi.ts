@@ -50,12 +50,20 @@ export const generateAndSendAiReply = action({
     let requestedProductName = "";
 
     try {
-        if (aiResponse.trim().startsWith("{") && aiResponse.trim().endsWith("}")) {
-            const parsed = JSON.parse(aiResponse);
+        // Only try to parse as JSON if it looks like JSON
+        const trimmedResponse = aiResponse.trim();
+        if (trimmedResponse.startsWith("{") && trimmedResponse.endsWith("}")) {
+            const parsed = JSON.parse(trimmedResponse);
             if (parsed.productName) {
                 const product = products.find(p => p.name.toLowerCase() === parsed.productName.toLowerCase());
                 if (product) {
-                    messageToSend = `Here are the details for ${product.name}:\nBrand: ${product.brandName}\nMolecule: ${product.molecule || "N/A"}\nMRP: ${product.mrp}\nRate: ${product.rate}\n${product.description || ""}`;
+                    // Product found - send full details
+                    messageToSend = `Here are the details for *${product.name}*:\n\n` +
+                                  `🏷️ Brand: ${product.brandName}\n` +
+                                  `🧪 Molecule: ${product.molecule || "N/A"}\n` +
+                                  `💰 MRP: ₹${product.mrp}\n` +
+                                  `💵 Rate: ₹${product.rate}\n\n` +
+                                  `${product.description || ""}`;
                     
                     if (product.images && product.images.length > 0) {
                         mediaToSend = {
@@ -65,17 +73,20 @@ export const generateAndSendAiReply = action({
                         };
                     }
                 } else {
-                    // Product not found in database
+                    // Product not found in database - trigger intervention
                     productNotFound = true;
                     requestedProductName = parsed.productName;
-                    messageToSend = "This product image and details will be shared shortly.";
+                    messageToSend = "This product image and details will be shared shortly. 📦";
                 }
             } else if (parsed.message) {
+                // AI returned a JSON with just a message field
                 messageToSend = parsed.message;
             }
         }
+        // If not JSON format, use the response as-is (normal conversation)
     } catch (e) {
-        // Not JSON, treat as plain text
+        // Not valid JSON, treat as plain text response (normal conversation)
+        // This is expected for general chat messages
     }
 
     // 4. Send message immediately via WhatsApp

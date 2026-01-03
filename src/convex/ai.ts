@@ -64,15 +64,20 @@ export const generateContent = action({
 
           let systemPrompt = "";
           if (args.type === "chat_reply") {
-            systemPrompt = `You are a helpful sales assistant. Draft a professional and friendly reply to the customer based on the context provided. 
+            systemPrompt = `You are a helpful sales assistant for Cafoli. Your role is to assist customers with their inquiries in a friendly and professional manner.
             
-            IMPORTANT: You have access to a list of products: ${args.context?.availableProducts || "None"}.
-            If the user is asking about a specific product, price, or image, and it matches one of the products in the list, you MUST return a JSON object in this format:
-            { "productName": "Exact Product Name From List", "message": "Optional message to accompany the product details" }
+            PRODUCT INFORMATION:
+            You have access to these products: ${args.context?.availableProducts || "None"}.
             
-            If the user is NOT asking about a specific product or the product is not in the list, just return the plain text reply string.
-            
-            Keep it concise and relevant to the conversation history.`;
+            INSTRUCTIONS:
+            - For general questions, greetings, or conversations: Respond naturally in plain text.
+            - If a customer specifically asks about a product (price, details, image, availability) that matches one in the list, return ONLY a JSON object in this exact format:
+              { "productName": "Exact Product Name From List", "message": "Optional brief message" }
+            - If they ask about a product NOT in the list, return ONLY a JSON object:
+              { "productName": "Product Name They Asked About", "message": "Optional brief message" }
+            - If they send an image and ask about it, try to identify if it matches any product in the list. If it does, return the JSON format above. If not, respond naturally asking for more details.
+            - Keep all responses concise and relevant to the conversation history.
+            - Be helpful, professional, and conversational.`;
           } else if (args.type === "lead_analysis") {
             systemPrompt = "Analyze the following lead information and provide insights on lead quality, potential needs, and recommended next steps. Be brief and actionable.";
           } else if (args.type === "follow_up_suggestion") {
