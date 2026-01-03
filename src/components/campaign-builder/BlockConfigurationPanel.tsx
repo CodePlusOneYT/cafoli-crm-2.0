@@ -5,6 +5,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { BlockType } from "./BlockPalette";
 import { CampaignBlock } from "@/types/campaign";
+import { Button } from "@/components/ui/button";
+import { Sparkles } from "lucide-react";
+import { useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useState } from "react";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 interface BlockConfigurationPanelProps {
   selectedBlock: CampaignBlock | undefined;
@@ -21,6 +28,38 @@ export function BlockConfigurationPanel({
   allTags,
   onUpdateBlockData,
 }: BlockConfigurationPanelProps) {
+  const { user } = useAuth();
+  const generateAiContent = useAction(api.ai.generateContent);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleAiGenerateEmail = async () => {
+    if (!selectedBlock || !user) return;
+    
+    const subject = selectedBlock.data.subject;
+    if (!subject) {
+      toast.error("Please enter a subject first to generate content");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const content = await generateAiContent({
+        prompt: `Write an email body for the subject: ${subject}`,
+        type: "campaign_email_content",
+        context: { subject },
+        userId: user._id,
+      });
+
+      onUpdateBlockData(selectedBlock.id, { content });
+      toast.success("Email content generated");
+    } catch (error) {
+      toast.error("Failed to generate content");
+      console.error(error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <Card className="sticky top-24">
       <CardHeader>
@@ -71,15 +110,29 @@ export function BlockConfigurationPanel({
                     className="h-8"
                     value={selectedBlock.data.subject}
                     onChange={(e) => onUpdateBlockData(selectedBlock.id, { subject: e.target.value })}
+                    placeholder="Enter email subject..."
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Content</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label className="text-xs">Content</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-xs text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      onClick={handleAiGenerateEmail}
+                      disabled={isGenerating || !selectedBlock.data.subject}
+                    >
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      {isGenerating ? "Writing..." : "AI Write"}
+                    </Button>
+                  </div>
                   <Textarea
                     className="text-xs"
                     value={selectedBlock.data.content}
                     onChange={(e) => onUpdateBlockData(selectedBlock.id, { content: e.target.value })}
-                    rows={4}
+                    rows={8}
+                    placeholder="Email body content..."
                   />
                 </div>
               </>

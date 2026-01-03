@@ -45,6 +45,8 @@ export const generateContent = action({
           systemPrompt = "Analyze the following lead information and provide insights on lead quality, potential needs, and recommended next steps. Be brief and actionable.";
         } else if (args.type === "follow_up_suggestion") {
           systemPrompt = "Suggest a follow-up date (in days from now) and a message based on the last interaction. Return JSON format: { \"days\": number, \"message\": string }.";
+        } else if (args.type === "campaign_email_content") {
+          systemPrompt = "You are an expert email marketing copywriter. Write a professional, engaging, and concise email body based on the provided subject and context. Do not include the subject line in the body. Use placeholders like {{Name}} if appropriate.";
         }
 
         const fullPrompt = `${systemPrompt}\n\nContext: ${JSON.stringify(args.context)}\n\nPrompt: ${args.prompt}`;
