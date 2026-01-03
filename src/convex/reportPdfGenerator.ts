@@ -92,6 +92,7 @@ function generateReportHTML(stats: any, title: string, dateRange: string): strin
           <thead>
             <tr>
               <th>User Name</th>
+              <th>Leads</th>
               <th>Emails Sent</th>
               <th>WA Sent</th>
               <th>WA Received</th>
@@ -103,6 +104,7 @@ function generateReportHTML(stats: any, title: string, dateRange: string): strin
             ${userStats.map((u: any) => `
               <tr>
                 <td>${u.name}</td>
+                <td>${u.leadsAssigned}</td>
                 <td>${u.emailsSent}</td>
                 <td>${u.whatsappSent}</td>
                 <td>${u.whatsappReceived}</td>

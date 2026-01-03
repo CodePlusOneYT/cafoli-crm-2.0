@@ -131,6 +131,9 @@ export const getDetailedReportStats = internalQuery({
     const userStats = staffUsers.map(user => {
       const userId = user._id;
       
+      // Leads Assigned (from the leads fetched above)
+      const leadsAssigned = leads.filter(l => l.assignedTo === userId).length;
+      
       // Emails
       const emailsSent = emailLogs.filter(l => l.userId === userId && l.action.includes("Sent")).length;
 
@@ -161,6 +164,7 @@ export const getDetailedReportStats = internalQuery({
       return {
         userId,
         name: user.name || "Unknown",
+        leadsAssigned,
         emailsSent,
         whatsappSent,
         whatsappReceived,
