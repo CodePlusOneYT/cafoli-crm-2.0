@@ -16,6 +16,16 @@ function generateReportHTML(stats: any, title: string, dateRange: string): strin
   const relevancyColumns = overall.relevancy.map((s: any) => s.name);
   const statusColumns = overall.status.map((s: any) => s.name);
 
+  // Helper to render a summary card list
+  const renderSummaryList = (items: any[]) => {
+    return items.map((item: any) => `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+        <span>${item.name}</span>
+        <span style="font-weight: bold;">${item.count}</span>
+      </div>
+    `).join('');
+  };
+
   return `
     <!DOCTYPE html>
     <html>
@@ -26,6 +36,12 @@ function generateReportHTML(stats: any, title: string, dateRange: string): strin
           h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
           h2 { color: #555; margin-top: 20px; margin-bottom: 10px; font-size: 16px; }
           .header { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+          
+          /* Summary Grid */
+          .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+          .summary-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+          .summary-title { font-size: 10px; font-weight: bold; color: #4f46e5; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; }
+          .summary-value-large { font-size: 24px; font-weight: bold; color: #1e293b; }
           
           table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 10px; }
           th, td { padding: 6px 4px; text-align: center; border: 1px solid #ddd; }
@@ -46,6 +62,39 @@ function generateReportHTML(stats: any, title: string, dateRange: string): strin
           <h1>${title}</h1>
           <p><strong>Period:</strong> ${dateRange}</p>
           <p><strong>Generated:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+        </div>
+
+        <h2>Overall Summary</h2>
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-title">Total Leads</div>
+            <div class="summary-value-large">${overall.totalLeads}</div>
+          </div>
+          
+          <div class="summary-card">
+            <div class="summary-title">Sources</div>
+            ${renderSummaryList(overall.sources)}
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-title">Status</div>
+            ${renderSummaryList(overall.status)}
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-title">Relevancy</div>
+            ${renderSummaryList(overall.relevancy)}
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-title">Assignment</div>
+            ${renderSummaryList(overall.assignment)}
+          </div>
+
+          <div class="summary-card">
+            <div class="summary-title">Follow-up Punctuality</div>
+            ${renderSummaryList(overall.punctuality)}
+          </div>
         </div>
 
         <h2>Team Performance Report</h2>
