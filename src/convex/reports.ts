@@ -214,12 +214,18 @@ async function generateStats(ctx: any, leads: any[], followups: any[], isAdmin: 
     
     const users = await Promise.all(userIds.map(uid => ctx.db.get(uid)));
     users.forEach((u, i) => {
-      if (u && u.name) usersMap.set(userIds[i], u.name);
+      if (u && u.name && u.role !== "owner") usersMap.set(userIds[i], u.name);
     });
 
     leads.forEach(l => {
-      const name = l.assignedTo ? (usersMap.get(l.assignedTo) || "Unknown User") : "Unassigned";
-      assignmentCounts[name] = (assignmentCounts[name] || 0) + 1;
+      if (l.assignedTo) {
+        const userName = usersMap.get(l.assignedTo);
+        if (userName) {
+          assignmentCounts[userName] = (assignmentCounts[userName] || 0) + 1;
+        }
+      } else {
+        assignmentCounts["Unassigned"] = (assignmentCounts["Unassigned"] || 0) + 1;
+      }
     });
     
     assignment = Object.entries(assignmentCounts).map(([name, count]) => ({ name, count }));
