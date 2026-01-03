@@ -9,6 +9,8 @@
  */
 
 import type * as activityLogs from "../activityLogs.js";
+import type * as ai from "../ai.js";
+import type * as aiMutations from "../aiMutations.js";
 import type * as auth from "../auth.js";
 import type * as authProviders from "../authProviders.js";
 import type * as brevo from "../brevo.js";
@@ -60,6 +62,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activityLogs: typeof activityLogs;
+  ai: typeof ai;
+  aiMutations: typeof aiMutations;
   auth: typeof auth;
   authProviders: typeof authProviders;
   brevo: typeof brevo;

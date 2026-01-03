@@ -14,6 +14,7 @@ export const LOG_CATEGORIES = {
   WHATSAPP_INCOMING: "WhatsApp: Message Coming",
   WHATSAPP_STATUS: "WhatsApp: Message Statuses",
   EMAIL: "Email",
+  AI_ASSISTANCE: "AI: Assistance",
   OTHER: "Others",
 } as const;
 

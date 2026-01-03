@@ -286,6 +286,19 @@ const schema = defineSchema(
     .index("by_chat_status", ["chatId", "status"])
     .index("by_external_id", ["externalId"]),
 
+    aiSuggestions: defineTable({
+      leadId: v.optional(v.id("leads")),
+      userId: v.id("users"),
+      type: v.string(), // "chat_reply", "follow_up", "lead_analysis"
+      content: v.string(),
+      originalContent: v.optional(v.string()), // For rewrites
+      status: v.string(), // "generated", "used", "discarded"
+      metadata: v.optional(v.any()),
+    })
+    .index("by_lead", ["leadId"])
+    .index("by_user", ["userId"])
+    .index("by_type", ["type"]),
+
     activityLogs: defineTable({
       userId: v.optional(v.id("users")),
       category: v.string(),
