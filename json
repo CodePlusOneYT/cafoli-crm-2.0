@@ -1,6 +1,3 @@
 {
-  "file_paths": [
-    "src/components/admin/AdminActions.tsx"
-  ],
-  "replace_files_in_context": false
+  "plan": "1. Verify the new AI auto-reply functionality in the ChatWindow.\n2. Monitor for any errors related to the new `whatsappAi` action.\n3. If requested, implement backend auto-reply for incoming messages (chatbot mode)."
 }

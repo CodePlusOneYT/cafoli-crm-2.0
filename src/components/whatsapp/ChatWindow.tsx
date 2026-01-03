@@ -25,7 +25,7 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
   const sendWhatsAppMedia = useAction(api.whatsapp.sendWhatsAppMedia);
   const generateUploadUrl = useMutation(api.whatsappStorage.generateUploadUrl);
   const markChatAsRead = useMutation(api.whatsappMutations.markChatAsRead);
-  const generateAiContent = useAction(api.ai.generateContent);
+  const generateAndSendAiReply = useAction(api.whatsappAi.generateAndSendAiReply);
 
   const [whatsappMessage, setWhatsappMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -183,21 +183,24 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
 
     setIsGeneratingAi(true);
     try {
-      const result = await generateAiContent({
+      await generateAndSendAiReply({
         prompt: "Draft a reply to this conversation",
-        type: "chat_reply",
         context: { 
           leadName: selectedLead.name,
           recentMessages 
         },
         userId: user._id,
         leadId: selectedLead._id,
+        phoneNumber: selectedLead.mobile,
+        replyingToMessageId: replyingTo?._id,
+        replyingToExternalId: replyingTo?.externalId,
       });
       
-      setWhatsappMessage(result);
-      toast.success("AI reply generated");
+      setWhatsappMessage("");
+      setReplyingTo(null);
+      toast.success("AI reply sent automatically");
     } catch (error) {
-      toast.error("Failed to generate AI reply");
+      toast.error("Failed to generate and send AI reply");
       console.error(error);
     } finally {
       setIsGeneratingAi(false);

@@ -49,6 +49,7 @@ import type * as test_ai from "../test_ai.js";
 import type * as test_utils from "../test_utils.js";
 import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
+import type * as whatsappAi from "../whatsappAi.js";
 import type * as whatsappBulk from "../whatsappBulk.js";
 import type * as whatsappMutations from "../whatsappMutations.js";
 import type * as whatsappQueries from "../whatsappQueries.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   test_utils: typeof test_utils;
   users: typeof users;
   whatsapp: typeof whatsapp;
+  whatsappAi: typeof whatsappAi;
   whatsappBulk: typeof whatsappBulk;
   whatsappMutations: typeof whatsappMutations;
   whatsappQueries: typeof whatsappQueries;
