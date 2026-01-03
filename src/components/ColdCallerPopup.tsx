@@ -26,6 +26,14 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
     setFollowUpDates(prev => ({ ...prev, [leadId]: date }));
   };
 
+  const setOneHourTimer = (leadId: string) => {
+    const now = new Date();
+    now.setHours(now.getHours() + 1);
+    const offset = now.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(now.getTime() - offset)).toISOString().slice(0, 16);
+    handleDateChange(leadId, localISOTime);
+  };
+
   const getMinDateTime = () => {
     const now = new Date();
     now.setMinutes(now.getMinutes() + 1);
@@ -103,7 +111,17 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor={`followup-${lead._id}`}>Follow-up Date & Time *</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor={`followup-${lead._id}`}>Follow-up Date & Time *</Label>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setOneHourTimer(lead._id)}
+                    className="h-6 text-xs bg-white hover:bg-blue-50 text-blue-600 border-blue-200"
+                  >
+                    +1 Hour
+                  </Button>
+                </div>
                 <Input
                   id={`followup-${lead._id}`}
                   type="datetime-local"
