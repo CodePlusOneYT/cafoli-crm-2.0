@@ -209,12 +209,10 @@ export const sendScheduledReports = internalAction({
 });
 
 export const sendTestReport = action({
-  args: {
-    email: v.string(),
-  },
+  args: {},
   handler: async (ctx, args) => {
-    const cleanEmail = args.email.trim();
-    console.log(`Generating test report for: "${cleanEmail}"`);
+    const targetEmail = "info@cafoli.in";
+    console.log(`Generating test report for: "${targetEmail}"`);
 
     const now = Date.now();
     const startDate = now - 24 * 60 * 60 * 1000; // Last 24 hours for test
@@ -237,7 +235,7 @@ export const sendTestReport = action({
 
     try {
       await ctx.runAction(internal.brevo.sendEmailInternal, {
-        to: cleanEmail,
+        to: targetEmail,
         toName: "Admin",
         subject: `Cafoli CRM - Test Report - ${dateRangeLabel}`,
         htmlContent: html,

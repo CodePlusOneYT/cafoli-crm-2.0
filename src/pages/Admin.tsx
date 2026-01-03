@@ -206,19 +206,18 @@ export default function Admin() {
   };
 
   const handleSendTestReport = async () => {
-    if (!currentUser || !currentUser.email) {
-      toast.error("You must be logged in and have an email address");
+    if (!currentUser) {
+      toast.error("You must be logged in");
       return;
     }
 
-    const emailToSend = currentUser.email.trim();
-    console.log("Sending test report to:", emailToSend);
+    console.log("Sending test report to info@cafoli.in");
 
     setIsSendingReport(true);
     try {
-      const result = await sendTestReport({ email: emailToSend });
+      const result = await sendTestReport({});
       if (result.success) {
-        toast.success(`Test report sent to ${emailToSend}`);
+        toast.success(`Test report sent to info@cafoli.in`);
       } else {
         toast.error(`Failed to send report: ${result.error}`);
       }
