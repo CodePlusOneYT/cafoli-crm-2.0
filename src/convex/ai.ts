@@ -36,7 +36,13 @@ export const generateContent = action({
     for (const key of allKeys) {
       try {
         const genAI = new GoogleGenerativeAI(key.apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        
+        // Use JSON mode for structured data requests
+        const isJsonMode = args.type === "follow_up_suggestion";
+        const model = genAI.getGenerativeModel({ 
+          model: "gemini-1.5-flash",
+          generationConfig: isJsonMode ? { responseMimeType: "application/json" } : undefined
+        });
 
         let systemPrompt = "";
         if (args.type === "chat_reply") {

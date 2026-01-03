@@ -1,0 +1,16 @@
+        const parsed = JSON.parse(cleanResult);
+        if (parsed.days && parsed.message) {
+          console.log("✅ JSON Structure Valid");
+        } else {
+          console.warn("⚠️ JSON Structure Invalid (missing keys)");
+        }
+      } catch (e) {
+        console.error("❌ JSON Parsing Failed");
+      }
+    } catch (e) {
+      console.error("❌ Follow-up Suggestion Failed:", e);
+    }
+
+    console.log("\nTests Completed.");
+  },
+});
