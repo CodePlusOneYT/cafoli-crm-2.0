@@ -24,6 +24,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface LeadDetailsProps {
   leadId: Id<"leads">;
@@ -50,7 +58,15 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
     startEditing,
     cancelEditing,
     saveEdits,
+    showFollowUpCheck,
+    showNewFollowUpDialog,
+    setShowNewFollowUpDialog,
+    handleFollowUpDone,
+    handleFollowUpNotDone,
+    handleNewFollowUpDate,
   } = useLeadEditor({ lead, user });
+
+  const [tempFollowUpDate, setTempFollowUpDate] = useState<string>("");
 
   const handleDelete = async () => {
     if (!user || !lead) return;
@@ -264,6 +280,64 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
           onAddComment={handleAddComment} 
         />
       </div>
+
+      {/* Follow-up Check Dialog */}
+      <Dialog open={showFollowUpCheck} onOpenChange={(open) => !open && handleFollowUpNotDone()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Follow-up Check</DialogTitle>
+            <DialogDescription>
+              Is the follow-up for this lead done?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button variant="outline" onClick={handleFollowUpNotDone}>
+              No
+            </Button>
+            <Button onClick={handleFollowUpDone}>
+              Yes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Follow-up Date Dialog */}
+      <Dialog open={showNewFollowUpDialog} onOpenChange={setShowNewFollowUpDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Next Follow-up</DialogTitle>
+            <DialogDescription>
+              Please schedule the next follow-up date.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              type="datetime-local"
+              value={tempFollowUpDate}
+              onChange={(e) => setTempFollowUpDate(e.target.value)}
+              min={getMinDateTime()}
+              max={getMaxDateTime()}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewFollowUpDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (tempFollowUpDate) {
+                  handleNewFollowUpDate(new Date(tempFollowUpDate).getTime());
+                  setTempFollowUpDate("");
+                } else {
+                  toast.error("Please select a date");
+                }
+              }}
+            >
+              Set Date
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

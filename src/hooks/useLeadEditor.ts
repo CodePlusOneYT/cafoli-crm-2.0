@@ -16,6 +16,9 @@ export function useLeadEditor({ lead, user }: UseLeadEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedLead, setEditedLead] = useState<Partial<Doc<"leads">>>({});
   const [newComment, setNewComment] = useState("");
+  
+  const [showFollowUpCheck, setShowFollowUpCheck] = useState(false);
+  const [showNewFollowUpDialog, setShowNewFollowUpDialog] = useState(false);
 
   const handleStatusChange = async (status: string) => {
     if (!user || !lead) return;
@@ -34,6 +37,51 @@ export function useLeadEditor({ lead, user }: UseLeadEditorProps) {
     await addComment({ leadId: lead._id, content: newComment, userId: user._id });
     setNewComment("");
     toast.success("Comment added");
+
+    if (lead.nextFollowUpDate) {
+      const tenMinutesBefore = lead.nextFollowUpDate - (10 * 60 * 1000);
+      if (Date.now() >= tenMinutesBefore) {
+        setShowFollowUpCheck(true);
+      }
+    }
+  };
+
+  const handleFollowUpDone = () => {
+    setShowFollowUpCheck(false);
+    setShowNewFollowUpDialog(true);
+  };
+
+  const handleFollowUpNotDone = () => {
+    setShowFollowUpCheck(false);
+  };
+
+  const handleNewFollowUpDate = async (date: number) => {
+    if (!user || !lead) return;
+    
+    const now = Date.now();
+    const maxFutureDate = now + (31 * 24 * 60 * 60 * 1000);
+
+    if (date <= now) {
+      toast.error("Follow-up date must be in the future");
+      return;
+    }
+
+    if (date > maxFutureDate) {
+      toast.error("Follow-up date cannot be more than 31 days in the future");
+      return;
+    }
+
+    try {
+      await updateLead({ 
+          id: lead._id, 
+          patch: { nextFollowUpDate: date }, 
+          userId: user._id 
+      });
+      toast.success("Follow-up date updated");
+      setShowNewFollowUpDialog(false);
+    } catch (error) {
+      toast.error("Failed to update follow-up date");
+    }
   };
 
   const handleTagsChange = async (newTags: Id<"tags">[]) => {
@@ -131,5 +179,11 @@ export function useLeadEditor({ lead, user }: UseLeadEditorProps) {
     startEditing,
     cancelEditing,
     saveEdits,
+    showFollowUpCheck,
+    showNewFollowUpDialog,
+    setShowNewFollowUpDialog,
+    handleFollowUpDone,
+    handleFollowUpNotDone,
+    handleNewFollowUpDate,
   };
 }
