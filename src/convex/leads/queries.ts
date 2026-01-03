@@ -487,3 +487,26 @@ export const getMyLeadsWithoutFollowUp = query({
     return leads.filter(l => l.type !== "Irrelevant");
   },
 });
+
+export const getUpcomingFollowUps = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const thirtyMinutesFromNow = now + (30 * 60 * 1000);
+    
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
+      .collect();
+    
+    // Filter leads with follow-ups in the next 30 minutes
+    return leads
+      .filter(l => 
+        l.type !== "Irrelevant" && 
+        l.nextFollowUpDate && 
+        l.nextFollowUpDate >= now - (1 * 60 * 1000) && // Include 1 minute past
+        l.nextFollowUpDate <= thirtyMinutesFromNow
+      )
+      .sort((a, b) => (a.nextFollowUpDate || 0) - (b.nextFollowUpDate || 0));
+  },
+});

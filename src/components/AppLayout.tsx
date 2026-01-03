@@ -29,6 +29,7 @@ import { ColdCallerPopup } from "@/components/ColdCallerPopup";
 import { ProductUploadDialog } from "@/components/products/ProductUploadDialog";
 import { InterventionPopup } from "./InterventionPopup";
 import { api } from "@/convex/_generated/api";
+import { FollowUpNotifications } from "./FollowUpNotifications";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -284,10 +285,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Popups Sequence: 
-          1. Mandatory Follow Up (Set follow up date)
-          2. Lead Reminders (Hot/Mature then Cold)
-          3. Intervention Requests (Product not found)
+          1. Follow-up Notifications (10min, 5min, 1min, now)
+          2. Mandatory Follow Up (Set follow up date)
+          3. Lead Reminders (Hot/Mature then Cold)
+          4. Intervention Requests (Product not found)
       */}
+      {user && <FollowUpNotifications />}
+      
       {leadsWithoutFollowUp && leadsWithoutFollowUp.length > 0 ? (
         <MandatoryFollowUpPopup leads={leadsWithoutFollowUp} />
       ) : (
@@ -306,6 +310,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           userId={user._id}
         />
       )}
+
       {/* Desktop Sidebar */}
       <div className="hidden md:block w-64 fixed inset-y-0 z-50">
         {renderSidebarContent()}
