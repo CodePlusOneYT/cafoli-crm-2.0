@@ -21,7 +21,8 @@ export default defineSchema({
 
   rangePdfs: defineTable({
     name: v.string(),
-    division: v.string(),
+    division: v.optional(v.string()),
+    category: v.optional(v.string()), // "DIVISION" or "THERAPEUTIC"
     storageId: v.id("_storage"),
   })
   .index("by_name", ["name"])

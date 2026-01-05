@@ -4,13 +4,15 @@ import { v } from "convex/values";
 export const createRangePdf = mutation({
   args: {
     name: v.string(),
-    division: v.string(),
+    division: v.optional(v.string()),
+    category: v.optional(v.string()),
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
     const rangeId = await ctx.db.insert("rangePdfs", {
       name: args.name,
       division: args.division,
+      category: args.category || "DIVISION",
       storageId: args.storageId,
     });
     return rangeId;

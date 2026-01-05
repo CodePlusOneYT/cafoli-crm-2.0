@@ -93,7 +93,12 @@ export const generateAndSendAiReply = action({
     const productNames = products.map((p: any) => p.name).join(", ");
     
     const rangePdfs = await ctx.runQuery(api.rangePdfs.listRangePdfs);
-    const rangeNames = rangePdfs.map((r: any) => `${r.name} (Division: ${r.division})`).join("; ");
+    const rangeNames = rangePdfs.map((r: any) => {
+      if (r.category === "THERAPEUTIC") {
+        return `${r.name} (Therapeutic Range)`;
+      }
+      return `${r.name} (Division: ${r.division})`;
+    }).join("; ");
 
     const aiResponse = (await ctx.runAction(api.ai.generateContent, {
       prompt: args.prompt || "Draft a reply to this conversation",
@@ -120,9 +125,12 @@ export const generateAndSendAiReply = action({
     let rangePdfsToSend: any[] = [];
 
     try {
-        const trimmedResponse = aiResponse.trim();
-        if (trimmedResponse.startsWith("{") && trimmedResponse.endsWith("}")) {
-            const parsed = JSON.parse(trimmedResponse);
+        // Extract JSON from response (handling potential markdown code blocks or preambles)
+        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : aiResponse.trim();
+        
+        if (jsonString.startsWith("{") && jsonString.endsWith("}")) {
+            const parsed = JSON.parse(jsonString);
             
             // Handle Product Match
             if (parsed.productName) {
@@ -150,22 +158,36 @@ export const generateAndSendAiReply = action({
             } 
             // Handle Range Match
             else if (parsed.rangeName) {
-                const range = rangePdfs.find((r: any) => r.name.toLowerCase() === parsed.rangeName.toLowerCase());
-                if (range) {
-                    messageToSend = `Here is the PDF for *${range.name}* (${range.division}). 📄`;
-                    mediaToSend = {
-                        storageId: range.storageId,
-                        fileName: `${range.name}.pdf`,
-                        mimeType: "application/pdf"
-                    };
+                // Find ALL ranges that match the name (ignoring case)
+                // This handles cases where the same range name exists in multiple divisions
+                const matchingRanges = rangePdfs.filter((r: any) => 
+                    r.name.toLowerCase() === parsed.rangeName.toLowerCase()
+                );
+
+                if (matchingRanges.length > 0) {
+                    // If multiple matches, send all of them
+                    if (matchingRanges.length > 1) {
+                        messageToSend = `Here are the PDFs for *${parsed.rangeName}*. 📄`;
+                        rangePdfsToSend = matchingRanges;
+                    } else {
+                        const range = matchingRanges[0];
+                        const divisionInfo = range.division ? ` (${range.division})` : "";
+                        messageToSend = `Here is the PDF for *${range.name}*${divisionInfo}. 📄`;
+                        mediaToSend = {
+                            storageId: range.storageId,
+                            fileName: `${range.name}.pdf`,
+                            mimeType: "application/pdf"
+                        };
+                    }
                 } else {
                     messageToSend = `I couldn't find the PDF for ${parsed.rangeName}. Please check the name and try again.`;
                 }
             }
             // Handle Full Catalogue
             else if (parsed.fullCatalogue) {
-                messageToSend = `Here are all our product range catalogs. 📚`;
-                rangePdfsToSend = rangePdfs;
+                messageToSend = `Here is our full product catalogue: https://cafoli.in/allproduct.aspx 📚`;
+                // We do NOT send all PDFs individually anymore as per user request to send the link
+                rangePdfsToSend = []; 
             }
             else if (parsed.message) {
                 messageToSend = parsed.message;
@@ -173,6 +195,7 @@ export const generateAndSendAiReply = action({
         }
     } catch (e) {
         // Not valid JSON, treat as plain text response
+        console.log("Failed to parse AI JSON response:", e);
     }
 
     // 5. Send message immediately via WhatsApp

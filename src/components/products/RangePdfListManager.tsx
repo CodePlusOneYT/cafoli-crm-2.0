@@ -52,6 +52,7 @@ export function RangePdfListManager() {
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
+            <TableHead>Type</TableHead>
             <TableHead>Division</TableHead>
             <TableHead>File</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -60,7 +61,7 @@ export function RangePdfListManager() {
         <TableBody>
           {rangePdfs.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                 No range PDFs uploaded yet.
               </TableCell>
             </TableRow>
@@ -68,7 +69,16 @@ export function RangePdfListManager() {
             rangePdfs.map((pdf) => (
               <TableRow key={pdf._id}>
                 <TableCell className="font-medium">{pdf.name}</TableCell>
-                <TableCell>{pdf.division}</TableCell>
+                <TableCell>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    pdf.category === "THERAPEUTIC" 
+                      ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" 
+                      : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                  }`}>
+                    {pdf.category === "THERAPEUTIC" ? "Therapeutic" : "Division"}
+                  </span>
+                </TableCell>
+                <TableCell>{pdf.division || "-"}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />

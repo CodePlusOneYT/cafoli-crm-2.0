@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { Loader2, Plus, Upload, X, FileText } from "lucide-react";
 
@@ -25,6 +26,7 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [division, setDivision] = useState("");
+  const [category, setCategory] = useState("DIVISION"); // "DIVISION" or "THERAPEUTIC"
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const generateUploadUrl = useMutation(api.rangePdfs.generateUploadUrl);
@@ -47,8 +49,14 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !division || !selectedFile) {
-      toast.error("Please fill in all required fields and select a PDF");
+    
+    if (!name || !selectedFile) {
+      toast.error("Please fill in name and select a PDF");
+      return;
+    }
+
+    if (category === "DIVISION" && !division) {
+      toast.error("Please enter a division name");
       return;
     }
 
@@ -65,7 +73,8 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
 
       await createRangePdf({
         name,
-        division,
+        division: category === "DIVISION" ? division : undefined,
+        category,
         storageId,
       });
 
@@ -74,6 +83,7 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
       // Reset form
       setName("");
       setDivision("");
+      setCategory("DIVISION");
       setSelectedFile(null);
     } catch (error) {
       console.error(error);
@@ -104,14 +114,30 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
+            <Label>Range Type</Label>
+            <RadioGroup defaultValue="DIVISION" value={category} onValueChange={setCategory} className="flex gap-4">
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="DIVISION" id="r1" />
+                <Label htmlFor="r1">Division Range</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="THERAPEUTIC" id="r2" />
+                <Label htmlFor="r2">Therapeutic Range</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="name">Range Name *</Label>
             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Cardiac Range" />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="division">Division *</Label>
-            <Input id="division" value={division} onChange={(e) => setDivision(e.target.value)} required placeholder="e.g. Main Division" />
-          </div>
+          {category === "DIVISION" && (
+            <div className="space-y-2">
+              <Label htmlFor="division">Division *</Label>
+              <Input id="division" value={division} onChange={(e) => setDivision(e.target.value)} required placeholder="e.g. Main Division" />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>PDF File *</Label>
