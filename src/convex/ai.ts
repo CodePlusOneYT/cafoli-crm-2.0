@@ -86,8 +86,11 @@ export const generateContent = action({
             1. RANGE PDF REQUESTS:
             When a customer asks for a specific division, category, or range (e.g., "Gynecology range", "Cardiac division", "General products"):
             - Check if the requested range matches ANY item in the available ranges list: ${args.context?.availableRanges || "None"}
-            - If you find a match (even partial), respond with JSON: { "rangeName": "Exact Range Name From List" }
-            - Example: If user asks for "Gynae" and list has "Gynecology Range", return { "rangeName": "Gynecology Range" }
+            - The list is formatted as "Range Name (Division: Division Name)".
+            - Use your NLP capabilities to match the user's request (handling typos, synonyms, or partial matches) to one of the specific ranges in the list.
+            - If you find a match, respond with JSON: { "rangeName": "Exact Range Name" }
+            - IMPORTANT: The "rangeName" in the JSON must be the EXACT name from the list (excluding the division part).
+            - Example: If list has "Gynae Range (Division: Main)" and user asks for "gyno", return { "rangeName": "Gynae Range" }
             
             2. FULL CATALOGUE REQUESTS:
             When a customer asks for "all products", "full catalog", "complete list", or "send me all PDFs":

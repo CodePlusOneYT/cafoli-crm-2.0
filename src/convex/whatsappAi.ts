@@ -93,7 +93,7 @@ export const generateAndSendAiReply = action({
     const productNames = products.map((p: any) => p.name).join(", ");
     
     const rangePdfs = await ctx.runQuery(api.rangePdfs.listRangePdfs);
-    const rangeNames = rangePdfs.map((r: any) => r.name).join(", ");
+    const rangeNames = rangePdfs.map((r: any) => `${r.name} (Division: ${r.division})`).join("; ");
 
     const aiResponse = (await ctx.runAction(api.ai.generateContent, {
       prompt: args.prompt || "Draft a reply to this conversation",
