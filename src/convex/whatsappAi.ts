@@ -178,16 +178,20 @@ export const generateAndSendAiReply = action({
                         `${product.description || ""}`
                     ).join("\n\n-------------------\n\n");
                     
-                    // Collect images for all matched products
+                    // Collect ALL images for all matched products
                     for (const product of matchedProducts) {
                         if (product.images && product.images.length > 0) {
-                            console.log(`✓ Adding image for product ${product.name}: ${product.images[0]}`);
-                            mediasToSend.push({
-                                storageId: product.images[0],
-                                fileName: `${product.name}.jpg`,
-                                mimeType: "image/jpeg",
-                                caption: `${product.name}`
-                            });
+                            console.log(`✓ Product ${product.name} has ${product.images.length} images`);
+                            // Add ALL images for this product, not just the first one
+                            for (let i = 0; i < product.images.length; i++) {
+                                console.log(`  - Adding image ${i + 1}/${product.images.length}: ${product.images[i]}`);
+                                mediasToSend.push({
+                                    storageId: product.images[i],
+                                    fileName: `${product.name}_${i + 1}.jpg`,
+                                    mimeType: "image/jpeg",
+                                    caption: i === 0 ? `${product.name}` : `${product.name} (Image ${i + 1})`
+                                });
+                            }
                         } else {
                             console.log(`✗ No images found for product: ${product.name}`);
                         }
