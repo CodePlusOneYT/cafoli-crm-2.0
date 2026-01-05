@@ -7,6 +7,8 @@ import GeminiKeyManager from "@/components/GeminiKeyManager";
 import { AllocateColdCallerDialog } from "@/components/admin/AllocateColdCallerDialog";
 import { ProductUploadDialog } from "@/components/products/ProductUploadDialog";
 import { ProductListManager } from "@/components/products/ProductListManager";
+import { RangePdfUploadDialog } from "@/components/products/RangePdfUploadDialog";
+import { RangePdfListManager } from "@/components/products/RangePdfListManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield } from "lucide-react";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -469,8 +471,17 @@ export default function Admin() {
 
           <TabsContent value="products" className="mt-6 space-y-6">
             <div className="grid gap-6">
-              <ProductUploadDialog />
-              <ProductListManager />
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">Product Catalog</h2>
+                <ProductUploadDialog />
+                <ProductListManager />
+              </div>
+              
+              <div className="space-y-4 pt-6 border-t">
+                <h2 className="text-lg font-semibold">Range PDFs</h2>
+                <RangePdfUploadDialog />
+                <RangePdfListManager />
+              </div>
             </div>
           </TabsContent>
 

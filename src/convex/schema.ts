@@ -19,6 +19,14 @@ export default defineSchema({
     pageLink: v.optional(v.string()),
   }).index("by_name", ["name"]),
 
+  rangePdfs: defineTable({
+    name: v.string(),
+    division: v.string(),
+    storageId: v.id("_storage"),
+  })
+  .index("by_name", ["name"])
+  .index("by_division", ["division"]),
+
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),

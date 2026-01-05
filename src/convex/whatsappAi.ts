@@ -91,6 +91,9 @@ export const generateAndSendAiReply = action({
     // 3. If NOT a contact request, proceed with normal AI reply generation
     const products = await ctx.runQuery(api.products.listProducts);
     const productNames = products.map((p: any) => p.name).join(", ");
+    
+    const rangePdfs = await ctx.runQuery(api.rangePdfs.listRangePdfs);
+    const rangeNames = rangePdfs.map((r: any) => r.name).join(", ");
 
     const aiResponse = (await ctx.runAction(api.ai.generateContent, {
       prompt: args.prompt || "Draft a reply to this conversation",
@@ -98,6 +101,7 @@ export const generateAndSendAiReply = action({
       context: {
         ...args.context,
         availableProducts: productNames,
+        availableRanges: rangeNames,
         isAutoReply: args.isAutoReply
       },
       userId: userId,
@@ -108,16 +112,19 @@ export const generateAndSendAiReply = action({
       throw new Error("AI failed to generate a response");
     }
 
-    // 4. Check if the response indicates a product match (JSON format)
+    // 4. Check if the response indicates a product match or range match (JSON format)
     let messageToSend = aiResponse;
     let mediaToSend = null;
     let productNotFound = false;
     let requestedProductName = "";
+    let rangePdfsToSend: any[] = [];
 
     try {
         const trimmedResponse = aiResponse.trim();
         if (trimmedResponse.startsWith("{") && trimmedResponse.endsWith("}")) {
             const parsed = JSON.parse(trimmedResponse);
+            
+            // Handle Product Match
             if (parsed.productName) {
                 const product = products.find((p: any) => p.name.toLowerCase() === parsed.productName.toLowerCase());
                 if (product) {
@@ -140,7 +147,27 @@ export const generateAndSendAiReply = action({
                     requestedProductName = parsed.productName;
                     messageToSend = "This product image and details will be shared shortly. 📦";
                 }
-            } else if (parsed.message) {
+            } 
+            // Handle Range Match
+            else if (parsed.rangeName) {
+                const range = rangePdfs.find((r: any) => r.name.toLowerCase() === parsed.rangeName.toLowerCase());
+                if (range) {
+                    messageToSend = `Here is the PDF for *${range.name}* (${range.division}). 📄`;
+                    mediaToSend = {
+                        storageId: range.storageId,
+                        fileName: `${range.name}.pdf`,
+                        mimeType: "application/pdf"
+                    };
+                } else {
+                    messageToSend = `I couldn't find the PDF for ${parsed.rangeName}. Please check the name and try again.`;
+                }
+            }
+            // Handle Full Catalogue
+            else if (parsed.fullCatalogue) {
+                messageToSend = `Here are all our product range catalogs. 📚`;
+                rangePdfsToSend = rangePdfs;
+            }
+            else if (parsed.message) {
                 messageToSend = parsed.message;
             }
         }
@@ -149,7 +176,28 @@ export const generateAndSendAiReply = action({
     }
 
     // 5. Send message immediately via WhatsApp
-    if (mediaToSend) {
+    if (rangePdfsToSend.length > 0) {
+        // Send initial message
+        await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
+            phoneNumber: args.phoneNumber,
+            message: messageToSend,
+            leadId: args.leadId,
+            quotedMessageId: args.replyingToMessageId,
+            quotedMessageExternalId: args.replyingToExternalId,
+        });
+        
+        // Send all PDFs
+        for (const range of rangePdfsToSend) {
+            await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
+                phoneNumber: args.phoneNumber,
+                message: `${range.name} (${range.division})`,
+                leadId: args.leadId,
+                storageId: range.storageId,
+                fileName: `${range.name}.pdf`,
+                mimeType: "application/pdf",
+            });
+        }
+    } else if (mediaToSend) {
         await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
             phoneNumber: args.phoneNumber,
             message: messageToSend,

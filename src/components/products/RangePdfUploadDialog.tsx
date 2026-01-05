@@ -1,0 +1,159 @@
+import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { Loader2, Plus, Upload, X, FileText } from "lucide-react";
+
+interface RangePdfUploadDialogProps {
+  disabled?: boolean;
+}
+
+export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [division, setDivision] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  const generateUploadUrl = useMutation(api.rangePdfs.generateUploadUrl);
+  const createRangePdf = useMutation(api.rangePdfs.createRangePdf);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.type !== "application/pdf") {
+        toast.error("Please upload a PDF file");
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !division || !selectedFile) {
+      toast.error("Please fill in all required fields and select a PDF");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Upload PDF
+      const postUrl = await generateUploadUrl();
+      const result = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": selectedFile.type },
+        body: selectedFile,
+      });
+      const { storageId } = await result.json();
+
+      await createRangePdf({
+        name,
+        division,
+        storageId,
+      });
+
+      toast.success("Range PDF uploaded successfully");
+      setOpen(false);
+      // Reset form
+      setName("");
+      setDivision("");
+      setSelectedFile(null);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to upload Range PDF");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button 
+          variant="outline" 
+          className="w-full justify-start gap-2"
+          disabled={disabled}
+        >
+          <Plus className="h-4 w-4" />
+          Upload Range PDF
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Upload Range PDF</DialogTitle>
+          <DialogDescription>
+            Add a new product range PDF catalog.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Range Name *</Label>
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Cardiac Range" />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="division">Division *</Label>
+            <Input id="division" value={division} onChange={(e) => setDivision(e.target.value)} required placeholder="e.g. Main Division" />
+          </div>
+
+          <div className="space-y-2">
+            <Label>PDF File *</Label>
+            {selectedFile ? (
+              <div className="relative bg-muted p-3 rounded-md flex items-center gap-3">
+                <FileText className="h-5 w-5 text-blue-500" />
+                <span className="text-sm truncate flex-1">{selectedFile.name}</span>
+                <button type="button" onClick={removeFile} className="text-destructive hover:text-destructive/80">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="pdf-upload"
+                />
+                <Label
+                  htmlFor="pdf-upload"
+                  className="flex items-center gap-2 px-4 py-2 border rounded-md cursor-pointer hover:bg-muted w-full justify-center"
+                >
+                  <Upload className="h-4 w-4" />
+                  Select PDF
+                </Label>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Upload PDF
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
