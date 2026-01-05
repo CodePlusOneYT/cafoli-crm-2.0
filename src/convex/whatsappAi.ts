@@ -46,7 +46,8 @@ export const generateAndSendAiReply = action({
     // 3. Check if customer is requesting to speak with salesperson
     const contactKeywords = [
       "speak", "talk", "contact", "call", "salesperson", "sales person",
-      "representative", "agent", "human", "person", "someone", "staff", "team member"
+      "representative", "agent", "human", "person", "someone", "staff", 
+      "team member", "sales team", "sales", "reach out", "connect with"
     ];
     
     const userMessage = (args.prompt || "").toLowerCase();
