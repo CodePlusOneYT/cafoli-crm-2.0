@@ -28,6 +28,8 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
   const markChatAsRead = useMutation(api.whatsappMutations.markChatAsRead);
   const generateAndSendAiReply = useAction(api.whatsappAi.generateAndSendAiReply);
   const incrementQuickReplyUsage = useMutation(api.quickReplies.incrementUsage);
+  const updateActiveSession = useMutation(api.activeChatSessions.updateActiveSession);
+  const removeActiveSession = useMutation(api.activeChatSessions.removeActiveSession);
 
   const [whatsappMessage, setWhatsappMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -40,6 +42,25 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update active session when chat is opened and periodically
+  useEffect(() => {
+    if (!user || !selectedLeadId) return;
+
+    // Mark session as active immediately
+    updateActiveSession({ leadId: selectedLeadId, userId: user._id });
+
+    // Update every 15 seconds to keep session alive
+    const interval = setInterval(() => {
+      updateActiveSession({ leadId: selectedLeadId, userId: user._id });
+    }, 15000);
+
+    // Cleanup on unmount or when lead changes
+    return () => {
+      clearInterval(interval);
+      removeActiveSession({ leadId: selectedLeadId, userId: user._id });
+    };
+  }, [selectedLeadId, user, updateActiveSession, removeActiveSession]);
 
   // Update time every minute to keep window status accurate
   useEffect(() => {

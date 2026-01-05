@@ -366,31 +366,30 @@ export const handleIncomingMessage = internalAction({
             console.error("Error sending welcome message:", error);
           }
         } else {
-            // TRIGGER AUTO REPLY FOR EXISTING LEADS
-            // We only auto-reply to text messages for now to avoid loops or confusion with media
+            // TRIGGER AUTO REPLY FOR EXISTING LEADS - BUT ONLY IF CHAT IS NOT ACTIVE
             if (args.type === "text") {
-                console.log(`Triggering auto-reply for lead ${leadId}`);
-                // We use runAction to call the public action (or we can make it internal)
-                // Since generateAndSendAiReply is public, we use api.whatsappAi
-                // But we are in an internalAction, so we can call public actions via ctx.runAction(api...)
+                // Check if someone is actively viewing this chat
+                const isChatActive = await ctx.runQuery(api.activeChatSessions.isLeadChatActive, { leadId });
                 
-                // We need a userId. We'll use a system user or just pass undefined if we handle it.
-                // I updated generateAndSendAiReply to make userId optional.
-                
-                // Get recent messages for context
-                const recentMessages = await ctx.runQuery(api.whatsappQueries.getChatMessages, { leadId });
-                const contextMessages = recentMessages.slice(-5).map((m: any) => ({
-                    role: m.direction === "outbound" ? "assistant" : "user",
-                    content: m.content
-                }));
+                if (!isChatActive) {
+                    console.log(`Triggering auto-reply for lead ${leadId} (chat not active)`);
+                    
+                    const recentMessages = await ctx.runQuery(api.whatsappQueries.getChatMessages, { leadId });
+                    const contextMessages = recentMessages.slice(-5).map((m: any) => ({
+                        role: m.direction === "outbound" ? "assistant" : "user",
+                        content: m.content
+                    }));
 
-                await ctx.runAction(api.whatsappAi.generateAndSendAiReply, {
-                    leadId,
-                    phoneNumber: args.from,
-                    context: { recentMessages: contextMessages },
-                    prompt: args.text, // Use the incoming message as the prompt/trigger
-                    isAutoReply: true
-                });
+                    await ctx.runAction(api.whatsappAi.generateAndSendAiReply, {
+                        leadId,
+                        phoneNumber: args.from,
+                        context: { recentMessages: contextMessages },
+                        prompt: args.text,
+                        isAutoReply: true
+                    });
+                } else {
+                    console.log(`Skipping auto-reply for lead ${leadId} (chat is actively being viewed)`);
+                }
             }
         }
 

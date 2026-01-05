@@ -337,6 +337,14 @@ export default defineSchema({
   })
     .index("by_assignedTo_and_status", ["assignedTo", "status"])
     .index("by_leadId", ["leadId"]),
+  
+  activeChatSessions: defineTable({
+    leadId: v.id("leads"),
+    userId: v.id("users"),
+    lastActivity: v.number(),
+  })
+    .index("by_leadId", ["leadId"])
+    .index("by_userId", ["userId"]),
 
   quickReplies: defineTable({
     name: v.string(),
