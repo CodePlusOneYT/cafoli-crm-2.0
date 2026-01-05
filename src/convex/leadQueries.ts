@@ -119,6 +119,11 @@ export const getPaginatedLeads = query({
         })
         .take(args.paginationOpts.numItems); 
 
+      // Filter out irrelevant leads for non-admins
+      if (user.role !== ROLES.ADMIN) {
+        results = results.filter(l => l.type !== "Irrelevant");
+      }
+
       results = applyFilters(results);
       results = sortLeads(results);
       const enrichedResults = await enrichLeads(results);
@@ -336,7 +341,19 @@ export const getLead = query({
   handler: async (ctx, args) => {
     const userId = args.userId || await getAuthUserId(ctx);
     if (!userId) return null;
-    return await ctx.db.get(args.id);
+
+    const lead = await ctx.db.get(args.id);
+    if (!lead) return null;
+
+    // Check permissions for irrelevant leads
+    if (lead.type === "Irrelevant") {
+      const user = await ctx.db.get(userId);
+      if (user?.role !== ROLES.ADMIN) {
+        return null;
+      }
+    }
+
+    return lead;
   },
 });
 
