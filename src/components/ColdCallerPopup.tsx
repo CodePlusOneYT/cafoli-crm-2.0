@@ -167,6 +167,9 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
                   <p className="text-xs text-muted-foreground mt-1">
                     Mobile: {lead.mobile}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Source: {lead.source}
+                  </p>
                 </div>
                 <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded">
                   Cold Caller
