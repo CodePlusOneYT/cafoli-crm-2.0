@@ -384,16 +384,22 @@ export const handleIncomingMessage = internalAction({
                     // Get configurable contact request message
                     const contactRequestMessage = await ctx.runQuery(api.whatsappConfig.getContactRequestMessage);
 
-                    await ctx.runAction(api.whatsappAi.generateAndSendAiReply, {
-                        leadId,
-                        phoneNumber: args.from,
-                        context: { 
-                            recentMessages: contextMessages,
-                            contactRequestMessage 
-                        },
-                        prompt: args.text,
-                        isAutoReply: true
-                    });
+                    // Cast to any to avoid circular dependency type issues during generation
+                    const whatsappAi = (api as any).whatsappAi;
+                    if (whatsappAi?.generateAndSendAiReply) {
+                        await ctx.runAction(whatsappAi.generateAndSendAiReply, {
+                            leadId,
+                            phoneNumber: args.from,
+                            context: { 
+                                recentMessages: contextMessages,
+                                contactRequestMessage 
+                            },
+                            prompt: args.text,
+                            isAutoReply: true
+                        });
+                    } else {
+                        console.error("Could not find whatsappAi.generateAndSendAiReply action");
+                    }
                 } else {
                     console.log(`Skipping auto-reply for lead ${leadId} (chat is actively being viewed)`);
                 }

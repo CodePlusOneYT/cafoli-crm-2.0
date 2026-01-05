@@ -1,16 +1,14 @@
-  const jsonMatch = text.match(jsonBlockRegex);
-  if (jsonMatch && jsonMatch[1]) {
-    return jsonMatch[1].trim();
-  }
-  
-  // Also try to find just a JSON object if no markdown but looks like JSON
-  const objectRegex = /(\{[\s\S]*\})/;
-  const objectMatch = text.match(objectRegex);
-  if (objectMatch && objectMatch[1]) {
-    return objectMatch[1].trim();
-  }
-  
-  return text.trim();
+if (jsonMatch && jsonMatch[1]) {
+  return jsonMatch[1].trim();
+}
+
+// Also try to find just a JSON object if no markdown but looks like JSON
+const objectMatch = text.match(/(\{[\s\S]*\})/);
+if (objectMatch && objectMatch[1]) {
+  return objectMatch[1].trim();
+}
+
+return text.trim();
 }
 
 export const generateAndSendAiReply = action({
@@ -23,15 +21,15 @@ export const generateAndSendAiReply = action({
   },
   handler: async (ctx, args) => {
     console.log(`Generating AI reply for ${args.phoneNumber}...`);
-    
+
     try {
       // 1. Get available products and ranges for context
       const products = await ctx.runQuery(api.products.listProducts);
       const ranges = await ctx.runQuery(api.whatsappQueries.listRangePdfs);
-      
+
       const productList = products.map(p => p.name).join(", ");
       const rangeList = ranges.map(r => `${r.name} (Division: ${r.division || "General"})`).join(", ");
-      
+
       // 2. Generate content using Gemini
       const aiResponse = await ctx.runAction(api.ai.generateContent, {
         prompt: args.prompt,
@@ -47,7 +45,7 @@ export const generateAndSendAiReply = action({
 
       // 3. Parse the response (handle JSON if present)
       const cleanedResponse = extractJsonFromMarkdown(aiResponse);
-      
+
       let parsedResponse;
       try {
         // Try to parse as JSON if it looks like it
@@ -63,17 +61,17 @@ export const generateAndSendAiReply = action({
         // CASE A: Full Catalogue Request
         if (parsedResponse.fullCatalogue) {
           console.log("AI detected full catalogue request");
-          
+
           // Send text first
           await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
             phoneNumber: args.phoneNumber,
             message: "Here is our complete product catalog. I'll send the PDFs now.",
             leadId: args.leadId,
           });
-          
+
           // Send all PDFs
           const allRanges = await ctx.runQuery(api.whatsappQueries.listRangePdfs);
-          
+
           // Send sequentially with delay to prevent OCC
           for (const range of allRanges) {
             try {
@@ -93,22 +91,22 @@ export const generateAndSendAiReply = action({
           }
           return;
         }
-        
+
         // CASE B: Specific Range Request
         if (parsedResponse.rangeName) {
           console.log(`AI detected range request: ${parsedResponse.rangeName}`);
-          
+
           const range = await ctx.runQuery(api.whatsappQueries.getRangePdfByName, { 
             name: parsedResponse.rangeName 
           });
-          
+
           if (range) {
             await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
               phoneNumber: args.phoneNumber,
               message: `Here is the ${parsedResponse.rangeName} you requested.`,
               leadId: args.leadId,
             });
-            
+
             await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
               phoneNumber: args.phoneNumber,
               leadId: args.leadId,
@@ -119,13 +117,13 @@ export const generateAndSendAiReply = action({
             return;
           }
         }
-        
+
         // CASE C: Product Images Request
         if (parsedResponse.productNames && Array.isArray(parsedResponse.productNames)) {
           console.log(`AI detected product image request: ${parsedResponse.productNames.join(", ")}`);
-          
+
           let foundAny = false;
-          
+
           // Send initial message
           await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
             phoneNumber: args.phoneNumber,
@@ -140,13 +138,13 @@ export const generateAndSendAiReply = action({
               p.name.toLowerCase().includes(productName.toLowerCase()) || 
               productName.toLowerCase().includes(p.name.toLowerCase())
             );
-            
+
             if (product && product.images && product.images.length > 0) {
               foundAny = true;
-              
+
               // Send ALL images for the product sequentially
               console.log(`Sending ${product.images.length} images for ${product.name}`);
-              
+
               for (let i = 0; i < product.images.length; i++) {
                 const imageId = product.images[i];
                 try {
@@ -158,17 +156,17 @@ export const generateAndSendAiReply = action({
                     mimeType: "image/jpeg", // Assuming JPEG, storage metadata would be better
                     message: i === 0 ? `Here are the images for ${product.name}` : undefined
                   });
-                  
+
                   // Add delay between images to prevent OCC errors
                   await new Promise(resolve => setTimeout(resolve, 1000));
-                  
+
                 } catch (err) {
                   console.error(`Failed to send image ${i+1} for ${product.name}:`, err);
                 }
               }
             }
           }
-          
+
           if (!foundAny) {
             await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
               phoneNumber: args.phoneNumber,
@@ -183,7 +181,7 @@ export const generateAndSendAiReply = action({
       // CASE D: Standard Text Reply (or fallback)
       // If it was JSON but not one of the special cases, or just plain text
       const textToSend = typeof parsedResponse === 'object' ? JSON.stringify(parsedResponse) : cleanedResponse;
-      
+
       await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
         phoneNumber: args.phoneNumber,
         message: textToSend,

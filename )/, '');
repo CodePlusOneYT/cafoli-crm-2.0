@@ -1,3 +1,11 @@
+  }
+  return text;
+}
+
+export const generateAndSendAiReply = action({
+  // ... keep existing code
+});
+=======
 "use node";
 import { action } from "./_generated/server";
 import { v } from "convex/values";
@@ -6,11 +14,4 @@ import { api } from "./_generated/api";
 // Helper to strip markdown code blocks from JSON
 function extractJsonFromMarkdown(text: string): string {
   // Try to find JSON inside markdown code blocks
-  // Using new RegExp to avoid potential parsing issues with literals in some environments
-  const jsonBlockRegex = /(?:^|(?<=\n))\s*```json\s*([\s\S]*?)\s*```(?:\n|$)/;
-  const jsonMatch = text.match(jsonBlockRegex);
-  if (jsonMatch) {
-    return jsonMatch[1];
-  }
-  return text;
-}
+  const jsonMatch = text.match(/
