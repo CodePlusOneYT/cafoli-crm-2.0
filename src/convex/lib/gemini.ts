@@ -5,14 +5,9 @@ import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 
 export const modelsToTry = [
-  "gemini-2.0-flash",
   "gemini-3-flash",
   "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash-exp",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-pro"
+  "gemini-2.5-flash"
 ];
 
 export function extractJsonFromMarkdown(text: string): string {
