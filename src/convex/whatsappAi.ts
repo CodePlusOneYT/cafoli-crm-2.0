@@ -43,15 +43,25 @@ export const generateAndSendAiReply = action({
       throw new Error("AI failed to generate a response");
     }
 
-    // 3. Check if customer is requesting to speak with salesperson
-    const contactKeywords = [
-      "speak", "talk", "contact", "call", "salesperson", "sales person",
-      "representative", "agent", "human", "person", "someone", "staff", 
-      "team member", "sales team", "sales", "reach out", "connect with"
-    ];
+    // 3. Use AI to intelligently detect if customer wants to speak with salesperson
+    let isContactRequest = false;
     
-    const userMessage = (args.prompt || "").toLowerCase();
-    const isContactRequest = contactKeywords.some(keyword => userMessage.includes(keyword));
+    try {
+      const detectionResponse = await ctx.runAction(api.ai.generateContent, {
+        prompt: args.prompt || "",
+        type: "contact_request_detection",
+        context: {
+          conversationHistory: args.context?.conversationHistory || [],
+        },
+        userId: userId,
+        leadId: args.leadId,
+      }) as string;
+
+      const detection = JSON.parse(detectionResponse.trim());
+      isContactRequest = detection.wantsContact === true && detection.confidence !== "low";
+    } catch (e) {
+      console.warn("Failed to detect contact request with AI, skipping:", e);
+    }
 
     if (isContactRequest) {
       // Get lead details to find assigned user
@@ -62,7 +72,7 @@ export const generateAndSendAiReply = action({
         await ctx.runMutation(api.contactRequests.createContactRequest, {
           leadId: args.leadId,
           assignedTo: lead.assignedTo,
-          customerMessage: args.prompt || userMessage,
+          customerMessage: args.prompt || "",
         });
 
         // Send automated response

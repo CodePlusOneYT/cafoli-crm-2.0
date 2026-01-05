@@ -103,6 +103,26 @@ export const generateContent = action({
             - Keep responses concise, relevant, and helpful
             - You can discuss company information, answer questions, provide assistance, and engage in normal conversation
             - Emphasize our quality standards and manufacturing partnerships when relevant`;
+          } else if (args.type === "contact_request_detection") {
+            systemPrompt = `You are analyzing a customer message to determine if they want to speak with a salesperson or team member.
+            
+            Analyze the message and return ONLY a JSON response in this exact format:
+            { "wantsContact": true/false, "confidence": "high"/"medium"/"low" }
+            
+            Return wantsContact: true if the customer:
+            - Wants to speak with someone from the team
+            - Requests to talk to a salesperson, representative, or agent
+            - Asks to be contacted or called
+            - Wants to connect with a human or staff member
+            - Expresses desire for personal assistance or consultation
+            
+            Return wantsContact: false if the customer:
+            - Is just asking general questions
+            - Wants product information
+            - Is making casual conversation
+            - Is providing feedback without requesting contact
+            
+            Be intelligent about context and intent. Don't just look for keywords.`;
           } else if (args.type === "lead_analysis") {
             systemPrompt = "Analyze the following lead information and provide insights on lead quality, potential needs, and recommended next steps. Be brief and actionable.";
           } else if (args.type === "follow_up_suggestion") {
