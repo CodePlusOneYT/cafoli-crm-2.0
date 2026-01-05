@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useState } from "react";
 import { useMutation } from "convex/react";
@@ -20,6 +21,13 @@ interface ColdCallerPopupProps {
 
 export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPopupProps) {
   const [followUpDates, setFollowUpDates] = useState<Record<string, string>>({});
+  const [leadTypes, setLeadTypes] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    leads.forEach(lead => {
+      initial[lead._id] = lead.type || "To be Decided";
+    });
+    return initial;
+  });
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
   const updateLead = useMutation(api.leads.standard.updateLead);
   const [searchParams] = useSearchParams();
@@ -27,6 +35,10 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
 
   const handleDateChange = (leadId: string, date: string) => {
     setFollowUpDates(prev => ({ ...prev, [leadId]: date }));
+  };
+
+  const handleTypeChange = (leadId: string, type: string) => {
+    setLeadTypes(prev => ({ ...prev, [leadId]: type }));
   };
 
   const setOneHourTimer = (leadId: string) => {
@@ -58,20 +70,21 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
     }
 
     try {
-      // Update all leads with follow-up dates
+      // Update all leads with follow-up dates and types
       await Promise.all(
         leads.map(lead => 
           updateLead({
             id: lead._id,
             patch: {
               nextFollowUpDate: new Date(followUpDates[lead._id]).getTime(),
+              type: leadTypes[lead._id],
             },
             userId,
           })
         )
       );
 
-      toast.success("Follow-up dates set for all Cold Caller Leads");
+      toast.success("Follow-up dates and lead types set for all Cold Caller Leads");
       onClose();
     } catch (error) {
       toast.error("Failed to set follow-up dates");
@@ -101,7 +114,7 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
             🎯 Cold Caller Leads - Set Follow-up Dates
           </DialogTitle>
           <DialogDescription>
-            You have {leads.length} Cold Caller Leads assigned to you. Please set follow-up dates for all of them to continue.
+            You have {leads.length} Cold Caller Leads assigned to you. Please set follow-up dates and classify all of them to continue.
           </DialogDescription>
         </DialogHeader>
         
@@ -134,28 +147,47 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
                 </span>
               </div>
               
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor={`followup-${lead._id}`}>Follow-up Date & Time *</Label>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setOneHourTimer(lead._id)}
-                    className="h-6 text-xs bg-white hover:bg-blue-50 text-blue-600 border-blue-200"
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor={`type-${lead._id}`}>Lead Classification *</Label>
+                  <Select 
+                    value={leadTypes[lead._id]} 
+                    onValueChange={(value) => handleTypeChange(lead._id, value)}
                   >
-                    +1 Hour
-                  </Button>
+                    <SelectTrigger id={`type-${lead._id}`} className="w-full mt-1">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="To be Decided">To be Decided</SelectItem>
+                      <SelectItem value="Relevant">Relevant</SelectItem>
+                      <SelectItem value="Irrelevant">Irrelevant</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Input
-                  id={`followup-${lead._id}`}
-                  type="datetime-local"
-                  value={followUpDates[lead._id] || ""}
-                  onChange={(e) => handleDateChange(lead._id, e.target.value)}
-                  min={getMinDateTime()}
-                  max={getMaxDateTime()}
-                  required
-                  className="w-full"
-                />
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor={`followup-${lead._id}`}>Follow-up Date & Time *</Label>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setOneHourTimer(lead._id)}
+                      className="h-6 text-xs bg-white hover:bg-blue-50 text-blue-600 border-blue-200"
+                    >
+                      +1 Hour
+                    </Button>
+                  </div>
+                  <Input
+                    id={`followup-${lead._id}`}
+                    type="datetime-local"
+                    value={followUpDates[lead._id] || ""}
+                    onChange={(e) => handleDateChange(lead._id, e.target.value)}
+                    min={getMinDateTime()}
+                    max={getMaxDateTime()}
+                    required
+                    className="w-full"
+                  />
+                </div>
               </div>
             </div>
           ))}
