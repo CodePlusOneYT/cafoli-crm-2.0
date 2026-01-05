@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { useSearchParams } from "react-router";
@@ -46,6 +46,7 @@ export default function Leads() {
   const [whatsAppLeadId, setWhatsAppLeadId] = useState<Id<"leads"> | null>(null);
   const [filterSidebarOpen, setFilterSidebarOpen] = useState(false);
   const [viewColdCallerLeads, setViewColdCallerLeads] = useState(false);
+  const [viewIrrelevantLeads, setViewIrrelevantLeads] = useState(false);
 
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leadQueries.getUniqueSources) || [];
@@ -100,6 +101,12 @@ export default function Leads() {
 
   const availableStatuses = ["Cold", "Hot", "Mature"];
 
+  // Reset view states when path changes
+  useEffect(() => {
+    setViewColdCallerLeads(false);
+    setViewIrrelevantLeads(false);
+  }, [path]);
+
   // Use client-side filtering for now
   const ITEMS_PER_PAGE = 50;
   const [paginationOpts, setPaginationOpts] = useState({ numItems: ITEMS_PER_PAGE, cursor: null as string | null });
@@ -108,7 +115,7 @@ export default function Leads() {
     api.leadQueries.getPaginatedLeads,
     user ? {
       userId: user._id,
-      filter: viewColdCallerLeads ? "cold_caller" : filter,
+      filter: viewIrrelevantLeads ? "irrelevant" : viewColdCallerLeads ? "cold_caller" : filter,
       search: search || undefined,
       statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
       sources: selectedSources.length > 0 ? selectedSources : undefined,
@@ -125,7 +132,7 @@ export default function Leads() {
   useMemo(() => {
     setAllLoadedLeads([]);
     setPaginationOpts({ numItems: ITEMS_PER_PAGE, cursor: null });
-  }, [filter, search, selectedStatuses, selectedSources, selectedTags, selectedAssignedTo, sortBy, viewColdCallerLeads]);
+  }, [filter, search, selectedStatuses, selectedSources, selectedTags, selectedAssignedTo, sortBy, viewColdCallerLeads, viewIrrelevantLeads]);
 
   // Append new leads when pagination result changes
   useMemo(() => {
@@ -169,7 +176,7 @@ export default function Leads() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              {viewColdCallerLeads ? "Cold Caller Leads" : title}
+              {viewIrrelevantLeads ? "Irrelevant Leads" : viewColdCallerLeads ? "Cold Caller Leads" : title}
             </h1>
             <p className="text-muted-foreground">
               Manage and track your leads
@@ -198,10 +205,23 @@ export default function Leads() {
                 )}
                 <Button
                   variant={viewColdCallerLeads ? "default" : "outline"}
-                  onClick={() => setViewColdCallerLeads(!viewColdCallerLeads)}
+                  onClick={() => {
+                    if (!viewColdCallerLeads) setViewIrrelevantLeads(false);
+                    setViewColdCallerLeads(!viewColdCallerLeads);
+                  }}
                   className="gap-2"
                 >
                   {viewColdCallerLeads ? "Show All Leads" : "Show Cold Caller Leads"}
+                </Button>
+                <Button
+                  variant={viewIrrelevantLeads ? "default" : "outline"}
+                  onClick={() => {
+                    if (!viewIrrelevantLeads) setViewColdCallerLeads(false);
+                    setViewIrrelevantLeads(!viewIrrelevantLeads);
+                  }}
+                  className="gap-2"
+                >
+                  {viewIrrelevantLeads ? "Show All Leads" : "Show Irrelevant Leads"}
                 </Button>
               </>
             )}
