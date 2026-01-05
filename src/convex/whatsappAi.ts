@@ -36,8 +36,11 @@ export const generateAndSendAiReply = action({
       1. Reply with text: { "action": "reply", "text": "your message" }
       2. Send a product image: { "action": "send_image", "text": "optional caption", "resource_name": "exact product name" }
       3. Send a PDF: { "action": "send_pdf", "text": "optional caption", "resource_name": "exact pdf name" }
-      4. Request human intervention (if you can't help): { "action": "intervention_request", "text": "I will connect you with an agent.", "reason": "reason" }
-      5. Request contact (if they want a meeting/call): { "action": "contact_request", "text": "I've noted your request.", "reason": "reason" }
+      4. Send full catalogue (link + all PDFs): { "action": "send_full_catalogue", "text": "optional message" }
+      5. Request human intervention (if you can't help): { "action": "intervention_request", "text": "I will connect you with an agent.", "reason": "reason" }
+      6. Request contact (if they want a meeting/call): { "action": "contact_request", "text": "I've noted your request.", "reason": "reason" }
+      
+      When the user asks for "full catalogue", "complete catalogue", "all products", or similar requests, use the "send_full_catalogue" action.
       
       Always return ONLY the JSON object. Do not include other text.
       `;
@@ -110,6 +113,35 @@ export const generateAndSendAiReply = action({
              message: `I couldn't find the PDF for ${aiAction.resource_name}. ${aiAction.text}`,
            });
          }
+      } else if (aiAction.action === "send_full_catalogue") {
+          // Send the catalogue link first
+          const catalogueMessage = aiAction.text || "Here is our complete product catalogue:";
+          await ctx.runAction(api.whatsapp.messages.send, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: `${catalogueMessage}\n\nhttps://cafoli.in/allproducts.aspx`,
+          });
+
+          // Send all PDFs
+          for (const pdf of rangePdfs) {
+            try {
+              const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: pdf.storageId });
+              
+              await ctx.runAction(api.whatsapp.messages.sendMedia, {
+                leadId: args.leadId,
+                phoneNumber: args.phoneNumber,
+                storageId: pdf.storageId,
+                fileName: `${pdf.name}.pdf`,
+                mimeType: metadata?.contentType || "application/pdf",
+                message: pdf.name
+              });
+              
+              // Small delay to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (error) {
+              console.error(`Failed to send PDF ${pdf.name}:`, error);
+            }
+          }
       } else if (aiAction.action === "intervention_request") {
           await ctx.runAction(api.whatsapp.messages.send, {
             leadId: args.leadId,
