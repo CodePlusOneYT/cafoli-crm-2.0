@@ -28,6 +28,10 @@ export const getPaginatedLeads = query({
       return { page: [], isDone: true, continueCursor: "" };
     }
 
+    if (args.filter === "irrelevant" && user.role !== ROLES.ADMIN) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
     // Helper function to enrich leads with assigned user names and tags
     const enrichLeads = async (leads: any[]) => {
       return await Promise.all(
