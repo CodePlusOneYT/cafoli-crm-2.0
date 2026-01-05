@@ -111,8 +111,7 @@ export const handleIncomingMessage = internalAction({
         if (isNewLead) {
           console.log(`Sending welcome message to new lead ${leadId}`);
           try {
-            // @ts-ignore
-            await ctx.runAction(internal.whatsapp.internal.sendWelcomeMessage, {
+            await ctx.runAction(internal.whatsappTemplates.sendWelcomeMessage, {
               leadId,
               phoneNumber: args.from,
             });
