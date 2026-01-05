@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 export const createProduct = mutation({
   args: {
-    name: v.string(),
+    name: v.optional(v.string()),
     brandName: v.string(),
     molecule: v.optional(v.string()),
     mrp: v.string(),
@@ -14,7 +14,7 @@ export const createProduct = mutation({
   },
   handler: async (ctx, args) => {
     const productId = await ctx.db.insert("products", {
-      name: args.name,
+      name: args.name || args.brandName,
       brandName: args.brandName,
       molecule: args.molecule,
       mrp: args.mrp,

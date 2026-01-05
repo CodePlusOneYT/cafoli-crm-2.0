@@ -24,7 +24,6 @@ interface ProductUploadDialogProps {
 export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState("");
   const [brandName, setBrandName] = useState("");
   const [molecule, setMolecule] = useState("");
   const [mrp, setMrp] = useState("");
@@ -53,7 +52,7 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !brandName || !mrp || !packaging) {
+    if (!brandName || !mrp || !packaging) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -74,7 +73,6 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
       }
 
       await createProduct({
-        name,
         brandName,
         molecule,
         mrp,
@@ -87,7 +85,6 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
       toast.success("Product uploaded successfully");
       setOpen(false);
       // Reset form
-      setName("");
       setBrandName("");
       setMolecule("");
       setMrp("");
@@ -123,11 +120,7 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Product Name *</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label htmlFor="brand">Brand Name *</Label>
               <Input id="brand" value={brandName} onChange={(e) => setBrandName(e.target.value)} required />

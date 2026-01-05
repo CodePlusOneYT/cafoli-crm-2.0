@@ -55,7 +55,9 @@ export function ProductListManager() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold">{product.name}</h3>
-                        <Badge variant="secondary">{product.brandName}</Badge>
+                        {product.brandName && product.brandName !== product.name && (
+                          <Badge variant="secondary">{product.brandName}</Badge>
+                        )}
                       </div>
                       {product.molecule && (
                         <p className="text-sm text-muted-foreground">
