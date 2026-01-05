@@ -256,61 +256,78 @@ export const generateAndSendAiReply = action({
     console.log(`=== MEDIA SENDING PHASE ===`);
     console.log(`Product images to send: ${mediasToSend.length}`);
     console.log(`Range PDFs to send: ${rangePdfsToSend.length}`);
+    console.log(`Is auto-reply: ${args.isAutoReply}`);
     
     // Send Product Images FIRST (before Range PDFs)
-    for (let i = 0; i < mediasToSend.length; i++) {
-        const media = mediasToSend[i];
-        console.log(`[${i+1}/${mediasToSend.length}] Attempting to send product image:`);
-        console.log(`  - File: ${media.fileName}`);
-        console.log(`  - Storage ID: ${media.storageId}`);
-        console.log(`  - MIME Type: ${media.mimeType}`);
-        console.log(`  - Caption: ${media.caption}`);
-        
-        try {
-            // Verify storage ID exists
-            const fileUrl = await ctx.storage.getUrl(media.storageId);
-            if (!fileUrl) {
-                console.error(`✗ Storage ID ${media.storageId} returned null URL!`);
-                continue;
-            }
-            console.log(`✓ File URL retrieved: ${fileUrl.substring(0, 50)}...`);
+    // Use Promise.allSettled to send all images in parallel and not fail if one fails
+    if (mediasToSend.length > 0) {
+        const imagePromises = mediasToSend.map(async (media, i) => {
+            console.log(`[${i+1}/${mediasToSend.length}] Attempting to send product image:`);
+            console.log(`  - File: ${media.fileName}`);
+            console.log(`  - Storage ID: ${media.storageId}`);
+            console.log(`  - MIME Type: ${media.mimeType}`);
+            console.log(`  - Caption: ${media.caption}`);
             
-            await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
-                phoneNumber: args.phoneNumber,
-                message: media.caption || "",
-                leadId: args.leadId,
-                storageId: media.storageId,
-                fileName: media.fileName,
-                mimeType: media.mimeType,
-            });
-            console.log(`✓ Successfully sent image: ${media.fileName}`);
-        } catch (error) {
-            console.error(`✗ Failed to send image ${media.fileName}:`, error);
-            console.error(`Error details:`, JSON.stringify(error, null, 2));
-        }
+            try {
+                // Verify storage ID exists
+                const fileUrl = await ctx.storage.getUrl(media.storageId);
+                if (!fileUrl) {
+                    console.error(`✗ Storage ID ${media.storageId} returned null URL!`);
+                    throw new Error(`Storage ID ${media.storageId} returned null URL`);
+                }
+                console.log(`✓ File URL retrieved: ${fileUrl.substring(0, 50)}...`);
+                
+                await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
+                    phoneNumber: args.phoneNumber,
+                    message: media.caption || "",
+                    leadId: args.leadId,
+                    storageId: media.storageId,
+                    fileName: media.fileName,
+                    mimeType: media.mimeType,
+                });
+                console.log(`✓ Successfully sent image: ${media.fileName}`);
+                return { success: true, fileName: media.fileName };
+            } catch (error) {
+                console.error(`✗ Failed to send image ${media.fileName}:`, error);
+                console.error(`Error details:`, JSON.stringify(error, null, 2));
+                return { success: false, fileName: media.fileName, error };
+            }
+        });
+        
+        const results = await Promise.allSettled(imagePromises);
+        const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+        console.log(`✓ Sent ${successCount}/${mediasToSend.length} product images successfully`);
     }
     
     console.log(`Sending ${rangePdfsToSend.length} range PDFs...`);
     
-    // Send Range PDFs
-    for (const range of rangePdfsToSend) {
-        const caption = range.category === "THERAPEUTIC" 
-            ? `${range.name} (Therapeutic Range)`
-            : `${range.name}${range.division ? ` (${range.division})` : ""}`;
+    // Send Range PDFs in parallel
+    if (rangePdfsToSend.length > 0) {
+        const pdfPromises = rangePdfsToSend.map(async (range) => {
+            const caption = range.category === "THERAPEUTIC" 
+                ? `${range.name} (Therapeutic Range)`
+                : `${range.name}${range.division ? ` (${range.division})` : ""}`;
 
-        try {
-            await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
-                phoneNumber: args.phoneNumber,
-                message: caption,
-                leadId: args.leadId,
-                storageId: range.storageId,
-                fileName: `${range.name}.pdf`,
-                mimeType: "application/pdf",
-            });
-            console.log(`Successfully sent range PDF: ${range.name}`);
-        } catch (error) {
-            console.error(`Failed to send range PDF ${range.name}:`, error);
-        }
+            try {
+                await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
+                    phoneNumber: args.phoneNumber,
+                    message: caption,
+                    leadId: args.leadId,
+                    storageId: range.storageId,
+                    fileName: `${range.name}.pdf`,
+                    mimeType: "application/pdf",
+                });
+                console.log(`✓ Successfully sent range PDF: ${range.name}`);
+                return { success: true, name: range.name };
+            } catch (error) {
+                console.error(`✗ Failed to send range PDF ${range.name}:`, error);
+                return { success: false, name: range.name, error };
+            }
+        });
+        
+        const results = await Promise.allSettled(pdfPromises);
+        const successCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+        console.log(`✓ Sent ${successCount}/${rangePdfsToSend.length} range PDFs successfully`);
     }
 
     // 6. If product not found, create intervention request
