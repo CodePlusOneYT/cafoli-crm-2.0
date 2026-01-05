@@ -185,9 +185,8 @@ export const generateAndSendAiReply = action({
             }
             // Handle Full Catalogue
             else if (parsed.fullCatalogue) {
-                messageToSend = `It sounds like you're looking for our full product catalog! You can find all of our products listed here: https://cafoli.in/allproduct.aspx 📚`;
-                // We do NOT send all PDFs individually anymore as per user request to send the link
-                rangePdfsToSend = []; 
+                messageToSend = `It sounds like you're looking for our full product catalog! You can find all of our products listed here: https://cafoli.in/allproduct.aspx 📚\n\nI am also sending you all our range PDFs below. 👇`;
+                rangePdfsToSend = rangePdfs; 
             }
             else if (parsed.message) {
                 messageToSend = parsed.message;
@@ -211,9 +210,13 @@ export const generateAndSendAiReply = action({
         
         // Send all PDFs
         for (const range of rangePdfsToSend) {
+            const caption = range.category === "THERAPEUTIC" 
+                ? `${range.name} (Therapeutic Range)`
+                : `${range.name}${range.division ? ` (${range.division})` : ""}`;
+
             await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
                 phoneNumber: args.phoneNumber,
-                message: `${range.name} (${range.division})`,
+                message: caption,
                 leadId: args.leadId,
                 storageId: range.storageId,
                 fileName: `${range.name}.pdf`,
