@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 
 const api = getConvexApi() as any;
@@ -17,7 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Plus, Upload, X, FileText, Image as ImageIcon, Edit } from "lucide-react";
+import { Loader2, Plus, Upload, X, FileText, Image as ImageIcon, Edit, FolderPlus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ProductUploadDialogProps {
   disabled?: boolean;
@@ -34,22 +36,28 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
   const [packaging, setPackaging] = useState("");
   const [description, setDescription] = useState("");
   const [pageLink, setPageLink] = useState("");
+  const [videoLink, setVideoLink] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
   
   // Files
   const [mainImage, setMainImage] = useState<File | null>(null);
   const [flyer, setFlyer] = useState<File | null>(null);
   const [bridgeCard, setBridgeCard] = useState<File | null>(null);
-  const [visuelet, setVisuelet] = useState<File | null>(null);
+  const [visualaid, setVisualaid] = useState<File | null>(null);
 
   // Existing file flags (for UI only, to show something is there)
   const [hasExistingMainImage, setHasExistingMainImage] = useState(false);
   const [hasExistingFlyer, setHasExistingFlyer] = useState(false);
   const [hasExistingBridgeCard, setHasExistingBridgeCard] = useState(false);
-  const [hasExistingVisuelet, setHasExistingVisuelet] = useState(false);
+  const [hasExistingVisualaid, setHasExistingVisualaid] = useState(false);
   
   const generateUploadUrl = useMutation(api.products.generateUploadUrl);
   const createProduct = useMutation(api.products.createProduct);
   const updateProduct = useMutation(api.products.updateProduct);
+  const categories = useQuery(api.products.listCategories) || [];
+  const createCategory = useMutation(api.products.createCategory);
 
   useEffect(() => {
     if (product && open) {
@@ -59,11 +67,13 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
       setPackaging(product.packaging || "");
       setDescription(product.description || "");
       setPageLink(product.pageLink || "");
+      setVideoLink(product.videoLink || "");
+      setSelectedCategories(product.categories || []);
       
       setHasExistingMainImage(!!product.mainImage);
       setHasExistingFlyer(!!product.flyer);
       setHasExistingBridgeCard(!!product.bridgeCard);
-      setHasExistingVisuelet(!!product.visuelet);
+      setHasExistingVisualaid(!!product.visualaid);
     } else if (!product && open) {
       // Reset for create mode
       setBrandName("");
@@ -72,14 +82,16 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
       setPackaging("");
       setDescription("");
       setPageLink("");
+      setVideoLink("");
+      setSelectedCategories([]);
       setMainImage(null);
       setFlyer(null);
       setBridgeCard(null);
-      setVisuelet(null);
+      setVisualaid(null);
       setHasExistingMainImage(false);
       setHasExistingFlyer(false);
       setHasExistingBridgeCard(false);
-      setHasExistingVisuelet(false);
+      setHasExistingVisualaid(false);
     }
   }, [product, open]);
 
@@ -90,14 +102,21 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
   ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      // Basic validation
-      if (accept === "application/pdf" && file.type !== "application/pdf") {
-        toast.error("Please upload a PDF file");
-        return;
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      
+      // Validate based on file extension as fallback
+      if (accept === "application/pdf") {
+        if (ext !== "pdf" && file.type !== "application/pdf") {
+          toast.error("Please upload a PDF file");
+          return;
+        }
       }
-      if (accept.startsWith("image/") && !file.type.startsWith("image/")) {
-        toast.error("Please upload an image file");
-        return;
+      if (accept.startsWith("image/")) {
+        const validImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        if (!validImageExts.includes(ext || '') && !file.type.startsWith("image/")) {
+          toast.error("Please upload an image file (JPG, PNG, GIF, or WebP)");
+          return;
+        }
       }
       setter(file);
     }
@@ -105,9 +124,22 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
 
   const uploadFile = async (file: File) => {
     const postUrl = await generateUploadUrl();
+    
+    // Ensure correct Content-Type header
+    let contentType = file.type;
+    if (!contentType || contentType === 'application/octet-stream') {
+      // Fallback based on file extension
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') contentType = 'application/pdf';
+      else if (['jpg', 'jpeg'].includes(ext || '')) contentType = 'image/jpeg';
+      else if (ext === 'png') contentType = 'image/png';
+      else if (ext === 'gif') contentType = 'image/gif';
+      else if (ext === 'webp') contentType = 'image/webp';
+    }
+    
     const result = await fetch(postUrl, {
       method: "POST",
-      headers: { "Content-Type": file.type },
+      headers: { "Content-Type": contentType },
       body: file,
     });
     const { storageId } = await result.json();
@@ -138,8 +170,8 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
       let bridgeCardId = undefined;
       if (bridgeCard) bridgeCardId = await uploadFile(bridgeCard);
       
-      let visueletId = undefined;
-      if (visuelet) visueletId = await uploadFile(visuelet);
+      let visualaidId = undefined;
+      if (visualaid) visualaidId = await uploadFile(visualaid);
 
       if (product) {
         await updateProduct({
@@ -151,9 +183,11 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
           mainImage: mainImageId,
           flyer: flyerId,
           bridgeCard: bridgeCardId,
-          visuelet: visueletId,
+          visualaid: visualaidId,
           description,
           pageLink,
+          videoLink,
+          categories: selectedCategories.length > 0 ? selectedCategories as any : undefined,
           // If user removed existing file (we need UI for this, but for now let's assume replacing or keeping)
           // To properly support removal, we need "remove" buttons for existing files.
           // For now, we only support replacing or adding.
@@ -163,7 +197,7 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
           // Let's add simple removal logic if we have time, but for now replacing is key.
           removeFlyer: hasExistingFlyer === false && !!product.flyer, // If it was there but now UI says no (we need to implement the UI removal)
           removeBridgeCard: hasExistingBridgeCard === false && !!product.bridgeCard,
-          removeVisuelet: hasExistingVisuelet === false && !!product.visuelet,
+          removeVisualaid: hasExistingVisualaid === false && !!product.visualaid,
         });
         toast.success("Product updated successfully");
       } else {
@@ -175,9 +209,11 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
           mainImage: mainImageId!,
           flyer: flyerId,
           bridgeCard: bridgeCardId,
-          visuelet: visueletId,
+          visualaid: visualaidId,
           description,
           pageLink,
+          videoLink,
+          categories: selectedCategories.length > 0 ? selectedCategories as any : undefined,
         });
         toast.success("Product uploaded successfully");
       }
@@ -264,8 +300,68 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
     </div>
   );
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error("Category name cannot be empty");
+      return;
+    }
+    
+    try {
+      const categoryId = await createCategory({ name: newCategoryName.trim() });
+      toast.success("Category created successfully");
+      setNewCategoryName("");
+      setShowCategoryDialog(false);
+      // Auto-select the newly created category if under limit
+      if (selectedCategories.length < 7) {
+        setSelectedCategories([...selectedCategories, categoryId]);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create category");
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+      <Dialog open={showCategoryDialog} onOpenChange={setShowCategoryDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Create New Category</DialogTitle>
+            <DialogDescription>
+              Add a new product category to organize your catalog.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="categoryName">Category Name</Label>
+              <Input
+                id="categoryName"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g., Antibiotics, Vitamins"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCreateCategory();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => {
+              setShowCategoryDialog(false);
+              setNewCategoryName("");
+            }}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateCategory}>
+              Create Category
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ? trigger : (
           <Button 
@@ -324,6 +420,62 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="videoLink">Video Link (Optional)</Label>
+            <Input 
+              id="videoLink" 
+              type="url"
+              value={videoLink} 
+              onChange={(e) => setVideoLink(e.target.value)} 
+              placeholder="https://youtube.com/watch?v=..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Categories (Select up to 7)</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1 h-7 text-xs"
+                onClick={() => setShowCategoryDialog(true)}
+              >
+                <FolderPlus className="h-3 w-3" />
+                New Category
+              </Button>
+            </div>
+            <ScrollArea className="h-32 border rounded-md p-3">
+              <div className="space-y-2">
+                {categories.map((cat: any) => (
+                  <div key={cat._id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={cat._id}
+                      checked={selectedCategories.includes(cat._id)}
+                      onCheckedChange={(checked) => {
+                        if (checked && selectedCategories.length < 7) {
+                          setSelectedCategories([...selectedCategories, cat._id]);
+                        } else if (!checked) {
+                          setSelectedCategories(selectedCategories.filter(id => id !== cat._id));
+                        } else {
+                          toast.error("Maximum 7 categories allowed");
+                        }
+                      }}
+                    />
+                    <Label htmlFor={cat._id} className="text-sm font-normal cursor-pointer">
+                      {cat.name}
+                    </Label>
+                  </div>
+                ))}
+                {categories.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-2">
+                    No categories yet. Create one!
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
           <div className="grid grid-cols-2 gap-4 border-t pt-4">
             <FileInput 
               label="Product Image" 
@@ -351,12 +503,12 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
               onRemoveExisting={() => setHasExistingBridgeCard(false)}
             />
             <FileInput 
-              label="Visuelet (PDF)" 
-              file={visuelet} 
-              setFile={setVisuelet} 
+              label="Visual Aid (PDF)" 
+              file={visualaid} 
+              setFile={setVisualaid} 
               accept="application/pdf" 
-              existing={hasExistingVisuelet}
-              onRemoveExisting={() => setHasExistingVisuelet(false)}
+              existing={hasExistingVisualaid}
+              onRemoveExisting={() => setHasExistingVisualaid(false)}
             />
           </div>
 
@@ -372,5 +524,6 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

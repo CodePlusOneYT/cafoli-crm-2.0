@@ -17,10 +17,16 @@ export default defineSchema({
     mainImage: v.optional(v.id("_storage")), // Compulsory for new, optional for migration
     flyer: v.optional(v.id("_storage")),
     bridgeCard: v.optional(v.id("_storage")),
-    visuelet: v.optional(v.id("_storage")), // PDF
+    visualaid: v.optional(v.id("_storage")), // PDF
 
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
+    videoLink: v.optional(v.string()),
+    categories: v.optional(v.array(v.id("productCategories"))),
+  }).index("by_name", ["name"]),
+
+  productCategories: defineTable({
+    name: v.string(),
   }).index("by_name", ["name"]),
 
   rangePdfs: defineTable({

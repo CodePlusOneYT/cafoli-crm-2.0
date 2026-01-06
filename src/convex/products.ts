@@ -12,10 +12,12 @@ export const createProduct = mutation({
     mainImage: v.id("_storage"),
     flyer: v.optional(v.id("_storage")),
     bridgeCard: v.optional(v.id("_storage")),
-    visuelet: v.optional(v.id("_storage")),
+    visualaid: v.optional(v.id("_storage")),
     
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
+    videoLink: v.optional(v.string()),
+    categories: v.optional(v.array(v.id("productCategories"))),
   },
   handler: async (ctx, args) => {
     const productId = await ctx.db.insert("products", {
@@ -28,9 +30,11 @@ export const createProduct = mutation({
       mainImage: args.mainImage,
       flyer: args.flyer,
       bridgeCard: args.bridgeCard,
-      visuelet: args.visuelet,
+      visualaid: args.visualaid,
       description: args.description,
       pageLink: args.pageLink,
+      videoLink: args.videoLink,
+      categories: args.categories,
     });
     return productId;
   },
@@ -47,14 +51,16 @@ export const updateProduct = mutation({
     mainImage: v.optional(v.id("_storage")),
     flyer: v.optional(v.id("_storage")),
     bridgeCard: v.optional(v.id("_storage")),
-    visuelet: v.optional(v.id("_storage")),
+    visualaid: v.optional(v.id("_storage")),
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
+    videoLink: v.optional(v.string()),
+    categories: v.optional(v.array(v.id("productCategories"))),
     
     // Flags to remove optional files
     removeFlyer: v.optional(v.boolean()),
     removeBridgeCard: v.optional(v.boolean()),
-    removeVisuelet: v.optional(v.boolean()),
+    removeVisualaid: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const product = await ctx.db.get(args.id);
@@ -68,6 +74,8 @@ export const updateProduct = mutation({
       packaging: args.packaging,
       description: args.description,
       pageLink: args.pageLink,
+      videoLink: args.videoLink,
+      categories: args.categories,
     };
 
     // Handle file updates
@@ -85,7 +93,7 @@ export const updateProduct = mutation({
 
     if (args.flyer) updates.flyer = args.flyer;
     if (args.bridgeCard) updates.bridgeCard = args.bridgeCard;
-    if (args.visuelet) updates.visuelet = args.visuelet;
+    if (args.visualaid) updates.visualaid = args.visualaid;
 
     // Handle removals
     if (args.removeFlyer && product.flyer) {
@@ -96,9 +104,9 @@ export const updateProduct = mutation({
       // await ctx.storage.delete(product.bridgeCard);
       updates.bridgeCard = undefined;
     }
-    if (args.removeVisuelet && product.visuelet) {
-      // await ctx.storage.delete(product.visuelet);
-      updates.visuelet = undefined;
+    if (args.removeVisualaid && product.visualaid) {
+      // await ctx.storage.delete(product.visualaid);
+      updates.visualaid = undefined;
     }
 
     await ctx.db.patch(args.id, updates);
@@ -116,7 +124,21 @@ export const listProducts = query({
 export const listProductsInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("products").order("desc").collect();
+    const products = await ctx.db.query("products").collect();
+    return products.map(p => ({
+      _id: p._id,
+      name: p.name,
+      brandName: p.brandName,
+      molecule: p.molecule,
+      mrp: p.mrp,
+      packaging: p.packaging,
+      description: p.description,
+      pageLink: p.pageLink,
+      mainImage: p.mainImage,
+      flyer: p.flyer,
+      bridgeCard: p.bridgeCard,
+      visualaid: p.visualaid,
+    }));
   },
 });
 
@@ -127,6 +149,38 @@ export const getProductByName = query({
       .query("products")
       .withIndex("by_name", (q) => q.eq("name", args.name))
       .first();
+  },
+});
+
+export const getProductById = query({
+  args: { id: v.id("products") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getProductWithUrls = query({
+  args: { id: v.id("products") },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.id);
+    if (!product) return null;
+
+    const urls: any = {};
+    
+    if (product.mainImage) {
+      urls.mainImageUrl = await ctx.storage.getUrl(product.mainImage);
+    }
+    if (product.flyer) {
+      urls.flyerUrl = await ctx.storage.getUrl(product.flyer);
+    }
+    if (product.bridgeCard) {
+      urls.bridgeCardUrl = await ctx.storage.getUrl(product.bridgeCard);
+    }
+    if (product.visualaid) {
+      urls.visualaidUrl = await ctx.storage.getUrl(product.visualaid);
+    }
+
+    return { ...product, ...urls };
   },
 });
 
@@ -162,7 +216,7 @@ export const deleteProduct = mutation({
     if (product.mainImage) storageIds.add(product.mainImage);
     if (product.flyer) storageIds.add(product.flyer);
     if (product.bridgeCard) storageIds.add(product.bridgeCard);
-    if (product.visuelet) storageIds.add(product.visuelet);
+    if (product.visualaid) storageIds.add(product.visualaid);
 
     for (const storageId of storageIds) {
       try {
@@ -180,5 +234,30 @@ export const getStorageMetadata = internalQuery({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
     return await ctx.db.system.get(args.storageId);
+  },
+});
+
+// Category management
+export const listCategories = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("productCategories").order("asc").collect();
+  },
+});
+
+export const createCategory = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    // Check if category already exists
+    const existing = await ctx.db
+      .query("productCategories")
+      .withIndex("by_name", (q) => q.eq("name", args.name))
+      .first();
+    
+    if (existing) {
+      throw new Error("Category already exists");
+    }
+    
+    return await ctx.db.insert("productCategories", { name: args.name });
   },
 });

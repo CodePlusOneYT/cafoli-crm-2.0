@@ -112,7 +112,7 @@ export const generateAndSendAiReplyInternal = internalAction({
           
           // Send all product images and files
           console.log(`[PRODUCT_SEND] Starting to send files for product: ${product.name}`);
-          console.log(`[PRODUCT_SEND] Product has - mainImage: ${!!product.mainImage}, flyer: ${!!product.flyer}, bridgeCard: ${!!product.bridgeCard}, visuelet: ${!!product.visuelet}`);
+          console.log(`[PRODUCT_SEND] Product has - mainImage: ${!!product.mainImage}, flyer: ${!!product.flyer}, bridgeCard: ${!!product.bridgeCard}, visualaid: ${!!product.visualaid}`);
           
           const filesToSend = [];
           
@@ -149,14 +149,14 @@ export const generateAndSendAiReplyInternal = internalAction({
             });
           }
           
-          // Visuelet (PDF)
-          if (product.visuelet) {
-            console.log(`[PRODUCT_SEND] Adding visuelet to queue: ${product.visuelet}`);
+          // Visual Aid (PDF)
+          if (product.visualaid) {
+            console.log(`[PRODUCT_SEND] Adding visualaid to queue: ${product.visualaid}`);
             filesToSend.push({
-              storageId: product.visuelet,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_visuelet.pdf`,
+              storageId: product.visualaid,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_visualaid.pdf`,
               type: "pdf",
-              label: "Visuelet"
+              label: "Visual Aid"
             });
           }
           
@@ -172,8 +172,16 @@ export const generateAndSendAiReplyInternal = internalAction({
               console.log(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] ${file.label} metadata retrieved:`, metadata);
               
               if (!metadata) {
-                console.error(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Metadata is null for storageId: ${file.storageId}. File might be missing.`);
+                console.error(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Metadata is null for storageId: ${file.storageId}. File might be missing or corrupted.`);
                 continue;
+              }
+
+              // Determine correct mime type - fix for old uploads with wrong content type
+              let correctMimeType = metadata?.contentType;
+              if (!correctMimeType || correctMimeType === "application/octet-stream" || correctMimeType === "text/html") {
+                // Fallback based on file type
+                correctMimeType = file.type === "pdf" ? "application/pdf" : "image/jpeg";
+                console.log(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Correcting mime type from ${metadata?.contentType} to ${correctMimeType}`);
               }
 
               await ctx.runAction(internal.whatsapp.messages.sendMedia, {
@@ -181,7 +189,7 @@ export const generateAndSendAiReplyInternal = internalAction({
                 phoneNumber: args.phoneNumber,
                 storageId: file.storageId,
                 fileName: file.fileName,
-                mimeType: metadata?.contentType || (file.type === "pdf" ? "application/pdf" : "image/jpeg"),
+                mimeType: correctMimeType,
                 message: undefined
               });
               
@@ -220,7 +228,7 @@ export const generateAndSendAiReplyInternal = internalAction({
          if (pdf) {
            const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: pdf.storageId });
            
-           await ctx.runAction(internal.whatsapp.internal.sendMedia, {
+           await ctx.runAction(internal.whatsapp.messages.sendMedia, {
              leadId: args.leadId,
              phoneNumber: args.phoneNumber,
              storageId: pdf.storageId,
@@ -247,7 +255,7 @@ export const generateAndSendAiReplyInternal = internalAction({
             try {
               const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: pdf.storageId });
               
-              await ctx.runAction(internal.whatsapp.internal.sendMedia, {
+              await ctx.runAction(internal.whatsapp.messages.sendMedia, {
                 leadId: args.leadId,
                 phoneNumber: args.phoneNumber,
                 storageId: pdf.storageId,

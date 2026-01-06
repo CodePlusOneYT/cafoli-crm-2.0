@@ -14,7 +14,8 @@ import {
   Download,
   Mail,
   FileText,
-  Package
+  Package,
+  Database
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -44,6 +45,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
   
   const ensureRole = useMutation(api.users.ensureRole);
+  const runMigration = useMutation(api.migrations.fixProductStorageMetadata.runMigration);
   
   // Mandatory Follow Up Logic
   const leadsWithoutFollowUp = useQuery(
@@ -221,6 +223,39 @@ export default function AppLayout({ children }: AppLayoutProps) {
     toast.info("Preparing download...");
   };
 
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  const handleMigrationClick = async () => {
+    if (!isAdmin) return;
+    setIsMigrating(true);
+    toast.info("Scanning product files for metadata issues...");
+    try {
+      const result = await runMigration({}) as any;
+      if (result.success) {
+        toast.success(result.message, {
+          duration: 5000,
+        });
+      } else {
+        // Show detailed list of problematic products
+        const productList = result.products?.map((p: any) => 
+          `• ${p.name}: ${p.issues.join(", ")}`
+        ).join("\n") || "";
+        
+        toast.error(result.message, {
+          description: productList,
+          duration: 15000,
+        });
+        
+        console.log("Problematic products:", result.products);
+      }
+    } catch (error) {
+      console.error('Migration error:', error);
+      toast.error('Failed to check product files. See console for details.');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       <div className="p-6">
@@ -260,15 +295,27 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
       <div className="p-4 border-t border-sidebar-border">
         {isAdmin && (
-          <Button 
-            variant="outline" 
-            className="w-full justify-start gap-2 mb-4"
-            onClick={handleExportClick}
-            disabled={isExporting}
-          >
-            <Download className={`h-4 w-4 ${isExporting ? 'animate-spin' : ''}`} />
-            {isExporting ? "Exporting..." : "Download All Leads"}
-          </Button>
+          <>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start gap-2 mb-2"
+              onClick={handleExportClick}
+              disabled={isExporting}
+            >
+              <Download className={`h-4 w-4 ${isExporting ? 'animate-spin' : ''}`} />
+              {isExporting ? "Exporting..." : "Download All Leads"}
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              className="w-full justify-start gap-2 mb-4"
+              onClick={handleMigrationClick}
+              disabled={isMigrating}
+            >
+              <Database className={`h-4 w-4 ${isMigrating ? 'animate-spin' : ''}`} />
+              {isMigrating ? "Migrating..." : "Fix Product Files"}
+            </Button>
+          </>
         )}
 
         <div className="flex items-center gap-3 mb-4 px-2">
