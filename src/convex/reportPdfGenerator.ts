@@ -177,10 +177,20 @@ export const sendScheduledReports = internalAction({
     let dateRangeLabel: string;
 
     // Calculate date range based on report type
+    // For daily reports: 7PM to 7PM (19:00 to 19:00 IST)
     switch (args.reportType) {
       case "daily":
-        startDate = now - 24 * 60 * 60 * 1000; // Last 24 hours
-        dateRangeLabel = new Date(startDate).toLocaleDateString('en-IN') + " - " + new Date(now).toLocaleDateString('en-IN');
+        // Calculate 7PM today in IST (which is 1:30 PM UTC)
+        const today7PM = new Date();
+        today7PM.setHours(19, 0, 0, 0); // 7PM IST
+        
+        // If current time is before 7PM, use yesterday 7PM to today 7PM
+        // If current time is after 7PM, use today 7PM to tomorrow 7PM (but we cap at now)
+        const yesterday7PM = new Date(today7PM);
+        yesterday7PM.setDate(yesterday7PM.getDate() - 1);
+        
+        startDate = yesterday7PM.getTime();
+        dateRangeLabel = yesterday7PM.toLocaleDateString('en-IN') + " 7PM - " + today7PM.toLocaleDateString('en-IN') + " 7PM";
         break;
       case "weekly":
         startDate = now - 7 * 24 * 60 * 60 * 1000; // Last 7 days
@@ -253,8 +263,14 @@ export const sendTestReport = action({
     console.log(`Generating test report for: "${targetEmail}"`);
 
     const now = Date.now();
-    const startDate = now - 24 * 60 * 60 * 1000; // Last 24 hours for test
-    const dateRangeLabel = "TEST REPORT (Last 24h)";
+    // Test report: 7PM yesterday to 7PM today
+    const today7PM = new Date();
+    today7PM.setHours(19, 0, 0, 0);
+    const yesterday7PM = new Date(today7PM);
+    yesterday7PM.setDate(yesterday7PM.getDate() - 1);
+    
+    const startDate = yesterday7PM.getTime();
+    const dateRangeLabel = "TEST REPORT (7PM to 7PM)";
 
     const stats = await ctx.runQuery(internal.reports.getDetailedReportStats, {
       startDate,
