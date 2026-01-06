@@ -233,19 +233,19 @@ export const generateAndSendAiReplyInternal = internalAction({
             phoneNumber: args.phoneNumber,
             message: aiAction.text,
           });
-          try {
-            // @ts-ignore
-            if (internal.contactRequests && internal.contactRequests.create) {
-                // @ts-ignore
-                await ctx.runMutation(internal.contactRequests.create, { 
-                    leadId: args.leadId, 
-                    type: "general",
-                    status: "pending",
-                    notes: aiAction.reason
-                });
-            }
-          } catch (e) {
-              console.error("Failed to create contact request", e);
+          
+          // Get lead details to determine who to assign the contact request to
+          const lead = await ctx.runQuery(internal.leads.queries.basic.getLeadByIdInternal, { leadId: args.leadId });
+          
+          if (lead && lead.assignedTo) {
+            // Create contact request for the assigned user
+            await ctx.runMutation(internal.contactRequests.createContactRequestInternal, { 
+              leadId: args.leadId,
+              assignedTo: lead.assignedTo,
+              customerMessage: args.prompt,
+            });
+          } else {
+            console.warn("Cannot create contact request: lead has no assigned user", args.leadId);
           }
       }
 
