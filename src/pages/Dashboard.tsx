@@ -4,14 +4,16 @@ import { useQuery } from "convex/react";
 import { Users, MessageSquare, BarChart3, Activity, Loader2 } from "lucide-react";
 import { useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useNavigate } from "react-router";
 
 export default function Dashboard() {
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const leads = useQuery(api.leadQueries.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
+  const leads = useQuery(api.leads.queries.getLeads, user ? { filter: "all", userId: user._id } : "skip") || [];
   const campaigns = useQuery(api.campaignQueries.getCampaigns, user ? { userId: user._id } : "skip") || [];
 
   useEffect(() => {

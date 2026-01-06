@@ -2,7 +2,9 @@ import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useQuery, useMutation } from "convex/react";
 import { Plus, Play, Pause, Trash2, Edit, BarChart } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -73,7 +75,7 @@ export default function Campaigns() {
       </div>
 
       <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {campaigns.map((campaign) => (
+        {campaigns.map((campaign: any) => (
           <Card key={campaign._id}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-lg font-medium">{campaign.name}</CardTitle>

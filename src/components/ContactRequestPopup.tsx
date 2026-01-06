@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Dialog,
@@ -19,13 +19,14 @@ export function ContactRequestPopup() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isNavigating, setIsNavigating] = useState(false);
+  const api = getConvexApi();
 
   const pendingRequests = useQuery(
-    api.contactRequests.getPendingContactRequests,
+    (api as any).contactRequests.getPendingContactRequests,
     user ? { userId: user._id } : "skip"
   );
 
-  const acknowledgeRequest = useMutation(api.contactRequests.acknowledgeContactRequest);
+  const acknowledgeRequest = useMutation((api as any).contactRequests.acknowledgeContactRequest);
 
   // Debug logging
   useEffect(() => {

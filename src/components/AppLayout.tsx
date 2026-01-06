@@ -28,7 +28,9 @@ import { MandatoryFollowUpPopup } from "./MandatoryFollowUpPopup";
 import { ColdCallerPopup } from "@/components/ColdCallerPopup";
 import { ProductUploadDialog } from "@/components/products/ProductUploadDialog";
 import { InterventionPopup } from "./InterventionPopup";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { FollowUpNotifications } from "./FollowUpNotifications";
 import { ContactRequestPopup } from "./ContactRequestPopup";
 
@@ -289,8 +291,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <ContactRequestPopup />
       
       {/* Follow-up Notifications */}
-      <FollowUpNotifications />
-      
       {user && <FollowUpNotifications />}
       
       {leadsWithoutFollowUp && leadsWithoutFollowUp.length > 0 ? (

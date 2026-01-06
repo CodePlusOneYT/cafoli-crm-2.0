@@ -1,5 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +51,7 @@ export function ProductListManager() {
                 <p>No products uploaded yet</p>
               </div>
             ) : (
-              products.map((product) => (
+              products.map((product: any) => (
                 <Card key={product._id} className="p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 space-y-2">

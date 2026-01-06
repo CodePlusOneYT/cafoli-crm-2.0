@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -13,8 +13,9 @@ interface InterventionPopupProps {
 }
 
 export function InterventionPopup({ userId }: InterventionPopupProps) {
-  const interventions = useQuery(api.interventionRequests.getPendingInterventions, { userId });
-  const resolveIntervention = useMutation(api.interventionRequests.resolveIntervention);
+  const api = getConvexApi();
+  const interventions = useQuery((api as any).interventionRequests.getPendingInterventions, { userId });
+  const resolveIntervention = useMutation((api as any).interventionRequests.resolveIntervention);
   
   const [currentIndex, setCurrentIndex] = useState(0);
 

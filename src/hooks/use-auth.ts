@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { useState, useEffect } from "react";
-import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getConvexApiRuntime } from "@/lib/convex-api";
 
 export function useAuth() {
   const [userId, setUserId] = useState<Id<"users"> | null>(() => {
@@ -9,15 +9,23 @@ export function useAuth() {
     return stored as Id<"users"> | null;
   });
 
+  const api = getConvexApiRuntime();
+
+  // Add safety check for api before using it
   const user = useQuery(
-    api.users.getUser,
-    userId ? { id: userId } : "skip"
+    api?.users?.getUser ?? null,
+    userId && api ? { id: userId } : "skip"
   );
 
-  const login = useMutation(api.users.login);
-  const createLog = useMutation(api.activityLogs.createLog);
+  const login = useMutation(api?.users?.login ?? null);
+  const createLog = useMutation(api?.activityLogs?.createLog ?? null);
 
   const signIn = async (email: string, password: string) => {
+    if (!api || !login) {
+      console.error("Convex API not loaded yet");
+      return null;
+    }
+
     const result = await login({ email, password });
     if (result) {
       setUserId(result);
@@ -25,12 +33,14 @@ export function useAuth() {
       
       // Log login activity
       try {
-        await createLog({
-          userId: result,
-          category: "Login/Logout",
-          action: "User logged in",
-          details: `User ${email} logged in successfully`,
-        });
+        if (createLog) {
+          await createLog({
+            userId: result,
+            category: "Login/Logout",
+            action: "User logged in",
+            details: `User ${email} logged in successfully`,
+          });
+        }
       } catch (error) {
         console.error("Failed to log login activity:", error);
       }
@@ -42,7 +52,7 @@ export function useAuth() {
 
   const signOut = async () => {
     // Log logout activity
-    if (userId) {
+    if (userId && createLog) {
       try {
         await createLog({
           userId: userId,

@@ -1,8 +1,8 @@
 import { cronJobs } from "convex/server";
-import type { internal as InternalType } from "./_generated/api";
+import { internal as internalApi } from "./_generated/api";
 
 // Import internal with type bypass to avoid circular type instantiation
-const internal = require("./_generated/api").internal as any;
+const internal = internalApi as any;
 
 const crons = cronJobs();
 

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 
 interface UseLeadEditorProps {
   lead: Doc<"leads"> | undefined | null;

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
 import { Doc } from "@/convex/_generated/dataModel";
 import { Calendar, Phone, Mail } from "lucide-react";
 import { useSearchParams } from "react-router";
@@ -24,7 +24,8 @@ interface MandatoryFollowUpPopupProps {
 
 export function MandatoryFollowUpPopup({ leads }: MandatoryFollowUpPopupProps) {
   const { user } = useAuth();
-  const updateLead = useMutation(api.leads.standard.updateLead);
+  const api = getConvexApi();
+  const updateLead = useMutation((api as any).leads.standard.updateLead);
   const [searchParams] = useSearchParams();
   const isTestMode = searchParams.get("test-mode") === "true";
 

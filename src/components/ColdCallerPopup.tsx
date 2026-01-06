@@ -7,7 +7,7 @@ import { Doc, Id } from "@/convex/_generated/dataModel";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
 import { useSearchParams } from "react-router";
 import LeadDetails from "@/components/LeadDetails";
 import { Eye, ArrowLeft, X } from "lucide-react";
@@ -29,7 +29,8 @@ export function ColdCallerPopup({ leads, isOpen, onClose, userId }: ColdCallerPo
     return initial;
   });
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
-  const updateLead = useMutation(api.leads.standard.updateLead);
+  const api = getConvexApi();
+  const updateLead = useMutation((api as any).leads.standard.updateLead);
   const [searchParams] = useSearchParams();
   const isTestMode = searchParams.get("test-mode") === "true";
 

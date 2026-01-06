@@ -29,11 +29,12 @@ const PRESET_COLORS = [
   "#64748b", // slate-500
 ];
 
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
 
 export function TagManager({ leadId, selectedTagIds, onTagsChange }: TagManagerProps) {
-  const allTags = useQuery(api.tags.getAllTags) || [];
-  const createTag = useMutation(api.tags.createTag);
+  const api = getConvexApi();
+  const allTags = useQuery((api as any).tags.getAllTags) || [];
+  const createTag = useMutation((api as any).tags.createTag);
   
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);

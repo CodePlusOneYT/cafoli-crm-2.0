@@ -1,7 +1,9 @@
 import AppLayout from "@/components/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useAction } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -54,7 +56,7 @@ export default function Emailing() {
 
     try {
       // Get selected leads with emails
-      const recipients = leads.filter(l => selectedLeadIds.includes(l._id) && l.email);
+      const recipients = leads.filter((l: any) => selectedLeadIds.includes(l._id) && l.email);
       
       if (recipients.length === 0) {
         toast.error("Selected leads do not have valid email addresses");
@@ -145,7 +147,7 @@ export default function Emailing() {
       return;
     }
     
-    const template = templates.find(t => t._id === templateId);
+    const template = templates.find((t: any) => t._id === templateId);
     if (template) {
       setEmailSubject(template.subject);
       setEmailContent(template.content);
