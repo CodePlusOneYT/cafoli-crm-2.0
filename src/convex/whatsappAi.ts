@@ -98,7 +98,7 @@ export const generateAndSendAiReplyInternal = internalAction({
       } else if (aiAction.action === "send_product") {
         const product = products.find((p: any) => p.name === aiAction.resource_name);
         if (product) {
-          console.log(`Found product: ${product.name}, images:`, product.images);
+          console.log(`Found product: ${product.name}`);
           
           // Send intro message if provided
           if (aiAction.text) {
@@ -110,35 +110,76 @@ export const generateAndSendAiReplyInternal = internalAction({
             await new Promise(resolve => setTimeout(resolve, 300));
           }
           
-          // Send product image if available
-          if (product.images && product.images.length > 0) {
-            const storageId = product.images[0];
-            console.log(`[PRODUCT_SEND] Processing image for ${product.name}. StorageId: ${storageId}`);
-            
+          // Send all product images and files
+          const filesToSend = [];
+          
+          // Main Image
+          if (product.mainImage) {
+            filesToSend.push({
+              storageId: product.mainImage,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_main.jpg`,
+              type: "image",
+              label: "Main Image"
+            });
+          }
+          
+          // Flyer
+          if (product.flyer) {
+            filesToSend.push({
+              storageId: product.flyer,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_flyer.jpg`,
+              type: "image",
+              label: "Flyer"
+            });
+          }
+          
+          // Bridge Card
+          if (product.bridgeCard) {
+            filesToSend.push({
+              storageId: product.bridgeCard,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_bridge_card.jpg`,
+              type: "image",
+              label: "Bridge Card"
+            });
+          }
+          
+          // Visuelet (PDF)
+          if (product.visuelet) {
+            filesToSend.push({
+              storageId: product.visuelet,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_visuelet.pdf`,
+              type: "pdf",
+              label: "Visuelet"
+            });
+          }
+          
+          // Send all files
+          for (const file of filesToSend) {
             try {
-              const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId });
-              console.log(`[PRODUCT_SEND] Image metadata retrieved:`, metadata);
+              console.log(`[PRODUCT_SEND] Sending ${file.label} for ${product.name}. StorageId: ${file.storageId}`);
+              
+              const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: file.storageId });
+              console.log(`[PRODUCT_SEND] ${file.label} metadata retrieved:`, metadata);
               
               if (!metadata) {
-                 console.error(`[PRODUCT_SEND] Metadata is null for storageId: ${storageId}. Image might be missing.`);
+                console.error(`[PRODUCT_SEND] Metadata is null for storageId: ${file.storageId}. File might be missing.`);
+                continue;
               }
 
               await ctx.runAction(internal.whatsapp.internal.sendMedia, {
                 leadId: args.leadId,
                 phoneNumber: args.phoneNumber,
-                storageId: storageId,
-                fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`,
-                mimeType: metadata?.contentType || "image/jpeg",
-                message: product.name
+                storageId: file.storageId,
+                fileName: file.fileName,
+                mimeType: metadata?.contentType || (file.type === "pdf" ? "application/pdf" : "image/jpeg"),
+                message: file.label
               });
               
-              console.log(`[PRODUCT_SEND] Image sent successfully for ${product.name}`);
+              console.log(`[PRODUCT_SEND] ${file.label} sent successfully for ${product.name}`);
               await new Promise(resolve => setTimeout(resolve, 500));
             } catch (error) {
-              console.error(`[PRODUCT_SEND] Failed to send product image for ${product.name}:`, error);
+              console.error(`[PRODUCT_SEND] Failed to send ${file.label} for ${product.name}:`, error);
             }
-          } else {
-             console.log(`[PRODUCT_SEND] No images found for product: ${product.name}`);
           }
           
           // Format and send product details
@@ -209,43 +250,43 @@ export const generateAndSendAiReplyInternal = internalAction({
             }
           }
       } else if (aiAction.action === "intervention_request") {
+          // Send the AI's message to the customer
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
             message: aiAction.text,
           });
-          try {
-            // @ts-ignore
-            if (internal.interventionRequests && internal.interventionRequests.create) {
-                // @ts-ignore
-                await ctx.runMutation(internal.interventionRequests.create, { 
-                    leadId: args.leadId, 
-                    reason: aiAction.reason || "AI Request",
-                    status: "pending"
-                });
-            }
-          } catch (e) {
-              console.error("Failed to create intervention request", e);
-          }
+          
+          // Get lead details to determine assignment
+          const lead = await ctx.runQuery(internal.leads.queries.basic.getLeadByIdInternal, { leadId: args.leadId });
+          
+          // Create intervention request
+          await ctx.runMutation(internal.interventionRequests.createInterventionRequestInternal, { 
+            leadId: args.leadId,
+            assignedTo: (lead && lead.assignedTo && !lead.isColdCallerLead) ? lead.assignedTo : undefined,
+            requestedProduct: aiAction.resource_name,
+            customerMessage: args.prompt,
+            aiDraftedMessage: aiAction.reason || "Customer needs human assistance with their inquiry.",
+          });
       } else if (aiAction.action === "contact_request") {
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
             message: aiAction.text,
           });
-          try {
-            // @ts-ignore
-            if (internal.contactRequests && internal.contactRequests.create) {
-                // @ts-ignore
-                await ctx.runMutation(internal.contactRequests.create, { 
-                    leadId: args.leadId, 
-                    type: "general",
-                    status: "pending",
-                    notes: aiAction.reason
-                });
-            }
-          } catch (e) {
-              console.error("Failed to create contact request", e);
+          
+          // Get lead details to determine who to assign the contact request to
+          const lead = await ctx.runQuery(internal.leads.queries.basic.getLeadByIdInternal, { leadId: args.leadId });
+          
+          if (lead && lead.assignedTo) {
+            // Create contact request for the assigned user
+            await ctx.runMutation(internal.contactRequests.createContactRequestInternal, { 
+              leadId: args.leadId,
+              assignedTo: lead.assignedTo,
+              customerMessage: args.prompt,
+            });
+          } else {
+            console.warn("Cannot create contact request: lead has no assigned user", args.leadId);
           }
       }
 

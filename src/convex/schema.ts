@@ -335,15 +335,20 @@ export default defineSchema({
 
   interventionRequests: defineTable({
     leadId: v.id("leads"),
-    assignedTo: v.id("users"),
-    requestedProduct: v.string(),
+    assignedTo: v.optional(v.id("users")),
+    requestedProduct: v.optional(v.string()),
     customerMessage: v.string(),
-    status: v.union(v.literal("pending"), v.literal("resolved"), v.literal("dismissed")),
+    aiDraftedMessage: v.string(),
+    status: v.union(v.literal("pending"), v.literal("claimed"), v.literal("resolved"), v.literal("dismissed")),
+    claimedBy: v.optional(v.id("users")),
+    claimedAt: v.optional(v.number()),
     resolvedAt: v.optional(v.number()),
+    requiresFollowUp: v.optional(v.boolean()),
   })
   .index("by_assigned_to", ["assignedTo"])
   .index("by_status", ["status"])
-  .index("by_lead", ["leadId"]),
+  .index("by_lead", ["leadId"])
+  .index("by_claimed_by", ["claimedBy"]),
 
   contactRequests: defineTable({
     leadId: v.id("leads"),

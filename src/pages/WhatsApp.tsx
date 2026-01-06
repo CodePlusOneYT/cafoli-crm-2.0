@@ -11,7 +11,8 @@ import { ROLES } from "@/lib/constants";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useAction } from "convex/react";
 import { MessageSquare, Settings, Send } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { LeadSelector } from "@/components/LeadSelector";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 
 export default function WhatsApp() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   
   // Determine filter based on user role
   const filter = user?.role === ROLES.ADMIN ? "all" : "mine";
@@ -27,6 +29,17 @@ export default function WhatsApp() {
   
   const [selectedLeadId, setSelectedLeadId] = useState<Id<"leads"> | null>(null);
   const selectedLead = leads.find((l: any) => l._id === selectedLeadId);
+
+  // Handle leadId from URL params (for intervention navigation)
+  useEffect(() => {
+    const leadIdParam = searchParams.get("leadId");
+    if (leadIdParam && leads.length > 0) {
+      const lead = leads.find((l: any) => l._id === leadIdParam);
+      if (lead) {
+        setSelectedLeadId(leadIdParam as Id<"leads">);
+      }
+    }
+  }, [searchParams, leads]);
 
   const updateInterface = useAction(api.whatsapp.config.updateInterface);
   const sendBulkMessages = useAction(api.whatsappBulk.sendBulkWhatsAppMessages);

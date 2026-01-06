@@ -38,10 +38,10 @@ crons.interval(
   {}
 );
 
-// Daily report at 12 AM IST (6:30 PM UTC previous day)
+// Daily report at 7 PM IST (1:30 PM UTC same day)
 crons.cron(
   "daily_report_email",
-  "30 18 * * *",
+  "30 13 * * *",
   internal.reportPdfGenerator.sendScheduledReports,
   { reportType: "daily" }
 );

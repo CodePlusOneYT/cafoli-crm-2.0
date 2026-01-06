@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { useNavigate } from "react-router";
 import { getConvexApi } from "@/lib/convex-api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { AlertCircle, X, CheckCircle } from "lucide-react";
+import { AlertCircle, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -14,10 +15,12 @@ interface InterventionPopupProps {
 
 export function InterventionPopup({ userId }: InterventionPopupProps) {
   const api = getConvexApi();
+  const navigate = useNavigate();
   const interventions = useQuery((api as any).interventionRequests.getPendingInterventions, { userId });
-  const resolveIntervention = useMutation((api as any).interventionRequests.resolveIntervention);
+  const claimIntervention = useMutation((api as any).interventionRequests.claimIntervention);
   
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   if (!interventions || interventions.length === 0) {
     return null;
@@ -25,23 +28,29 @@ export function InterventionPopup({ userId }: InterventionPopupProps) {
 
   const current = interventions[currentIndex];
 
-  const handleResolve = async (status: "resolved" | "dismissed") => {
+  const handleIntervene = async () => {
+    setIsClaiming(true);
     try {
-      await resolveIntervention({
+      const result = await claimIntervention({
         interventionId: current._id,
-        status,
+        userId,
       });
       
-      toast.success(status === "resolved" ? "Marked as resolved" : "Dismissed");
+      toast.success("Intervention claimed! Opening chat...");
       
-      // Move to next intervention or close
+      // Navigate to WhatsApp page with the lead selected
+      navigate(`/whatsapp?leadId=${result.leadId}`);
+      
+      // Move to next intervention if any
       if (currentIndex < interventions.length - 1) {
         setCurrentIndex(currentIndex + 1);
       } else {
         setCurrentIndex(0);
       }
-    } catch (error) {
-      toast.error("Failed to update intervention");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to claim intervention");
+    } finally {
+      setIsClaiming(false);
     }
   };
 
@@ -51,54 +60,64 @@ export function InterventionPopup({ userId }: InterventionPopupProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-orange-500" />
-            Product Intervention Required
+            Human Intervention Required
           </DialogTitle>
           <DialogDescription>
-            A customer is asking about a product not in the database
+            {current.assignedTo ? "Your lead needs assistance" : "A lead needs immediate attention"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="bg-muted p-4 rounded-lg space-y-2">
+          <div className="bg-muted p-4 rounded-lg space-y-3">
             <div>
               <span className="text-sm font-medium">Lead:</span>
-              <p className="text-sm">{current.lead?.name || "Unknown"}</p>
+              <p className="text-sm font-semibold">{current.lead?.name || "Unknown"}</p>
               <p className="text-xs text-muted-foreground">{current.lead?.mobile}</p>
             </div>
             
-            <div>
-              <span className="text-sm font-medium">Requested Product:</span>
-              <Badge variant="outline" className="ml-2">{current.requestedProduct}</Badge>
-            </div>
+            {current.requestedProduct && (
+              <div>
+                <span className="text-sm font-medium">Requested Product:</span>
+                <Badge variant="outline" className="ml-2">{current.requestedProduct}</Badge>
+              </div>
+            )}
             
             <div>
               <span className="text-sm font-medium">Customer Message:</span>
-              <p className="text-sm mt-1 italic">"{current.customerMessage}"</p>
+              <p className="text-sm mt-1 italic bg-background p-2 rounded border">
+                "{current.customerMessage}"
+              </p>
+            </div>
+
+            <div>
+              <span className="text-sm font-medium">AI Assessment:</span>
+              <p className="text-sm mt-1 bg-background p-2 rounded border">
+                {current.aiDraftedMessage}
+              </p>
             </div>
           </div>
+
+          {!current.assignedTo && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                ⚡ This lead is unassigned. First to intervene will be assigned this lead.
+              </p>
+            </div>
+          )}
 
           <div className="text-xs text-muted-foreground">
             Intervention {currentIndex + 1} of {interventions.length}
           </div>
 
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => handleResolve("dismissed")}
-            >
-              <X className="h-4 w-4 mr-2" />
-              Dismiss
-            </Button>
-            <Button
-              variant="default"
-              className="flex-1"
-              onClick={() => handleResolve("resolved")}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Mark Resolved
-            </Button>
-          </div>
+          <Button
+            variant="default"
+            className="w-full"
+            onClick={handleIntervene}
+            disabled={isClaiming}
+          >
+            <MessageSquare className="h-4 w-4 mr-2" />
+            {isClaiming ? "Claiming..." : "Intervene Now"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
