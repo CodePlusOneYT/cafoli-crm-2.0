@@ -1,1 +1,1 @@
-grep -r "createAccount" src
+npx convex run test_ai_comprehensive:runComprehensiveTests

@@ -7,10 +7,11 @@ import { ROLES } from "./schema";
  * Get the current signed in user. Returns null if the user is not signed in.
  */
 export const currentUser = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    if (!args.userId) return null;
-    return await ctx.db.get(args.userId);
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    return await ctx.db.get(userId);
   },
 });
 
@@ -128,36 +129,36 @@ export const createUserWithRole = internalMutation({
     return await ctx.db.insert("users", {
       email: args.email,
       name: args.name,
-      role: args.role as "admin" | "staff",
+      role: args.role as "admin" | "staff" | "uploader",
       passwordHash: args.passwordHash,
     });
   },
 });
 
-export const updateUserRole = internalMutation({
+export const updateUserRole = mutation({
   args: {
     userId: v.id("users"),
     role: v.string(),
   },
   handler: async (ctx, args) => {
+    const currentUserId = await getAuthUserId(ctx);
+    if (!currentUserId) throw new Error("Unauthorized");
+    
+    const currentUser = await ctx.db.get(currentUserId);
+    if (currentUser?.role !== ROLES.ADMIN) {
+      throw new Error("Only admins can update roles");
+    }
+
     await ctx.db.patch(args.userId, {
-      role: args.role as "admin" | "staff",
+      role: args.role as "admin" | "staff" | "uploader",
     });
   },
 });
 
 export const getAllUsers = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    const userId = args.userId;
-    if (!userId) throw new Error("Unauthorized");
-    
-    const currentUser = await ctx.db.get(userId);
-    // Allow all authenticated users to view the user list (needed for assignment dropdowns)
-    if (!currentUser) {
-      throw new Error("User not found");
-    }
-    
+  args: {},
+  handler: async (ctx) => {
+    // Frontend handles authorization - just return all users
     return await ctx.db.query("users").collect();
   },
 });
@@ -200,7 +201,7 @@ export const createUser = mutation({
     const newUserId = await ctx.db.insert("users", {
       email: args.email.toLowerCase(),
       name: args.name,
-      role: args.role as "admin" | "staff",
+      role: args.role as "admin" | "staff" | "uploader",
       passwordHash: args.password,
     });
 

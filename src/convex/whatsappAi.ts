@@ -2,349 +2,247 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
+import { generateWithGemini, extractJsonFromMarkdown } from "./lib/gemini";
 
 export const generateAndSendAiReply = action({
   args: {
     leadId: v.id("leads"),
     phoneNumber: v.string(),
+    prompt: v.string(),
+    context: v.any(),
     userId: v.optional(v.id("users")),
     replyingToMessageId: v.optional(v.id("messages")),
     replyingToExternalId: v.optional(v.string()),
-    context: v.any(),
-    prompt: v.optional(v.string()),
     isAutoReply: v.optional(v.boolean()),
   },
-  handler: async (ctx, args): Promise<string> => {
-    const systemUser = args.userId ? null : await ctx.runQuery(api.users.getSystemUser);
-    const userId = args.userId || systemUser?._id;
-    
-    if (!userId) {
-      throw new Error("No user ID available for AI generation");
-    }
-
-    // 1. FIRST: Check if customer wants to speak with salesperson using AI
-    let isContactRequest = false;
-    let contactConfidence = "low";
-    let contactReason = "";
-    
+  handler: async (ctx, args) => {
     try {
-      const detectionResponse = await ctx.runAction(api.ai.generateContent, {
-        prompt: args.prompt || "",
-        type: "contact_request_detection",
-        context: {
-          conversationHistory: args.context?.conversationHistory || [],
-        },
-        userId: userId,
-        leadId: args.leadId,
-      }) as string;
+      // Fetch available resources for context
+      const products = await ctx.runQuery(api.products.listProducts);
+      const rangePdfs = await ctx.runQuery(api.rangePdfs.listRangePdfs);
 
-      console.log("Contact request detection response:", detectionResponse);
+      const productNames = products.map((p: any) => p.name).join(", ");
+      const pdfNames = rangePdfs.map((p: any) => p.name).join(", ");
+
+      const systemPrompt = `You are a helpful CRM assistant for a pharmaceutical company.
+      You are chatting with a lead on WhatsApp.
       
-      // Clean up response if it contains markdown code blocks
-      let cleanResponse = detectionResponse.trim();
-      const jsonMatch = cleanResponse.match(/(\{[\s\S]*\})/);
-      if (jsonMatch) {
-        cleanResponse = jsonMatch[1];
+      Available Products: ${productNames}
+      Available Range PDFs: ${pdfNames}
+      
+      Your goal is to assist the lead, answer questions, and provide product information.
+      
+      You can perform the following actions by returning a JSON object:
+      1. Reply with text: { "action": "reply", "text": "your message" }
+      2. Send a product with image and details: { "action": "send_product", "text": "optional intro message", "resource_name": "exact product name" }
+      3. Send a PDF: { "action": "send_pdf", "text": "optional caption", "resource_name": "exact pdf name" }
+      4. Send full catalogue (link + all PDFs): { "action": "send_full_catalogue", "text": "optional message" }
+      5. Request human intervention (if you can't help): { "action": "intervention_request", "text": "I will connect you with an agent.", "reason": "reason" }
+      6. Request contact (if they want a meeting/call): { "action": "contact_request", "text": "I've noted your request.", "reason": "reason" }
+      
+      When the user asks for product details, images, or information about a specific product, use "send_product" action.
+      When the user asks for "full catalogue", "complete catalogue", "all products", or similar requests, use the "send_full_catalogue" action.
+      
+      Always return ONLY the JSON object. Do not include other text.
+      `;
+
+      const chatContext = JSON.stringify(args.context);
+      const userPrompt = `Context: ${chatContext}\n\nUser Message: ${args.prompt}`;
+
+      const { text } = await generateWithGemini(ctx, systemPrompt, userPrompt, { jsonMode: true });
+      
+      const jsonStr = extractJsonFromMarkdown(text);
+      let aiAction;
+      try {
+        aiAction = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("Failed to parse AI response as JSON", text);
+        // Fallback to text reply
+        aiAction = { action: "reply", text: text };
       }
-      
-      const detection = JSON.parse(cleanResponse);
-      console.log("Parsed detection:", detection);
-      
-      contactConfidence = detection.confidence || "low";
-      contactReason = detection.reason || "";
-      
-      // Only trigger contact request if confidence is high or medium
-      isContactRequest = detection.wantsContact === true && (contactConfidence === "high" || contactConfidence === "medium");
-      console.log("Is contact request:", isContactRequest, "Confidence:", contactConfidence, "Reason:", contactReason);
-    } catch (e) {
-      console.error("Failed to detect contact request with AI:", e);
-    }
 
-    // 2. If contact request detected with sufficient confidence, handle it immediately and return
-    if (isContactRequest) {
-      const lead = await ctx.runQuery(api.leads.queries.getLead, { id: args.leadId });
-      
-      if (lead && lead.assignedTo) {
-        console.log(`Creating contact request for lead ${args.leadId}, assigned to ${lead.assignedTo}`);
-        
-        // Create contact request for assigned user
-        const requestId = await ctx.runMutation(api.contactRequests.createContactRequest, {
+      console.log("AI Action:", aiAction);
+
+      // Execute Action
+      if (aiAction.action === "reply") {
+        await ctx.runAction(api.whatsapp.messages.send, {
           leadId: args.leadId,
-          assignedTo: lead.assignedTo,
-          customerMessage: args.prompt || "",
-        });
-
-        console.log(`Contact request created with ID: ${requestId}`);
-
-        // Get configurable automated response or use default
-        const autoMessage = args.context?.contactRequestMessage || 
-          "Thank you for your request! A member of our team will contact you shortly. 🙏";
-        
-        await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
           phoneNumber: args.phoneNumber,
-          message: autoMessage,
-          leadId: args.leadId,
+          message: aiAction.text,
           quotedMessageId: args.replyingToMessageId,
           quotedMessageExternalId: args.replyingToExternalId,
         });
-
-        console.log(`Contact request created for lead ${args.leadId} with confidence: ${contactConfidence}`);
-        return autoMessage;
-      } else {
-        console.log(`Lead ${args.leadId} has no assignedTo user, skipping contact request`);
-      }
-    }
-
-    // 3. If NOT a contact request, proceed with normal AI reply generation
-    const products = await ctx.runQuery(api.products.listProducts);
-    const productNames = products.map((p: any) => p.name).join(", ");
-    
-    const rangePdfs = await ctx.runQuery(api.rangePdfs.listRangePdfs);
-    const rangeNames = rangePdfs.map((r: any) => {
-      if (r.category === "THERAPEUTIC") {
-        return `${r.name} (Therapeutic Range)`;
-      }
-      return `${r.name} (Division: ${r.division})`;
-    }).join("; ");
-
-    const aiResponse = (await ctx.runAction(api.ai.generateContent, {
-      prompt: args.prompt || "Draft a reply to this conversation",
-      type: "chat_reply",
-      context: {
-        ...args.context,
-        availableProducts: productNames,
-        availableRanges: rangeNames,
-        isAutoReply: args.isAutoReply
-      },
-      userId: userId,
-      leadId: args.leadId,
-    })) as string;
-
-    if (!aiResponse) {
-      throw new Error("AI failed to generate a response");
-    }
-
-    // 4. Check if the response indicates a product match or range match (JSON format)
-    let messageToSend = aiResponse;
-    let mediasToSend: any[] = [];
-    let productNotFound = false;
-    let requestedProductName = "";
-    let rangePdfsToSend: any[] = [];
-
-    try {
-        // Extract JSON from response (handling potential markdown code blocks or preambles)
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        const jsonString = jsonMatch ? jsonMatch[0] : aiResponse.trim();
-        
-        console.log("AI Response:", aiResponse);
-        console.log("Extracted JSON string:", jsonString);
-        
-        if (jsonString.startsWith("{") && jsonString.endsWith("}")) {
-            const parsed = JSON.parse(jsonString);
-            console.log("Parsed JSON:", JSON.stringify(parsed, null, 2));
-            
-            // Handle Product Match (Single or Multiple)
-            if (parsed.productNames || parsed.productName) {
-                const names = parsed.productNames || [parsed.productName];
-                console.log("Looking for products:", names);
-                console.log("Available products:", products.map((p: any) => p.name));
-                
-                const matchedProducts = [];
-                const notFoundNames = [];
-
-                for (const name of names) {
-                    // Try exact match first
-                    let product = products.find((p: any) => p.name.toLowerCase() === name.toLowerCase());
-                    
-                    // If no exact match, try partial match
-                    if (!product) {
-                        product = products.find((p: any) => 
-                            p.name.toLowerCase().includes(name.toLowerCase()) || 
-                            name.toLowerCase().includes(p.name.toLowerCase())
-                        );
-                    }
-                    
-                    if (product) {
-                        matchedProducts.push(product);
-                        console.log(`✓ Found product: ${product.name}, images:`, product.images);
-                    } else {
-                        notFoundNames.push(name);
-                        console.log(`✗ Product not found: ${name}`);
-                    }
-                }
-
-                console.log(`Matched ${matchedProducts.length} products, ${notFoundNames.length} not found`);
-
-                if (matchedProducts.length > 0) {
-                    messageToSend = matchedProducts.map((product: any) => 
-                        `Here are the details for *${product.name}*:\n` +
-                        `🏷️ Brand: ${product.brandName}\n` +
-                        `🧪 Molecule: ${product.molecule || "N/A"}\n` +
-                        `💰 MRP: ₹${product.mrp}\n` +
-                        `📦 Packaging: ${product.packaging || "N/A"}\n` +
-                        `${product.description || ""}`
-                    ).join("\n\n-------------------\n\n");
-                    
-                    // Collect ALL images for all matched products
-                    for (const product of matchedProducts) {
-                        if (product.images && product.images.length > 0) {
-                            console.log(`✓ Product ${product.name} has ${product.images.length} images`);
-                            // Add ALL images for this product, not just the first one
-                            for (let i = 0; i < product.images.length; i++) {
-                                console.log(`  - Adding image ${i + 1}/${product.images.length}: ${product.images[i]}`);
-                                mediasToSend.push({
-                                    storageId: product.images[i],
-                                    fileName: `${product.name}_${i + 1}.jpg`,
-                                    mimeType: "image/jpeg",
-                                    caption: i === 0 ? `${product.name}` : `${product.name} (Image ${i + 1})`
-                                });
-                            }
-                        } else {
-                            console.log(`✗ No images found for product: ${product.name}`);
-                        }
-                    }
-                    console.log(`Total images queued to send: ${mediasToSend.length}`);
-                } 
-                
-                if (notFoundNames.length > 0) {
-                    if (matchedProducts.length === 0) {
-                        productNotFound = true;
-                        requestedProductName = notFoundNames[0];
-                        messageToSend = "This product image and details will be shared shortly. 📦";
-                    }
-                }
-            } 
-            // Handle Range Match
-            else if (parsed.rangeName) {
-                const matchingRanges = rangePdfs.filter((r: any) => 
-                    r.name.toLowerCase() === parsed.rangeName.toLowerCase()
-                );
-
-                if (matchingRanges.length > 0) {
-                    if (matchingRanges.length > 1) {
-                        messageToSend = `Here are the PDFs for *${parsed.rangeName}*. 📄`;
-                        rangePdfsToSend = matchingRanges;
-                    } else {
-                        const range = matchingRanges[0];
-                        const divisionInfo = range.division ? ` (${range.division})` : "";
-                        messageToSend = `Here is the PDF for *${range.name}*${divisionInfo}. 📄`;
-                        rangePdfsToSend = [range];
-                    }
-                } else {
-                    messageToSend = `I couldn't find the PDF for ${parsed.rangeName}. Please check the name and try again.`;
-                }
-            }
-            // Handle Full Catalogue
-            else if (parsed.fullCatalogue) {
-                messageToSend = `It sounds like you're looking for our full product catalog! You can find all of our products listed here: https://cafoli.in/allproduct.aspx 📚\n\nI am also sending you all our range PDFs below. 👇`;
-                rangePdfsToSend = rangePdfs; 
-            }
-            else if (parsed.message) {
-                messageToSend = parsed.message;
-            }
-        }
-    } catch (e) {
-        console.log("Failed to parse AI JSON response:", e);
-    }
-
-    // 5. Send message immediately via WhatsApp
-    
-    // Send initial text message
-    await ctx.runAction(api.whatsapp.sendWhatsAppMessage, {
-        phoneNumber: args.phoneNumber,
-        message: messageToSend,
-        leadId: args.leadId,
-        quotedMessageId: args.replyingToMessageId,
-        quotedMessageExternalId: args.replyingToExternalId,
-    });
-    
-    console.log(`Sending ${mediasToSend.length} product images...`);
-    
-    console.log(`=== MEDIA SENDING PHASE ===`);
-    console.log(`Product images to send: ${mediasToSend.length}`);
-    console.log(`Range PDFs to send: ${rangePdfsToSend.length}`);
-    console.log(`Is auto-reply: ${args.isAutoReply}`);
-    
-    // Send Product Images FIRST (before Range PDFs)
-    // Use sequential execution to avoid Optimistic Concurrency Control errors
-    if (mediasToSend.length > 0) {
-        for (const [i, media] of mediasToSend.entries()) {
-            // Add delay before sending media (especially after text or previous media)
-            // This helps prevent OCC errors and rate limiting
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            console.log(`[${i+1}/${mediasToSend.length}] Attempting to send product image:`);
-            console.log(`  - File: ${media.fileName}`);
-            console.log(`  - Storage ID: ${media.storageId}`);
-            console.log(`  - MIME Type: ${media.mimeType}`);
-            console.log(`  - Caption: ${media.caption}`);
-            
-            try {
-                // Verify storage ID exists
-                const fileUrl = await ctx.storage.getUrl(media.storageId);
-                if (!fileUrl) {
-                    console.error(`✗ Storage ID ${media.storageId} returned null URL!`);
-                    continue;
-                }
-                console.log(`✓ File URL retrieved: ${fileUrl.substring(0, 50)}...`);
-                
-                await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
-                    phoneNumber: args.phoneNumber,
-                    message: media.caption || "",
-                    leadId: args.leadId,
-                    storageId: media.storageId,
-                    fileName: media.fileName,
-                    mimeType: media.mimeType,
-                });
-                console.log(`✓ Successfully sent image: ${media.fileName}`);
-            } catch (error) {
-                console.error(`✗ Failed to send image ${media.fileName}:`, error);
-                console.error(`Error details:`, JSON.stringify(error, null, 2));
-            }
-        }
-    }
-    
-    console.log(`Sending ${rangePdfsToSend.length} range PDFs...`);
-    
-    // Send Range PDFs sequentially
-    if (rangePdfsToSend.length > 0) {
-        for (const [i, range] of rangePdfsToSend.entries()) {
-            // Add delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            const caption = range.category === "THERAPEUTIC" 
-                ? `${range.name} (Therapeutic Range)`
-                : `${range.name}${range.division ? ` (${range.division})` : ""}`;
-
-            try {
-                await ctx.runAction(api.whatsapp.sendWhatsAppMedia, {
-                    phoneNumber: args.phoneNumber,
-                    message: caption,
-                    leadId: args.leadId,
-                    storageId: range.storageId,
-                    fileName: `${range.name}.pdf`,
-                    mimeType: "application/pdf",
-                });
-                console.log(`✓ Successfully sent range PDF: ${range.name}`);
-            } catch (error) {
-                console.error(`✗ Failed to send range PDF ${range.name}:`, error);
-            }
-        }
-    }
-
-    // 6. If product not found, create intervention request
-    if (productNotFound && requestedProductName) {
-        const lead = await ctx.runQuery(api.leads.queries.getLead, { id: args.leadId });
-        if (lead && lead.assignedTo) {
-            await ctx.runMutation(api.interventionRequests.createInterventionRequest, {
-                leadId: args.leadId,
-                assignedTo: lead.assignedTo,
-                requestedProduct: requestedProductName,
-                customerMessage: args.prompt || "",
+      } else if (aiAction.action === "send_product") {
+        const product = products.find((p: any) => p.name === aiAction.resource_name);
+        if (product) {
+          console.log(`Found product: ${product.name}, images:`, product.images);
+          
+          // Send intro message if provided
+          if (aiAction.text) {
+            await ctx.runAction(api.whatsapp.messages.send, {
+              leadId: args.leadId,
+              phoneNumber: args.phoneNumber,
+              message: aiAction.text,
             });
-        }
-    }
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+          
+          // Send product image if available
+          if (product.images && product.images.length > 0) {
+            const storageId = product.images[0];
+            console.log(`[PRODUCT_SEND] Processing image for ${product.name}. StorageId: ${storageId}`);
+            
+            try {
+              const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId });
+              console.log(`[PRODUCT_SEND] Image metadata retrieved:`, metadata);
+              
+              if (!metadata) {
+                 console.error(`[PRODUCT_SEND] Metadata is null for storageId: ${storageId}. Image might be missing.`);
+              }
 
-    return messageToSend;
-  },
+              // Verify we can get a URL before attempting to send
+              // Note: We can't get the URL here in the action directly easily without passing it to the next action
+              // But sendMedia handles it.
+              
+              await ctx.runAction(api.whatsapp.messages.sendMedia, {
+                leadId: args.leadId,
+                phoneNumber: args.phoneNumber,
+                storageId: storageId,
+                fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}.jpg`, // Sanitize filename
+                mimeType: metadata?.contentType || "image/jpeg",
+                message: product.name
+              });
+              
+              console.log(`[PRODUCT_SEND] Image sent successfully for ${product.name}`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (error) {
+              console.error(`[PRODUCT_SEND] Failed to send product image for ${product.name}:`, error);
+              // We continue to send details even if image fails
+            }
+          } else {
+             console.log(`[PRODUCT_SEND] No images found for product: ${product.name}`);
+          }
+          
+          // Format and send product details
+          let detailsMessage = `📦 *${product.name}*\n\n`;
+          if (product.brandName) detailsMessage += `Brand: ${product.brandName}\n`;
+          if (product.molecule) detailsMessage += `Molecule: ${product.molecule}\n`;
+          if (product.mrp) detailsMessage += `MRP: ₹${product.mrp}\n`;
+          if (product.packaging) detailsMessage += `Packaging: ${product.packaging}\n`;
+          if (product.description) detailsMessage += `\n${product.description}\n`;
+          if (product.pageLink) detailsMessage += `\nMore info: ${product.pageLink}`;
+          
+          await ctx.runAction(api.whatsapp.messages.send, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: detailsMessage,
+          });
+        } else {
+          await ctx.runAction(api.whatsapp.messages.send, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: `I couldn't find the product "${aiAction.resource_name}". Please check the product name and try again.`,
+          });
+        }
+      } else if (aiAction.action === "send_pdf") {
+         const pdf = rangePdfs.find((p: any) => p.name === aiAction.resource_name);
+         if (pdf) {
+           const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: pdf.storageId });
+           
+           await ctx.runAction(api.whatsapp.messages.sendMedia, {
+             leadId: args.leadId,
+             phoneNumber: args.phoneNumber,
+             storageId: pdf.storageId,
+             fileName: `${pdf.name}.pdf`,
+             mimeType: metadata?.contentType || "application/pdf",
+             message: aiAction.text
+           });
+         } else {
+            await ctx.runAction(api.whatsapp.messages.send, {
+             leadId: args.leadId,
+             phoneNumber: args.phoneNumber,
+             message: `I couldn't find the PDF for ${aiAction.resource_name}. ${aiAction.text}`,
+           });
+         }
+      } else if (aiAction.action === "send_full_catalogue") {
+          // Send the catalogue link first
+          const catalogueMessage = aiAction.text || "Here is our complete product catalogue:";
+          await ctx.runAction(api.whatsapp.messages.send, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: `${catalogueMessage}\n\nhttps://cafoli.in/allproducts.aspx`,
+          });
+
+          // Send all PDFs
+          for (const pdf of rangePdfs) {
+            try {
+              const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: pdf.storageId });
+              
+              await ctx.runAction(api.whatsapp.messages.sendMedia, {
+                leadId: args.leadId,
+                phoneNumber: args.phoneNumber,
+                storageId: pdf.storageId,
+                fileName: `${pdf.name}.pdf`,
+                mimeType: metadata?.contentType || "application/pdf",
+                message: pdf.name
+              });
+              
+              // Small delay to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (error) {
+              console.error(`Failed to send PDF ${pdf.name}:`, error);
+            }
+          }
+      } else if (aiAction.action === "intervention_request") {
+          await ctx.runAction(api.whatsapp.messages.send, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: aiAction.text,
+          });
+          // Try to create intervention request if module exists
+          try {
+            // @ts-ignore
+            if (api.interventionRequests && api.interventionRequests.create) {
+                // @ts-ignore
+                await ctx.runMutation(api.interventionRequests.create, { 
+                    leadId: args.leadId, 
+                    reason: aiAction.reason || "AI Request",
+                    status: "pending"
+                });
+            }
+          } catch (e) {
+              console.error("Failed to create intervention request", e);
+          }
+      } else if (aiAction.action === "contact_request") {
+          await ctx.runAction(api.whatsapp.messages.send, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: aiAction.text,
+          });
+          // Try to create contact request if module exists
+          try {
+            // @ts-ignore
+            if (api.contactRequests && api.contactRequests.create) {
+                // @ts-ignore
+                await ctx.runMutation(api.contactRequests.create, { 
+                    leadId: args.leadId, 
+                    type: "general",
+                    status: "pending",
+                    notes: aiAction.reason
+                });
+            }
+          } catch (e) {
+              console.error("Failed to create contact request", e);
+          }
+      }
+
+    } catch (error) {
+      console.error("AI Generation Error", error);
+      await ctx.runAction(api.whatsapp.messages.send, {
+          leadId: args.leadId,
+          phoneNumber: args.phoneNumber,
+          message: "I'm having trouble processing your request right now. Please try again later.",
+      });
+    }
+  }
 });
