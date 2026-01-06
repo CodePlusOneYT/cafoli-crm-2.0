@@ -16,13 +16,28 @@ export function FollowUpReminderPopup({ userId }: FollowUpReminderPopupProps) {
   const api = getConvexApi();
   const navigate = useNavigate();
   const followUpRequired = useQuery((api as any).interventionRequests.checkFollowUpRequired, { userId });
+  const markFollowUpComplete = useMutation((api as any).interventionRequests.resolveIntervention);
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     if (followUpRequired) {
       setIsOpen(true);
+    } else {
+      setIsOpen(false);
     }
   }, [followUpRequired]);
+
+  // Auto-dismiss if lead now has a follow-up date
+  useEffect(() => {
+    if (followUpRequired && followUpRequired.lead?.nextFollowUpDate) {
+      // Lead now has a follow-up, mark intervention as resolved
+      markFollowUpComplete({
+        interventionId: followUpRequired.interventionId,
+        status: "resolved",
+      });
+      setIsOpen(false);
+    }
+  }, [followUpRequired, markFollowUpComplete]);
 
   if (!followUpRequired) {
     return null;
@@ -44,7 +59,7 @@ export function FollowUpReminderPopup({ userId }: FollowUpReminderPopupProps) {
             Follow-Up Required
           </DialogTitle>
           <DialogDescription>
-            5 minutes have passed since you claimed this intervention
+            This lead was unassigned and needs a follow-up date
           </DialogDescription>
         </DialogHeader>
 
@@ -59,7 +74,7 @@ export function FollowUpReminderPopup({ userId }: FollowUpReminderPopupProps) {
 
           <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
             <p className="text-xs text-blue-800 dark:text-blue-200">
-              Please schedule a follow-up to track your progress with this lead.
+              Since you claimed this previously unassigned lead, please schedule a follow-up to track your progress.
             </p>
           </div>
 

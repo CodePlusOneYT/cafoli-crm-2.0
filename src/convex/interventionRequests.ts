@@ -146,6 +146,13 @@ export const checkFollowUpRequired = query({
     // Get the lead for the first intervention
     const lead = await ctx.db.get(interventions[0].leadId);
     
+    // Only show popup if lead has no follow-up date set
+    // (meaning it was unassigned/cold caller before)
+    if (lead && lead.nextFollowUpDate) {
+      // Lead already has a follow-up, don't show popup
+      return null;
+    }
+    
     return {
       interventionId: interventions[0]._id,
       leadId: interventions[0].leadId,
