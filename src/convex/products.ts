@@ -36,6 +36,75 @@ export const createProduct = mutation({
   },
 });
 
+export const updateProduct = mutation({
+  args: {
+    id: v.id("products"),
+    name: v.optional(v.string()),
+    brandName: v.string(),
+    molecule: v.optional(v.string()),
+    mrp: v.string(),
+    packaging: v.string(),
+    mainImage: v.optional(v.id("_storage")),
+    flyer: v.optional(v.id("_storage")),
+    bridgeCard: v.optional(v.id("_storage")),
+    visuelet: v.optional(v.id("_storage")),
+    description: v.optional(v.string()),
+    pageLink: v.optional(v.string()),
+    
+    // Flags to remove optional files
+    removeFlyer: v.optional(v.boolean()),
+    removeBridgeCard: v.optional(v.boolean()),
+    removeVisuelet: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.id);
+    if (!product) throw new Error("Product not found");
+
+    const updates: any = {
+      name: args.name || args.brandName,
+      brandName: args.brandName,
+      molecule: args.molecule,
+      mrp: args.mrp,
+      packaging: args.packaging,
+      description: args.description,
+      pageLink: args.pageLink,
+    };
+
+    // Handle file updates
+    if (args.mainImage) {
+      // Delete old main image if it exists and is different
+      if (product.mainImage && product.mainImage !== args.mainImage) {
+        // We don't delete immediately in case of race conditions or if it's used elsewhere, 
+        // but for this app we can probably delete it or let a cron job clean up.
+        // For now, let's just update the reference.
+        // Ideally: await ctx.storage.delete(product.mainImage);
+      }
+      updates.mainImage = args.mainImage;
+      updates.images = [args.mainImage]; // Keep backward compatibility
+    }
+
+    if (args.flyer) updates.flyer = args.flyer;
+    if (args.bridgeCard) updates.bridgeCard = args.bridgeCard;
+    if (args.visuelet) updates.visuelet = args.visuelet;
+
+    // Handle removals
+    if (args.removeFlyer && product.flyer) {
+      // await ctx.storage.delete(product.flyer);
+      updates.flyer = undefined;
+    }
+    if (args.removeBridgeCard && product.bridgeCard) {
+      // await ctx.storage.delete(product.bridgeCard);
+      updates.bridgeCard = undefined;
+    }
+    if (args.removeVisuelet && product.visuelet) {
+      // await ctx.storage.delete(product.visuelet);
+      updates.visuelet = undefined;
+    }
+
+    await ctx.db.patch(args.id, updates);
+  },
+});
+
 export const listProducts = query({
   args: {},
   handler: async (ctx) => {
