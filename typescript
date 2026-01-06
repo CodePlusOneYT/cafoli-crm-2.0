@@ -1,10 +1,1 @@
-  const api = getConvexApi();
-  
-  const criticalLeads = useQuery(
-    (api as any).leads.queries.getCriticalOverdueLeads,
-    currentUser ? { userId: currentUser._id } : "skip"
-  );
-  const coldLeads = useQuery(
-    (api as any).leads.queries.getColdOverdueLeads,
-    currentUser ? { userId: currentUser._id } : "skip"
-  );
+export const blockTypes: BlockType[] = [ ... ];
