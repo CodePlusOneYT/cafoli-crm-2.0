@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 
@@ -17,13 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Loader2, Plus, Upload, X, FileText, Image as ImageIcon } from "lucide-react";
+import { Loader2, Plus, Upload, X, FileText, Image as ImageIcon, Edit } from "lucide-react";
 
 interface ProductUploadDialogProps {
   disabled?: boolean;
+  product?: any; // If provided, we are in edit mode
+  trigger?: React.ReactNode;
 }
 
-export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
+export function ProductUploadDialog({ disabled, product, trigger }: ProductUploadDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [brandName, setBrandName] = useState("");
@@ -38,9 +40,48 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
   const [flyer, setFlyer] = useState<File | null>(null);
   const [bridgeCard, setBridgeCard] = useState<File | null>(null);
   const [visuelet, setVisuelet] = useState<File | null>(null);
+
+  // Existing file flags (for UI only, to show something is there)
+  const [hasExistingMainImage, setHasExistingMainImage] = useState(false);
+  const [hasExistingFlyer, setHasExistingFlyer] = useState(false);
+  const [hasExistingBridgeCard, setHasExistingBridgeCard] = useState(false);
+  const [hasExistingVisuelet, setHasExistingVisuelet] = useState(false);
   
   const generateUploadUrl = useMutation(api.products.generateUploadUrl);
   const createProduct = useMutation(api.products.createProduct);
+  const updateProduct = useMutation(api.products.updateProduct);
+
+  useEffect(() => {
+    if (product && open) {
+      setBrandName(product.brandName || "");
+      setMolecule(product.molecule || "");
+      setMrp(product.mrp || "");
+      setPackaging(product.packaging || "");
+      setDescription(product.description || "");
+      setPageLink(product.pageLink || "");
+      
+      setHasExistingMainImage(!!product.mainImage);
+      setHasExistingFlyer(!!product.flyer);
+      setHasExistingBridgeCard(!!product.bridgeCard);
+      setHasExistingVisuelet(!!product.visuelet);
+    } else if (!product && open) {
+      // Reset for create mode
+      setBrandName("");
+      setMolecule("");
+      setMrp("");
+      setPackaging("");
+      setDescription("");
+      setPageLink("");
+      setMainImage(null);
+      setFlyer(null);
+      setBridgeCard(null);
+      setVisuelet(null);
+      setHasExistingMainImage(false);
+      setHasExistingFlyer(false);
+      setHasExistingBridgeCard(false);
+      setHasExistingVisuelet(false);
+    }
+  }, [product, open]);
 
   const handleFileSelect = (
     e: React.ChangeEvent<HTMLInputElement>, 
@@ -80,15 +121,16 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
       return;
     }
 
-    if (!mainImage) {
-      toast.error("Product Image is compulsory");
+    if (!product && !mainImage) {
+      toast.error("Product Image is compulsory for new products");
       return;
     }
 
     setLoading(true);
     try {
       // Upload files
-      const mainImageId = await uploadFile(mainImage);
+      let mainImageId = undefined;
+      if (mainImage) mainImageId = await uploadFile(mainImage);
       
       let flyerId = undefined;
       if (flyer) flyerId = await uploadFile(flyer);
@@ -99,35 +141,51 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
       let visueletId = undefined;
       if (visuelet) visueletId = await uploadFile(visuelet);
 
-      await createProduct({
-        brandName,
-        molecule,
-        mrp,
-        packaging,
-        mainImage: mainImageId,
-        flyer: flyerId,
-        bridgeCard: bridgeCardId,
-        visuelet: visueletId,
-        description,
-        pageLink,
-      });
+      if (product) {
+        await updateProduct({
+          id: product._id,
+          brandName,
+          molecule,
+          mrp,
+          packaging,
+          mainImage: mainImageId,
+          flyer: flyerId,
+          bridgeCard: bridgeCardId,
+          visuelet: visueletId,
+          description,
+          pageLink,
+          // If user removed existing file (we need UI for this, but for now let's assume replacing or keeping)
+          // To properly support removal, we need "remove" buttons for existing files.
+          // For now, we only support replacing or adding.
+          // If we want to support removal, we need state for "removeFlyer", etc.
+          // Let's add simple removal logic if we have time, but for now replacing is key.
+          // If we want to support removal, we need state for "removeFlyer", etc.
+          // Let's add simple removal logic if we have time, but for now replacing is key.
+          removeFlyer: hasExistingFlyer === false && !!product.flyer, // If it was there but now UI says no (we need to implement the UI removal)
+          removeBridgeCard: hasExistingBridgeCard === false && !!product.bridgeCard,
+          removeVisuelet: hasExistingVisuelet === false && !!product.visuelet,
+        });
+        toast.success("Product updated successfully");
+      } else {
+        await createProduct({
+          brandName,
+          molecule,
+          mrp,
+          packaging,
+          mainImage: mainImageId!,
+          flyer: flyerId,
+          bridgeCard: bridgeCardId,
+          visuelet: visueletId,
+          description,
+          pageLink,
+        });
+        toast.success("Product uploaded successfully");
+      }
 
-      toast.success("Product uploaded successfully");
       setOpen(false);
-      // Reset form
-      setBrandName("");
-      setMolecule("");
-      setMrp("");
-      setPackaging("");
-      setDescription("");
-      setPageLink("");
-      setMainImage(null);
-      setFlyer(null);
-      setBridgeCard(null);
-      setVisuelet(null);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to upload product");
+      toast.error(product ? "Failed to update product" : "Failed to upload product");
     } finally {
       setLoading(false);
     }
@@ -138,13 +196,17 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
     file, 
     setFile, 
     accept, 
-    required = false 
+    required = false,
+    existing = false,
+    onRemoveExisting
   }: { 
     label: string, 
     file: File | null, 
     setFile: (f: File | null) => void, 
     accept: string,
-    required?: boolean
+    required?: boolean,
+    existing?: boolean,
+    onRemoveExisting?: () => void
   }) => (
     <div className="space-y-2">
       <Label>{label} {required && "*"}</Label>
@@ -155,6 +217,31 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
           <button type="button" onClick={() => setFile(null)} className="text-destructive hover:text-destructive/80">
             <X className="h-3 w-3" />
           </button>
+        </div>
+      ) : existing ? (
+        <div className="relative bg-muted/50 border border-dashed p-2 rounded-md flex items-center gap-2">
+          {accept === "application/pdf" ? <FileText className="h-4 w-4 text-muted-foreground" /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}
+          <span className="text-xs truncate flex-1 text-muted-foreground">Existing file</span>
+          {onRemoveExisting && (
+             <button type="button" onClick={onRemoveExisting} className="text-destructive hover:text-destructive/80" title="Remove existing file">
+               <X className="h-3 w-3" />
+             </button>
+          )}
+          <div className="relative ml-2">
+             <Input
+                type="file"
+                accept={accept}
+                onChange={(e) => handleFileSelect(e, setFile, accept)}
+                className="hidden"
+                id={`file-replace-${label.replace(/\s+/g, '-')}`}
+              />
+              <Label
+                htmlFor={`file-replace-${label.replace(/\s+/g, '-')}`}
+                className="text-xs text-primary cursor-pointer hover:underline"
+              >
+                Replace
+              </Label>
+          </div>
         </div>
       ) : (
         <div className="flex items-center gap-2">
@@ -180,20 +267,22 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button 
-          variant="outline" 
-          className="gap-2"
-          disabled={disabled}
-        >
-          <Plus className="h-4 w-4" />
-          Upload Product
-        </Button>
+        {trigger ? trigger : (
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            disabled={disabled}
+          >
+            <Plus className="h-4 w-4" />
+            Upload Product
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Upload New Product</DialogTitle>
+          <DialogTitle>{product ? "Edit Product" : "Upload New Product"}</DialogTitle>
           <DialogDescription>
-            Add a new product to the catalog.
+            {product ? "Update product details and files." : "Add a new product to the catalog."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
@@ -241,25 +330,33 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
               file={mainImage} 
               setFile={setMainImage} 
               accept="image/*" 
-              required 
+              required={!product}
+              existing={hasExistingMainImage}
+              // Main image cannot be removed, only replaced
             />
             <FileInput 
               label="Product Flyer" 
               file={flyer} 
               setFile={setFlyer} 
               accept="image/*" 
+              existing={hasExistingFlyer}
+              onRemoveExisting={() => setHasExistingFlyer(false)}
             />
             <FileInput 
               label="Bridge Card" 
               file={bridgeCard} 
               setFile={setBridgeCard} 
               accept="image/*" 
+              existing={hasExistingBridgeCard}
+              onRemoveExisting={() => setHasExistingBridgeCard(false)}
             />
             <FileInput 
               label="Visuelet (PDF)" 
               file={visuelet} 
               setFile={setVisuelet} 
               accept="application/pdf" 
+              existing={hasExistingVisuelet}
+              onRemoveExisting={() => setHasExistingVisuelet(false)}
             />
           </div>
 
@@ -269,7 +366,7 @@ export function ProductUploadDialog({ disabled }: ProductUploadDialogProps) {
             </Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Upload Product
+              {product ? "Update Product" : "Upload Product"}
             </Button>
           </DialogFooter>
         </form>

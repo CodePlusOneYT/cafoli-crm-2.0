@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 
@@ -17,13 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Loader2, Plus, Upload, X, FileText } from "lucide-react";
+import { Loader2, Plus, Upload, X, FileText, Edit } from "lucide-react";
 
 interface RangePdfUploadDialogProps {
   disabled?: boolean;
+  rangePdf?: any;
+  trigger?: React.ReactNode;
 }
 
-export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
+export function RangePdfUploadDialog({ disabled, rangePdf, trigger }: RangePdfUploadDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
@@ -33,6 +35,20 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
   
   const generateUploadUrl = useMutation(api.rangePdfs.generateUploadUrl);
   const createRangePdf = useMutation(api.rangePdfs.createRangePdf);
+  const updateRangePdf = useMutation(api.rangePdfs.updateRangePdf);
+
+  useEffect(() => {
+    if (rangePdf && open) {
+      setName(rangePdf.name || "");
+      setDivision(rangePdf.division || "");
+      setCategory(rangePdf.category || "DIVISION");
+    } else if (!rangePdf && open) {
+      setName("");
+      setDivision("");
+      setCategory("DIVISION");
+      setSelectedFile(null);
+    }
+  }, [rangePdf, open]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -52,8 +68,13 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name || !selectedFile) {
-      toast.error("Please fill in name and select a PDF");
+    if (!name) {
+      toast.error("Please fill in name");
+      return;
+    }
+
+    if (!rangePdf && !selectedFile) {
+      toast.error("Please select a PDF");
       return;
     }
 
@@ -64,32 +85,48 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
 
     setLoading(true);
     try {
-      // Upload PDF
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": selectedFile.type },
-        body: selectedFile,
-      });
-      const { storageId } = await result.json();
+      let storageId = undefined;
+      if (selectedFile) {
+        // Upload PDF
+        const postUrl = await generateUploadUrl();
+        const result = await fetch(postUrl, {
+          method: "POST",
+          headers: { "Content-Type": selectedFile.type },
+          body: selectedFile,
+        });
+        const json = await result.json();
+        storageId = json.storageId;
+      }
 
-      await createRangePdf({
-        name,
-        division: category === "DIVISION" ? division : undefined,
-        category,
-        storageId,
-      });
+      if (rangePdf) {
+        await updateRangePdf({
+          id: rangePdf._id,
+          name,
+          division: category === "DIVISION" ? division : undefined,
+          category,
+          storageId,
+        });
+        toast.success("Range PDF updated successfully");
+      } else {
+        await createRangePdf({
+          name,
+          division: category === "DIVISION" ? division : undefined,
+          category,
+          storageId: storageId!,
+        });
+        toast.success("Range PDF uploaded successfully");
+      }
 
-      toast.success("Range PDF uploaded successfully");
       setOpen(false);
-      // Reset form
-      setName("");
-      setDivision("");
-      setCategory("DIVISION");
-      setSelectedFile(null);
+      if (!rangePdf) {
+        setName("");
+        setDivision("");
+        setCategory("DIVISION");
+        setSelectedFile(null);
+      }
     } catch (error) {
       console.error(error);
-      toast.error("Failed to upload Range PDF");
+      toast.error(rangePdf ? "Failed to update Range PDF" : "Failed to upload Range PDF");
     } finally {
       setLoading(false);
     }
@@ -98,20 +135,22 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start gap-2"
-          disabled={disabled}
-        >
-          <Plus className="h-4 w-4" />
-          Upload Range PDF
-        </Button>
+        {trigger ? trigger : (
+          <Button 
+            variant="outline" 
+            className="w-full justify-start gap-2"
+            disabled={disabled}
+          >
+            <Plus className="h-4 w-4" />
+            Upload Range PDF
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Upload Range PDF</DialogTitle>
+          <DialogTitle>{rangePdf ? "Edit Range PDF" : "Upload Range PDF"}</DialogTitle>
           <DialogDescription>
-            Add a new product range PDF catalog.
+            {rangePdf ? "Update range PDF details." : "Add a new product range PDF catalog."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
@@ -142,7 +181,7 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
           )}
 
           <div className="space-y-2">
-            <Label>PDF File *</Label>
+            <Label>PDF File {rangePdf ? "(Optional)" : "*"}</Label>
             {selectedFile ? (
               <div className="relative bg-muted p-3 rounded-md flex items-center gap-3">
                 <FileText className="h-5 w-5 text-blue-500" />
@@ -152,21 +191,28 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="pdf-upload"
-                />
-                <Label
-                  htmlFor="pdf-upload"
-                  className="flex items-center gap-2 px-4 py-2 border rounded-md cursor-pointer hover:bg-muted w-full justify-center"
-                >
-                  <Upload className="h-4 w-4" />
-                  Select PDF
-                </Label>
+              <div className="flex flex-col gap-2">
+                {rangePdf && (
+                  <div className="text-xs text-muted-foreground">
+                    Current file: <span className="font-medium">Existing PDF</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="pdf-upload"
+                  />
+                  <Label
+                    htmlFor="pdf-upload"
+                    className="flex items-center gap-2 px-4 py-2 border rounded-md cursor-pointer hover:bg-muted w-full justify-center"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {rangePdf ? "Replace PDF" : "Select PDF"}
+                  </Label>
+                </div>
               </div>
             )}
           </div>
@@ -177,7 +223,7 @@ export function RangePdfUploadDialog({ disabled }: RangePdfUploadDialogProps) {
             </Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Upload PDF
+              {rangePdf ? "Update PDF" : "Upload PDF"}
             </Button>
           </DialogFooter>
         </form>

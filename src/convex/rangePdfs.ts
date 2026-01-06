@@ -53,3 +53,30 @@ export const generateUploadUrl = mutation({
     return await ctx.storage.generateUploadUrl();
   },
 });
+
+export const updateRangePdf = mutation({
+  args: {
+    id: v.id("rangePdfs"),
+    name: v.string(),
+    division: v.optional(v.string()),
+    category: v.optional(v.string()),
+    storageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => {
+    const range = await ctx.db.get(args.id);
+    if (!range) throw new Error("Range PDF not found");
+
+    const updates: any = {
+      name: args.name,
+      division: args.division,
+      category: args.category || "DIVISION",
+    };
+
+    if (args.storageId) {
+      // await ctx.storage.delete(range.storageId); // Optional cleanup
+      updates.storageId = args.storageId;
+    }
+
+    await ctx.db.patch(args.id, updates);
+  },
+});

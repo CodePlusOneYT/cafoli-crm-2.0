@@ -3,18 +3,10 @@ import { getConvexApi } from "@/lib/convex-api";
 
 const api = getConvexApi() as any;
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Trash2, FileText, Loader2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { useState } from "react";
-import { Id } from "@/convex/_generated/dataModel";
+import { Trash2, FileText, Download, Edit } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,110 +18,96 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { RangePdfUploadDialog } from "./RangePdfUploadDialog";
 
 export function RangePdfListManager() {
-  const rangePdfs = useQuery(api.rangePdfs.listRangePdfs);
+  const rangePdfs = useQuery(api.rangePdfs.listRangePdfs) || [];
   const deleteRangePdf = useMutation(api.rangePdfs.deleteRangePdf);
-  const [deletingId, setDeletingId] = useState<Id<"rangePdfs"> | null>(null);
+  const getUrl = useMutation(api.products.generateUploadUrl); // We can't get URL directly from here easily without a query, but we can use the storage ID to construct a URL or use a query.
 
-  const handleDelete = async (id: Id<"rangePdfs">) => {
-    setDeletingId(id);
+  const handleDelete = async (id: any) => {
     try {
       await deleteRangePdf({ id });
       toast.success("Range PDF deleted successfully");
     } catch (error) {
       toast.error("Failed to delete Range PDF");
-    } finally {
-      setDeletingId(null);
+      console.error(error);
     }
   };
 
-  if (rangePdfs === undefined) {
-    return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>;
-  }
-
   return (
-    <div className="border rounded-md">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Division</TableHead>
-            <TableHead>Therapeutic</TableHead>
-            <TableHead>File</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rangePdfs.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                No range PDFs uploaded yet.
-              </TableCell>
-            </TableRow>
-          ) : (
-            rangePdfs.map((pdf: any) => (
-              <TableRow key={pdf._id}>
-                <TableCell className="font-medium">{pdf.name}</TableCell>
-                <TableCell>
-                  {pdf.category === "DIVISION" ? (
-                    <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full text-xs">
-                      {pdf.division}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {pdf.category === "THERAPEUTIC" ? (
-                    <span className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded-full text-xs">
-                      Therapeutic
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
+    <ScrollArea className="h-[600px] pr-4">
+      <div className="space-y-3">
+        {rangePdfs.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <FileText className="h-12 w-12 mx-auto mb-2 opacity-20" />
+            <p>No range PDFs uploaded yet</p>
+          </div>
+        ) : (
+          rangePdfs.map((pdf: any) => (
+            <div key={pdf._id} className="flex items-center justify-between p-4 border rounded-lg bg-card text-card-foreground shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
                   <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">PDF Document</span>
+                    <h3 className="font-semibold">{pdf.name}</h3>
+                    <Badge variant="outline" className="text-xs">
+                      {pdf.category === "THERAPEUTIC" ? "Therapeutic" : "Division"}
+                    </Badge>
                   </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/90">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Range PDF?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will permanently delete the PDF for "{pdf.name}". This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                          onClick={() => handleDelete(pdf._id)}
-                          className="bg-destructive hover:bg-destructive/90"
-                        >
-                          {deletingId === pdf._id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            "Delete"
-                          )}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
+                  {pdf.division && (
+                    <p className="text-sm text-muted-foreground">
+                      Division: {pdf.division}
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <RangePdfUploadDialog 
+                  rangePdf={pdf}
+                  trigger={
+                    <Button variant="ghost" size="icon" className="text-primary hover:text-primary/80">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive/80"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Range PDF</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete "{pdf.name}"? This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDelete(pdf._id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </ScrollArea>
   );
 }
