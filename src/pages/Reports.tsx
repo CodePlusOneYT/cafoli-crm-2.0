@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { format, startOfDay, endOfDay } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -108,14 +110,14 @@ export default function Reports() {
   }
 
   // Filter data based on checkboxes
-  const filteredSources = stats.sources.filter(s => enabledSources[s.name] !== false);
-  const filteredStatus = stats.status.filter(s => enabledStatuses[s.name] !== false);
-  const filteredRelevancy = stats.relevancy.filter(s => enabledTypes[s.name] !== false);
+  const filteredSources = stats.sources.filter((s: any) => enabledSources[s.name] !== false);
+  const filteredStatus = stats.status.filter((s: any) => enabledStatuses[s.name] !== false);
+  const filteredRelevancy = stats.relevancy.filter((s: any) => enabledTypes[s.name] !== false);
   
   // Initialize sources filter if empty and data exists
   if (Object.keys(enabledSources).length === 0 && stats.sources.length > 0) {
     const initial: Record<string, boolean> = {};
-    stats.sources.forEach(s => initial[s.name] = true);
+    stats.sources.forEach((s: any) => initial[s.name] = true);
     setEnabledSources(initial);
   }
 
@@ -141,7 +143,7 @@ export default function Reports() {
                 outerRadius={80}
                 paddingAngle={2}
                 dataKey="count"
-                onClick={(entry) => handleSliceClick(entry, type)}
+                onClick={(entry: any) => handleSliceClick(entry, type)}
                 cursor="pointer"
               >
                 {data.map((entry: any, index: number) => (
@@ -155,7 +157,7 @@ export default function Reports() {
         </div>
         {filterState && (
           <div className="flex flex-wrap gap-2 justify-center mt-4 mb-2">
-            {Object.keys(filterState).map(key => (
+            {Object.keys(filterState).map((key: string) => (
               <div key={key} className="flex items-center space-x-2">
                 <Checkbox 
                   id={`${type}-${key}`} 
@@ -271,7 +273,7 @@ export default function Reports() {
                       paddingAngle={2}
                       dataKey="count"
                     >
-                      {stats.punctuality.map((entry, index) => (
+                      {stats.punctuality.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={
                           entry.name === "Timely-Completed" ? "#4ade80" : 
                           entry.name === "Overdue-Completed" ? "#facc15" : 
@@ -309,7 +311,7 @@ export default function Reports() {
                   </TableHeader>
                   <TableBody>
                     {detailsLeads.length > 0 ? (
-                      detailsLeads.map((lead) => (
+                      detailsLeads.map((lead: any) => (
                         <TableRow key={lead._id}>
                           <TableCell className="font-medium">{lead.name}</TableCell>
                           <TableCell>{lead.mobile}</TableCell>

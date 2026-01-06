@@ -13,7 +13,9 @@ import { LeadDetailsHeader } from "@/components/leads/LeadDetailsHeader";
 import { LeadDetailsAiDialog } from "@/components/leads/LeadDetailsAiDialog";
 import { LeadDetailsFollowUpDialogs } from "@/components/leads/LeadDetailsFollowUpDialogs";
 import { useLeadEditor } from "@/hooks/useLeadEditor";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useSearchParams } from "react-router";
 import { TagManager } from "@/components/TagManager";
 import {

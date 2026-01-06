@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileText, Plus, RefreshCw, CheckCircle, Clock, XCircle, Info, Trash2, Edit, Send as SendIcon } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

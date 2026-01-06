@@ -12,7 +12,9 @@ import { RangePdfListManager } from "@/components/products/RangePdfListManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield } from "lucide-react";
 import { useQuery, useMutation, useAction } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -93,7 +95,7 @@ export default function Admin() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users?.map((user) => (
+                  {users?.map((user: any) => (
                     <TableRow key={user._id}>
                       <TableCell className="font-medium">{user.name || "Unknown"}</TableCell>
                       <TableCell>{user.email}</TableCell>

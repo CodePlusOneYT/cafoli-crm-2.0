@@ -5,7 +5,7 @@ import { internal } from "./_generated/api";
 import { generateWithGemini, extractJsonFromMarkdown } from "./lib/gemini";
 
 // Public wrapper for frontend to call
-export const generateAndSendAiReply: any = action({
+export const generateAndSendAiReply = action({
   args: {
     prompt: v.string(),
     context: v.object({

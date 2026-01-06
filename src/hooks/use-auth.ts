@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { useState, useEffect } from "react";
-import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+import { getConvexApi } from "@/lib/convex-api";
 
 export function useAuth() {
   const [userId, setUserId] = useState<Id<"users"> | null>(() => {
@@ -9,16 +9,15 @@ export function useAuth() {
     return stored as Id<"users"> | null;
   });
 
-  // Cast api to any to avoid deep type instantiation
-  const apiAny = api as any;
+  const api = getConvexApi();
 
   const user = useQuery(
-    apiAny.users.getUser,
+    api.users.getUser,
     userId ? { id: userId } : "skip"
   );
 
-  const login = useMutation(apiAny.users.login);
-  const createLog = useMutation(apiAny.activityLogs.createLog);
+  const login = useMutation(api.users.login);
+  const createLog = useMutation(api.activityLogs.createLog);
 
   const signIn = async (email: string, password: string) => {
     const result = await login({ email, password });

@@ -1,5 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -66,7 +68,7 @@ export function RangePdfListManager() {
               </TableCell>
             </TableRow>
           ) : (
-            rangePdfs.map((pdf) => (
+            rangePdfs.map((pdf: any) => (
               <TableRow key={pdf._id}>
                 <TableCell className="font-medium">{pdf.name}</TableCell>
                 <TableCell>

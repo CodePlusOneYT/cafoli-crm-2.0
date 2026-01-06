@@ -8,7 +8,9 @@ import { CampaignBlock } from "@/types/campaign";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 import { useAction } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";

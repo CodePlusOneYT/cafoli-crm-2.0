@@ -1,7 +1,9 @@
 import { useQuery } from "convex/react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 
 export function useFollowUpNotifications() {
   const { user: currentUser } = useAuth();

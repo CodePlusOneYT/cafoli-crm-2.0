@@ -4,7 +4,9 @@ import { useQuery } from "convex/react";
 import { Users, MessageSquare, BarChart3, Activity, Loader2 } from "lucide-react";
 import { useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useNavigate } from "react-router";
 
 export default function Dashboard() {

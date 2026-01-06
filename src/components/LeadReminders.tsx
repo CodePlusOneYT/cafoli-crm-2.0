@@ -14,22 +14,23 @@ import { useNavigate } from "react-router";
 import { BellOff } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
 import { useReminderQueue } from "@/hooks/useReminderQueue";
 import { getReminderConfig } from "@/components/reminders/reminderConfig";
 import { ReminderLeadCard } from "@/components/reminders/ReminderLeadCard";
 
 export function LeadReminders() {
   const { user: currentUser } = useAuth();
+  const api = getConvexApi();
   const criticalLeads = useQuery(
-    api.leads.queries.getCriticalOverdueLeads,
+    (api as any).leads.queries.getCriticalOverdueLeads,
     currentUser ? { userId: currentUser._id } : "skip"
   );
   const coldLeads = useQuery(
-    api.leads.queries.getColdOverdueLeads,
+    (api as any).leads.queries.getColdOverdueLeads,
     currentUser ? { userId: currentUser._id } : "skip"
   );
-  const updatePreferences = useMutation(api.users.updatePreferences);
+  const updatePreferences = useMutation((api as any).users.updatePreferences);
   const navigate = useNavigate();
 
   const {

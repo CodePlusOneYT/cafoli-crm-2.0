@@ -135,8 +135,8 @@ export const handleIncomingMessage = internalAction({
                 if (!isChatActive) {
                     console.log(`🤖 Triggering auto-reply for lead ${leadId} (chat not active)`);
                     
-                    const recentMessages = await ctx.runQuery(internal.whatsappQueries.getChatMessagesInternal, { leadId });
-                    const contextMessages = recentMessages.slice(-5).map((m: any) => ({
+                    const allMessages = await ctx.runQuery(internal.whatsappQueries.getChatMessagesInternal, { leadId });
+                    const contextMessages = allMessages.slice(-5).map((m: any) => ({
                         role: m.direction === "outbound" ? "assistant" : "user",
                         content: m.content
                     }));

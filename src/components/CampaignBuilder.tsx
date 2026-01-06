@@ -9,7 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Clock, Mail, MessageSquare, GitBranch, Shuffle, Tag, TagIcon, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useAuth } from "@/hooks/use-auth";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -47,6 +49,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [autoEnrollNew, setAutoEnrollNew] = useState(true);
 
+  const api = getConvexApi() as any;
   const allTags = useQuery(api.tags.getAllTags) || [];
   const uniqueSources = useQuery(api.leads.queries.getUniqueSources) || [];
   const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) || [];
@@ -209,14 +212,14 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
                       <SelectValue placeholder="Select tags..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {allTags.map(tag => (
+                      {allTags.map((tag: any) => (
                         <SelectItem key={tag._id} value={tag._id}>{tag.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <div className="flex flex-wrap gap-1 mt-2">
                     {selectedTags.map(tagId => {
-                      const tag = allTags.find(t => t._id === tagId);
+                      const tag = allTags.find((t: any) => t._id === tagId);
                       return tag ? (
                         <span key={tagId} className="px-2 py-1 rounded text-xs flex items-center gap-1" style={{ backgroundColor: tag.color, color: 'white' }}>
                           {tag.name}
@@ -256,7 +259,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
                       <SelectValue placeholder="Select sources..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {uniqueSources.map(source => (
+                      {uniqueSources.map((source: any) => (
                         <SelectItem key={source} value={source}>{source}</SelectItem>
                       ))}
                     </SelectContent>
@@ -298,7 +301,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
           {showBlockMenu && (
             <Card>
               <CardContent className="p-2 space-y-1">
-                {blockTypes.map(bt => (
+                {blockTypes.map((bt: any) => (
                   <Button
                     key={bt.type}
                     variant="ghost"
@@ -314,8 +317,8 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
           )}
 
           <div className="space-y-2">
-            {blocks.map((block, idx) => {
-              const blockType = blockTypes.find(bt => bt.type === block.type);
+            {blocks.map((block: any, idx: number) => {
+              const blockType = blockTypes.find((bt: any) => bt.type === block.type);
               return (
                 <Card
                   key={block.id}
@@ -350,7 +353,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {blockTypes.find(bt => bt.type === selectedBlockData.type)?.label} Configuration
+                  {blockTypes.find((bt: any) => bt.type === selectedBlockData.type)?.label} Configuration
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -436,7 +439,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
                         <SelectValue placeholder="Select tag..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {allTags.map(tag => (
+                        {allTags.map((tag: any) => (
                           <SelectItem key={tag._id} value={tag._id}>{tag.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -542,7 +545,7 @@ export default function CampaignBuilder({ campaignId, onSave }: CampaignBuilderP
                             <SelectValue placeholder="Select tags..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {allTags.map(tag => (
+                            {allTags.map((tag: any) => (
                               <SelectItem key={tag._id} value={tag._id}>{tag.name}</SelectItem>
                             ))}
                           </SelectContent>

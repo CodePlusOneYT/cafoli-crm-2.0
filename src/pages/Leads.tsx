@@ -1,5 +1,7 @@
 import AppLayout from "@/components/AppLayout";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useQuery, useMutation } from "convex/react";
 import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -119,8 +121,8 @@ export default function Leads() {
         if (paginationOpts.cursor === null) {
           return paginatedResult.page;
         }
-        const existingIds = new Set(prev.map(l => l._id));
-        const newLeads = paginatedResult.page.filter(l => !existingIds.has(l._id));
+        const existingIds = new Set(prev.map((l: any) => l._id));
+        const newLeads = paginatedResult.page.filter((l: any) => !existingIds.has(l._id));
         return [...prev, ...newLeads];
       });
     }

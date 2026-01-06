@@ -16,7 +16,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Shield, Filter, Download, Calendar } from "lucide-react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { toast } from "sonner";
 
 const LOG_CATEGORIES = {
@@ -73,7 +75,7 @@ export default function Logs() {
 
     const csvContent = [
       ["Timestamp", "Category", "Action", "User", "Lead", "Details"].join(","),
-      ...logs.map((log) =>
+      ...logs.map((log: any) =>
         [
           new Date(log.timestamp).toLocaleString(),
           log.category,
@@ -158,7 +160,7 @@ export default function Logs() {
             </Card>
             {Object.entries(stats.byCategory)
               .slice(0, 3)
-              .map(([category, count]) => (
+              .map(([category, count]: [string, any]) => (
                 <Card key={category}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium">{category}</CardTitle>
@@ -188,7 +190,7 @@ export default function Logs() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(LOG_CATEGORIES).map(([key, label]) => (
+                    {Object.entries(LOG_CATEGORIES).map(([key, label]: [string, string]) => (
                       <SelectItem key={key} value={key === "ALL" ? "ALL" : key}>
                         {label}
                       </SelectItem>
@@ -248,7 +250,7 @@ export default function Logs() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {logs.map((log) => (
+                  {logs.map((log: any) => (
                     <div
                       key={log._id}
                       className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"

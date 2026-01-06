@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { useAuth } from "@/hooks/use-auth";
 import { Id } from "@/convex/_generated/dataModel";
 import { BlockPalette, blockTypes } from "@/components/campaign-builder/BlockPalette";

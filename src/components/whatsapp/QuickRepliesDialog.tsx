@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -110,7 +112,7 @@ export function QuickRepliesDialog({ onSelectReply, disabled }: QuickRepliesDial
     setOpen(false);
   };
 
-  const categories = Array.from(new Set(quickReplies.map(r => r.category)));
+  const categories = Array.from(new Set(quickReplies.map((r: any) => r.category)));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -205,12 +207,12 @@ export function QuickRepliesDialog({ onSelectReply, disabled }: QuickRepliesDial
           {/* Quick Replies List */}
           <ScrollArea className="h-[400px] pr-4">
             <div className="space-y-3">
-              {categories.map((category) => (
+              {categories.map((category: any) => (
                 <div key={category} className="space-y-2">
-                  <h4 className="text-sm font-semibold text-muted-foreground">{category}</h4>
+                  <h4 className="text-sm font-semibold text-muted-foreground">{String(category)}</h4>
                   {quickReplies
-                    .filter((r) => r.category === category)
-                    .map((reply) => (
+                    .filter((r: any) => r.category === category)
+                    .map((reply: any) => (
                       <div
                         key={reply._id}
                         className="border rounded-lg p-3 hover:bg-muted/50 transition-colors"
