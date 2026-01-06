@@ -228,13 +228,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const handleMigrationClick = async () => {
     if (!isAdmin) return;
     setIsMigrating(true);
-    toast.info("Running migration...");
+    toast.info("Checking product files...");
     try {
-      await runMigration({});
-      toast.success("Migration completed successfully");
+      const result = await runMigration({}) as any;
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.warning(result.message, {
+          description: result.products?.map((p: any) => 
+            `${p.name}: ${p.issues.join(", ")}`
+          ).join("\n"),
+          duration: 10000,
+        });
+      }
     } catch (error) {
       console.error('Migration error:', error);
-      toast.error('Migration failed');
+      toast.error('Failed to check product files');
     } finally {
       setIsMigrating(false);
     }

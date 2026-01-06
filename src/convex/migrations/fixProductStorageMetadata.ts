@@ -1,5 +1,6 @@
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation, internalQuery, internalAction } from "../_generated/server";
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 
 // Query to find products with potentially problematic storage
 export const findProblematicProducts = internalQuery({
@@ -53,17 +54,30 @@ export const findProblematicProducts = internalQuery({
   },
 });
 
-// Mutation to mark products for re-upload (adds a flag)
-export const markProductForReupload = internalMutation({
-  args: {
-    productId: v.id("products"),
-  },
-  handler: async (ctx, args) => {
-    // Since we can't fix storage metadata directly, we'll need to delete and re-upload
-    // For now, just log the product that needs attention
-    const product = await ctx.db.get(args.productId);
-    if (product) {
-      console.log(`Product "${product.name}" (${args.productId}) needs file re-upload`);
+// Action to run the full migration check and report
+export const runMigration = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{
+    success: boolean;
+    message: string;
+    count: number;
+    products?: Array<{ _id: any; name: string; issues: string[] }>;
+  }> => {
+    const problematic: Array<{ _id: any; name: string; issues: string[] }> = await ctx.runQuery(internal.migrations.fixProductStorageMetadata.findProblematicProducts);
+    
+    if (problematic.length === 0) {
+      return {
+        success: true,
+        message: "All products have correct file metadata!",
+        count: 0,
+      };
     }
+
+    return {
+      success: false,
+      message: `Found ${problematic.length} product(s) with incorrect file metadata. These files need to be re-uploaded using the Edit button.`,
+      count: problematic.length,
+      products: problematic,
+    };
   },
 });
