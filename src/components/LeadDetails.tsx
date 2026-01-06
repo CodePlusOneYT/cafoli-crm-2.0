@@ -418,55 +418,14 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
       </Dialog>
 
       {/* AI Assist Dialog */}
-      <Dialog open={showAiDialog} onOpenChange={setShowAiDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              AI Lead Assistant
-            </DialogTitle>
-            <DialogDescription>
-              Get AI-powered insights and suggestions for this lead.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Button 
-                variant="outline" 
-                className="h-24 flex flex-col gap-2 hover:border-purple-400 hover:bg-purple-50"
-                onClick={handleAiAnalysis}
-                disabled={isAnalyzing}
-              >
-                <BrainCircuit className="h-6 w-6 text-purple-600" />
-                <span>Analyze Lead</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-24 flex flex-col gap-2 hover:border-purple-400 hover:bg-purple-50"
-                onClick={handleAiFollowUpSuggestion}
-                disabled={isAnalyzing}
-              >
-                <Calendar className="h-6 w-6 text-purple-600" />
-                <span>Suggest Follow-up</span>
-              </Button>
-            </div>
-
-            {isAnalyzing && (
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <Sparkles className="h-4 w-4 mr-2 animate-spin" />
-                Thinking...
-              </div>
-            )}
-
-            {aiAnalysis && !isAnalyzing && (
-              <div className="bg-muted/50 p-4 rounded-lg text-sm whitespace-pre-wrap border mt-2">
-                {aiAnalysis}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <LeadDetailsAiDialog
+        isOpen={showAiDialog}
+        onClose={() => setShowAiDialog(false)}
+        isAnalyzing={isAnalyzing}
+        aiAnalysis={aiAnalysis}
+        onAnalyzeLead={handleAiAnalysis}
+        onSuggestFollowUp={handleAiFollowUpSuggestion}
+      />
     </div>
   );
 }
