@@ -7,12 +7,26 @@ import { api } from "./_generated/api";
  * Run with: npx convex run test_ai:runAllTests
  */
 
+interface TestResult {
+  success: boolean;
+  passed?: boolean;
+  testMessage?: string;
+  expected?: boolean;
+  actual?: boolean;
+  confidence?: number;
+  reason?: string;
+  expectedProduct?: string;
+  detectedProduct?: string | null;
+  response?: string;
+  error?: string;
+}
+
 export const testContactRequestDetection = action({
   args: {
     testMessage: v.string(),
     expectedResult: v.boolean(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<TestResult> => {
     try {
       const systemPrompt = `Analyze if the following message is a request for human contact or intervention.
       Return a JSON object with the following fields:
@@ -20,16 +34,15 @@ export const testContactRequestDetection = action({
       - confidence: number (0-1)
       - reason: string`;
 
-      const response = await ctx.runAction(api.ai.generateJson, {
+      const response: unknown = await ctx.runAction(api.ai.generateJson, {
         prompt: args.testMessage,
         systemPrompt: systemPrompt,
       });
 
-      let detection;
+      let detection: { wantsContact: boolean; confidence: number; reason: string };
       try {
         detection = JSON.parse(response as string);
       } catch (e) {
-        // Try to clean up markdown if present (though generateJson should handle it)
         const cleaned = (response as string).replace(/```json/g, '').replace(/```/g, '');
         try {
           detection = JSON.parse(cleaned);
@@ -75,10 +88,11 @@ export const testProductQuery = action({
       Return a JSON object with:
       - productName: string (the exact name of the product found, or null if none found)`;
 
-      const response = await ctx.runAction(api.ai.generateJson, {
+      const response: unknown = await ctx.runAction(api.ai.generateJson, {
         prompt: args.testMessage,
         systemPrompt: systemPrompt,
-      }) as string;
+      });
+      const responseStr = response as string;
 
       let detectedProduct = null;
       try {
@@ -107,7 +121,7 @@ export const testProductQuery = action({
         testMessage: args.testMessage,
         expectedProduct: args.expectedProductName,
         detectedProduct,
-        response: response.substring(0, 200), // First 200 chars
+        response: responseStr.substring(0, 200), // First 200 chars
       };
     } catch (error) {
       return {

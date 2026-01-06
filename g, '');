@@ -1,167 +1,171 @@
-        const parsedResult = JSON.parse(cleanResult);
-        if (parsedResult.suggestion?.date) {
-          handleNewFollowUpDate(new Date(parsedResult.suggestion.date).getTime());
-        }
-      } catch (error) {
-        console.log("Failed to parse AI response:", error);
-      }
-    } catch (error) {
-      toast.error("Failed to generate follow-up suggestion");
-      console.error(error);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+import { action, v } from "etherscan";
 
-  const handleDelete = async () => {
-    if (!user || !lead) return;
-    try {
-      await deleteLead({ leadId: lead._id, adminId: user._id });
-      toast.success("Lead deleted successfully");
-      onClose();
-    } catch (error) {
-      toast.error("Failed to delete lead");
-      console.error(error);
-    }
-  };
-
-  const handleSetFollowUpDate = (date: string) => {
-    if (date) {
-      handleNewFollowUpDate(new Date(date).getTime());
-      setTempFollowUpDate("");
-    } else {
-      toast.error("Please select a date");
-    }
-  };
-
-  if (lead === undefined) {
-    return <div className="flex-1 flex items-center justify-center h-full">Loading...</div>;
-  }
-
-  if (lead === null) {
-    return <div className="flex-1 flex items-center justify-center h-full">Lead not found</div>;
-  }
-
-  const getMinDateTime = () => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 1);
-    return now.toISOString().slice(0, 16);
-  };
-
-  const getMaxDateTime = () => {
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 31);
-    return maxDate.toISOString().slice(0, 16);
-  };
-
-  const formatFollowUpDate = (timestamp?: number) => {
-    if (!timestamp) return "Not set";
-    return new Date(timestamp).toLocaleString();
-  };
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-card border rounded-lg shadow-sm h-full">
-      <LeadDetailsHeader
-        lead={lead}
-        isEditing={isEditing}
-        isAdmin={user?.role === "admin"}
-        onClose={onClose}
-        onStartEditing={startEditing}
-        onCancelEditing={cancelEditing}
-        onSaveEdits={saveEdits}
-        onStatusChange={handleStatusChange}
-        onTypeChange={handleTypeChange}
-        onTagsChange={handleTagsChange}
-        onDelete={handleDelete}
-        onShowAiDialog={() => setShowAiDialog(true)}
-      />
-
-      <div className="flex-1 overflow-y-auto p-6">
-        <LeadInfo 
-          lead={lead} 
-          isEditing={isEditing} 
-          editedLead={editedLead} 
-          setEditedLead={setEditedLead} 
-        />
-
-        <div className="mb-8">
-          <h3 className="font-semibold mb-2 flex items-center gap-2 text-primary">
-            <Calendar className="h-4 w-4" /> Follow-up Date
-            {lead.assignedTo && <span className="text-xs text-red-500 font-normal">(Required)</span>}
-          </h3>
-          {isEditing ? (
-            <div className="space-y-2">
-              <Input 
-                type="datetime-local"
-                value={editedLead.nextFollowUpDate ? new Date(editedLead.nextFollowUpDate).toISOString().slice(0, 16) : ""}
-                onChange={(e) => setEditedLead({ ...editedLead, nextFollowUpDate: new Date(e.target.value).getTime() })}
-                min={getMinDateTime()}
-                max={getMaxDateTime()}
-                className="max-w-md"
-              />
-              <p className="text-xs text-muted-foreground">
-                Must be between now and 31 days in the future
-              </p>
-            </div>
-          ) : (
-            <div className={`bg-muted/30 p-4 rounded-md text-sm border ${
-              lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() 
-                ? 'border-red-500 bg-red-50' 
-                : 'border-border'
-            }`}>
-              {formatFollowUpDate(lead.nextFollowUpDate)}
-              {lead.nextFollowUpDate && lead.nextFollowUpDate < Date.now() && (
-                <span className="ml-2 text-red-600 font-bold">⚠ Overdue</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="mb-8">
-          <h3 className="font-semibold mb-2 text-primary">Message</h3>
-          {isEditing ? (
-            <Textarea 
-              value={editedLead.message || ""} 
-              onChange={(e) => setEditedLead({ ...editedLead, message: e.target.value })}
-              className="min-h-[100px]"
-            />
-          ) : (
-            <div className="bg-muted/30 p-4 rounded-md text-sm border border-border">
-              {lead.message || <span className="text-muted-foreground italic">No message content.</span>}
-            </div>
-          )}
-        </div>
-
-        <LeadActivity 
-          comments={comments || []} 
-          newComment={newComment} 
-          setNewComment={setNewComment} 
-          onAddComment={handleAddComment} 
-        />
-      </div>
-
-      <LeadDetailsFollowUpDialogs
-        showFollowUpCheck={showFollowUpCheck}
-        showNewFollowUpDialog={showNewFollowUpDialog}
-        tempFollowUpDate={tempFollowUpDate}
-        isTestMode={isTestMode}
-        onFollowUpDone={handleFollowUpDone}
-        onFollowUpNotDone={handleFollowUpNotDone}
-        onSetFollowUpDate={handleSetFollowUpDate}
-        onTempDateChange={setTempFollowUpDate}
-        onCloseNewFollowUp={() => setShowNewFollowUpDialog(false)}
-        getMinDateTime={getMinDateTime}
-        getMaxDateTime={getMaxDateTime}
-      />
-
-      <LeadDetailsAiDialog
-        isOpen={showAiDialog}
-        onClose={() => setShowAiDialog(false)}
-        isAnalyzing={isAnalyzing}
-        aiAnalysis={aiAnalysis}
-        onAnalyzeLead={handleAiAnalysis}
-        onSuggestFollowUp={handleAiFollowUpSuggestion}
-      />
-    </div>
-  );
+interface TestResult {
+  success: boolean;
+  passed: boolean;
+  testMessage: string;
+  expected: any;
+  actual: any;
+  confidence: number;
+  reason: string;
+  error?: string;
 }
+
+export const testContactRequestDetection = action({
+  args: {
+    testMessage: v.string(),
+    expectedResult: v.boolean(),
+  },
+  handler: async (ctx, args): Promise<TestResult> => {
+    try {
+      const cleaned = await ctx.runAction(api.ai.generateJson, {
+        prompt: args.testMessage,
+        systemPrompt: `You are a helpful assistant. Identify if the message contains a request for contact.
+        Return a JSON object with:
+        - wantsContact: boolean (true if the message contains a request for contact, false otherwise)
+        - confidence: number (0-100, 0 if not confident, 100 if very confident)
+        - reason: string (explanation for the decision)`,
+      }) as string;
+
+      let detection = { wantsContact: false, confidence: 0, reason: "" };
+      try {
+        detection = JSON.parse(cleaned);
+      } catch (e) {
+        detection = { wantsContact: false, confidence: 0, reason: "Invalid JSON response" };
+      }
+
+      const actualResult = detection.wantsContact === true;
+      const passed = actualResult === args.expectedResult;
+
+      return {
+        success: true,
+        passed,
+        testMessage: args.testMessage,
+        expected: args.expectedResult,
+        actual: actualResult,
+        confidence: detection.confidence,
+        reason: detection.reason,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+});
+
+export const testProductQuery = action({
+  args: {
+    testMessage: v.string(),
+    expectedProductName: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<TestResult> => {
+    try {
+      const products = await ctx.runQuery(api.products.listProducts) as Array<{ name: string }>;
+      const productNames = products.map((p) => p.name).join(", ");
+
+      const systemPrompt = `You are a helpful assistant. Available Products: ${productNames}.
+      Identify if any of the available products are mentioned in the message.
+      Return a JSON object with:
+      - productName: string (the exact name of the product found, or null if none found)`;
+
+      const response = await ctx.runAction(api.ai.generateJson, {
+        prompt: args.testMessage,
+        systemPrompt: systemPrompt,
+      }) as string;
+
+      let detectedProduct: string | null = null;
+      try {
+        const trimmed = responseStr.trim();
+        const cleaned = trimmed.replace(/[\n\r]+/g, " ");
+        const parsed = JSON.parse(cleaned) as { productName: string | null };
+        detectedProduct = parsed.productName;
+      } catch (e) {
+        detectedProduct = null;
+      }
+
+      const passed = args.expectedProductName 
+        ? detectedProduct === args.expectedProductName
+        : detectedProduct !== null;
+
+      return {
+        success: true,
+        passed,
+        testMessage: args.testMessage,
+        expectedProduct: args.expectedProductName,
+        detectedProduct,
+        response: response.substring(0, 200),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+});
+
+interface TestSummary {
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    successRate: string;
+  };
+  results: Array<TestResult & { type: string }>;
+}
+
+export const runAllTests = action({
+  args: {},
+  handler: async (ctx): Promise<TestSummary> => {
+    const results: Array<TestResult & { type: string }> = [];
+
+    const contactTests = [
+      { message: "I want to talk to your representative", expected: true },
+      { message: "Can I speak with someone from your team?", expected: true },
+      { message: "I need to contact a salesperson", expected: true },
+      { message: "Connect me with your agent", expected: true },
+      { message: "What is the price of this product?", expected: false },
+      { message: "Hello, how are you?", expected: false },
+      { message: "Tell me about your company", expected: false },
+    ];
+
+    for (const test of contactTests) {
+      const result = await ctx.runAction(api.test_ai.testContactRequestDetection, {
+        testMessage: test.message,
+        expectedResult: test.expected,
+      });
+      results.push({ type: "contact_detection", ...result });
+    }
+
+    const productTests = [
+      { message: "What is the price of VAONOPULSE?", expectedProduct: "VAONOPULSE" },
+      { message: "Show me details of VAONOPULSE", expectedProduct: "VAONOPULSE" },
+      { message: "I need information about VAONOPULSE", expectedProduct: "VAONOPULSE" },
+      { message: "Tell me about your company", expectedProduct: undefined },
+    ];
+
+    for (const test of productTests) {
+      const result = await ctx.runAction(api.test_ai.testProductQuery, {
+        testMessage: test.message,
+        expectedProductName: test.expectedProduct,
+      });
+      results.push({ type: "product_query", ...result });
+    }
+
+    const totalTests = results.length;
+    const passedTests = results.filter((r) => r.passed).length;
+    const failedTests = totalTests - passedTests;
+
+    return {
+      summary: {
+        total: totalTests,
+        passed: passedTests,
+        failed: failedTests,
+        successRate: `${((passedTests / totalTests) * 100).toFixed(1)}%`,
+      },
+      results,
+    };
+  },
+});
