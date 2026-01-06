@@ -130,6 +130,38 @@ export const getProductByName = query({
   },
 });
 
+export const getProductById = query({
+  args: { id: v.id("products") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const getProductWithUrls = query({
+  args: { id: v.id("products") },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.id);
+    if (!product) return null;
+
+    const urls: any = {};
+    
+    if (product.mainImage) {
+      urls.mainImageUrl = await ctx.storage.getUrl(product.mainImage);
+    }
+    if (product.flyer) {
+      urls.flyerUrl = await ctx.storage.getUrl(product.flyer);
+    }
+    if (product.bridgeCard) {
+      urls.bridgeCardUrl = await ctx.storage.getUrl(product.bridgeCard);
+    }
+    if (product.visuelet) {
+      urls.visueletUrl = await ctx.storage.getUrl(product.visuelet);
+    }
+
+    return { ...product, ...urls };
+  },
+});
+
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
