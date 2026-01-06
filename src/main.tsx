@@ -3,7 +3,7 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { InstrumentationProvider } from "@/instrumentation.tsx";
 import { ConvexReactClient } from "convex/react";
 import { ConvexProvider } from "convex/react";
-import { StrictMode, lazy, Suspense } from "react";
+import { StrictMode, lazy, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import AppLayout from "@/components/AppLayout";
@@ -61,15 +61,6 @@ if (!convexUrl || convexUrl === 'undefined' || convexUrl === '') {
 }
 
 const convex = new ConvexReactClient(convexUrl);
-
-// Initialize the runtime API dynamically to avoid type instantiation issues
-// Using string-based import to prevent TypeScript from analyzing at compile time
-const apiPath = "@/convex/_generated/api";
-import(/* @vite-ignore */ apiPath).then((module) => {
-  setConvexApi(module.api);
-}).catch((error) => {
-  console.error("Failed to load Convex API:", error);
-});
 
 const router = createBrowserRouter([
   {
@@ -139,13 +130,44 @@ const router = createBrowserRouter([
   },
 ]);
 
+// Wrapper component that waits for API to load
+function AppWithApiLoader() {
+  const [apiLoaded, setApiLoaded] = useState(false);
+
+  useEffect(() => {
+    // Construct the path dynamically to avoid TypeScript analysis
+    const basePath = "./convex/";
+    const generatedPath = "_generated/";
+    const fileName = "api.js";
+    const fullPath = basePath + generatedPath + fileName;
+    
+    // Use dynamic import with the constructed path
+    import(/* @vite-ignore */ fullPath)
+      .then((module) => {
+        setConvexApi(module.api);
+        setApiLoaded(true);
+      })
+      .catch((error) => {
+        console.error("Failed to load Convex API:", error);
+        // Set a fallback to prevent infinite loading
+        setApiLoaded(true);
+      });
+  }, []);
+
+  if (!apiLoaded) {
+    return <RouteLoading />;
+  }
+
+  return <RouterProvider router={router} />;
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <VlyToolbar />
     <InstrumentationProvider>
       <ConvexProvider client={convex}>
         <Suspense fallback={<RouteLoading />}>
-          <RouterProvider router={router} />
+          <AppWithApiLoader />
         </Suspense>
         <Toaster />
       </ConvexProvider>

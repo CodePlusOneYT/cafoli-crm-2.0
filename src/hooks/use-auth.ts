@@ -11,15 +11,21 @@ export function useAuth() {
 
   const api = getConvexApiRuntime();
 
+  // Only run queries if API is loaded
   const user = useQuery(
-    api.users.getUser,
-    userId ? { id: userId } : "skip"
+    api?.users?.getUser,
+    userId && api ? { id: userId } : "skip"
   );
 
-  const login = useMutation(api.users.login);
-  const createLog = useMutation(api.activityLogs.createLog);
+  const login = useMutation(api?.users?.login);
+  const createLog = useMutation(api?.activityLogs?.createLog);
 
   const signIn = async (email: string, password: string) => {
+    if (!api || !login) {
+      console.error("Convex API not loaded yet");
+      return null;
+    }
+
     const result = await login({ email, password });
     if (result) {
       setUserId(result);
@@ -27,12 +33,14 @@ export function useAuth() {
       
       // Log login activity
       try {
-        await createLog({
-          userId: result,
-          category: "Login/Logout",
-          action: "User logged in",
-          details: `User ${email} logged in successfully`,
-        });
+        if (createLog) {
+          await createLog({
+            userId: result,
+            category: "Login/Logout",
+            action: "User logged in",
+            details: `User ${email} logged in successfully`,
+          });
+        }
       } catch (error) {
         console.error("Failed to log login activity:", error);
       }
@@ -44,7 +52,7 @@ export function useAuth() {
 
   const signOut = async () => {
     // Log logout activity
-    if (userId) {
+    if (userId && createLog) {
       try {
         await createLog({
           userId: userId,
