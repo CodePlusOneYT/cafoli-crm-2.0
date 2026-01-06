@@ -28,7 +28,7 @@ export function LeadDetailsAiDialog({
 }: LeadDetailsAiDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px] h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-purple-600" />
@@ -39,43 +39,43 @@ export function LeadDetailsAiDialog({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex flex-col gap-4 flex-1 min-h-0">
-          <div className="grid grid-cols-2 gap-4">
-            <Button 
-              variant="outline" 
-              className="h-24 flex flex-col gap-2 hover:border-purple-400 hover:bg-purple-50"
-              onClick={onAnalyzeLead}
-              disabled={isAnalyzing}
-            >
-              <BrainCircuit className="h-6 w-6 text-purple-600" />
-              <span>Analyze Lead</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-24 flex flex-col gap-2 hover:border-purple-400 hover:bg-purple-50"
-              onClick={onSuggestFollowUp}
-              disabled={isAnalyzing}
-            >
-              <Calendar className="h-6 w-6 text-purple-600" />
-              <span>Suggest Follow-up</span>
-            </Button>
+        <div className="grid grid-cols-2 gap-4">
+          <Button 
+            variant="outline" 
+            className="h-24 flex flex-col gap-2 hover:border-purple-400 hover:bg-purple-50"
+            onClick={onAnalyzeLead}
+            disabled={isAnalyzing}
+          >
+            <BrainCircuit className="h-6 w-6 text-purple-600" />
+            <span>Analyze Lead</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            className="h-24 flex flex-col gap-2 hover:border-purple-400 hover:bg-purple-50"
+            onClick={onSuggestFollowUp}
+            disabled={isAnalyzing}
+          >
+            <Calendar className="h-6 w-6 text-purple-600" />
+            <span>Suggest Follow-up</span>
+          </Button>
+        </div>
+
+        {isAnalyzing && (
+          <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <Sparkles className="h-4 w-4 mr-2 animate-spin" />
+            Analyzing lead data...
           </div>
+        )}
 
-          {isAnalyzing && (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Sparkles className="h-4 w-4 mr-2 animate-spin" />
-              Analyzing lead data...
-            </div>
-          )}
-
-          {aiAnalysis && !isAnalyzing && (
-            <ScrollArea className="flex-1 min-h-0 pr-4">
-              <div className="bg-muted/50 p-4 rounded-lg text-sm whitespace-pre-wrap border">
+        {aiAnalysis && !isAnalyzing && (
+          <ScrollArea className="flex-1 w-full rounded-md border">
+            <div className="p-4">
+              <div className="bg-muted/50 p-4 rounded-lg text-sm whitespace-pre-wrap">
                 {aiAnalysis}
               </div>
-            </ScrollArea>
-          )}
-        </div>
+            </div>
+          </ScrollArea>
+        )}
       </DialogContent>
     </Dialog>
   );
