@@ -7,9 +7,9 @@ import { ROLES } from "./schema";
  * Get the current signed in user. Returns null if the user is not signed in.
  */
 export const currentUser = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    const userId = args.userId ?? await getAuthUserId(ctx);
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
     if (!userId) return null;
     return await ctx.db.get(userId);
   },
@@ -156,9 +156,9 @@ export const updateUserRole = mutation({
 });
 
 export const getAllUsers = query({
-  args: { userId: v.optional(v.id("users")) },
-  handler: async (ctx, args) => {
-    const userId = args.userId;
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Unauthorized");
     
     const currentUser = await ctx.db.get(userId);
