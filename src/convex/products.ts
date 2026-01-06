@@ -16,6 +16,8 @@ export const createProduct = mutation({
     
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
+    videoLink: v.optional(v.string()),
+    categories: v.optional(v.array(v.id("productCategories"))),
   },
   handler: async (ctx, args) => {
     const productId = await ctx.db.insert("products", {
@@ -31,6 +33,8 @@ export const createProduct = mutation({
       visualaid: args.visualaid,
       description: args.description,
       pageLink: args.pageLink,
+      videoLink: args.videoLink,
+      categories: args.categories,
     });
     return productId;
   },
@@ -50,6 +54,8 @@ export const updateProduct = mutation({
     visualaid: v.optional(v.id("_storage")),
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
+    videoLink: v.optional(v.string()),
+    categories: v.optional(v.array(v.id("productCategories"))),
     
     // Flags to remove optional files
     removeFlyer: v.optional(v.boolean()),
@@ -68,6 +74,8 @@ export const updateProduct = mutation({
       packaging: args.packaging,
       description: args.description,
       pageLink: args.pageLink,
+      videoLink: args.videoLink,
+      categories: args.categories,
     };
 
     // Handle file updates
@@ -226,5 +234,30 @@ export const getStorageMetadata = internalQuery({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
     return await ctx.db.system.get(args.storageId);
+  },
+});
+
+// Category management
+export const listCategories = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("productCategories").order("asc").collect();
+  },
+});
+
+export const createCategory = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    // Check if category already exists
+    const existing = await ctx.db
+      .query("productCategories")
+      .withIndex("by_name", (q) => q.eq("name", args.name))
+      .first();
+    
+    if (existing) {
+      throw new Error("Category already exists");
+    }
+    
+    return await ctx.db.insert("productCategories", { name: args.name });
   },
 });
