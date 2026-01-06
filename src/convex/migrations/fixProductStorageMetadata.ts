@@ -54,6 +54,15 @@ export const findProblematicProducts = internalQuery({
   },
 });
 
+// Add this new query to check individual file metadata
+export const checkFileMetadata = internalQuery({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const metadata = await ctx.db.system.get(args.storageId);
+    return metadata;
+  },
+});
+
 // Action to run the full migration check and report
 export const runMigration = internalAction({
   args: {},
@@ -61,23 +70,32 @@ export const runMigration = internalAction({
     success: boolean;
     message: string;
     count: number;
-    products?: Array<{ _id: any; name: string; issues: string[] }>;
+    products?: Array<{ _id: any; name: string; issues: string[]; details: any }>;
   }> => {
     const problematic: Array<{ _id: any; name: string; issues: string[] }> = await ctx.runQuery(internal.migrations.fixProductStorageMetadata.findProblematicProducts);
     
     if (problematic.length === 0) {
       return {
         success: true,
-        message: "All products have correct file metadata!",
+        message: "✅ All products have correct file metadata!",
         count: 0,
       };
     }
 
+    // Add detailed information about what's wrong
+    const productsWithDetails = problematic.map(p => ({
+      ...p,
+      details: `Files with issues: ${p.issues.join(", ")}. These files will download as .htm because they lack proper Content-Type metadata.`
+    }));
+
     return {
       success: false,
-      message: `Found ${problematic.length} product(s) with incorrect file metadata. These files need to be re-uploaded using the Edit button.`,
+      message: `⚠️ Found ${problematic.length} product(s) with incorrect file metadata.\n\n` +
+               `These files were uploaded without proper Content-Type headers and will download as .htm files.\n\n` +
+               `Solution: Use the Edit button (✏️) on each product to re-upload the affected files.\n\n` +
+               `Affected files will be replaced with properly formatted versions.`,
       count: problematic.length,
-      products: problematic,
+      products: productsWithDetails,
     };
   },
 });

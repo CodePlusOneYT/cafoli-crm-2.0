@@ -228,22 +228,29 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const handleMigrationClick = async () => {
     if (!isAdmin) return;
     setIsMigrating(true);
-    toast.info("Checking product files...");
+    toast.info("Scanning product files for metadata issues...");
     try {
       const result = await runMigration({}) as any;
       if (result.success) {
-        toast.success(result.message);
-      } else {
-        toast.warning(result.message, {
-          description: result.products?.map((p: any) => 
-            `${p.name}: ${p.issues.join(", ")}`
-          ).join("\n"),
-          duration: 10000,
+        toast.success(result.message, {
+          duration: 5000,
         });
+      } else {
+        // Show detailed list of problematic products
+        const productList = result.products?.map((p: any) => 
+          `• ${p.name}: ${p.issues.join(", ")}`
+        ).join("\n") || "";
+        
+        toast.error(result.message, {
+          description: productList,
+          duration: 15000,
+        });
+        
+        console.log("Problematic products:", result.products);
       }
     } catch (error) {
       console.error('Migration error:', error);
-      toast.error('Failed to check product files');
+      toast.error('Failed to check product files. See console for details.');
     } finally {
       setIsMigrating(false);
     }
