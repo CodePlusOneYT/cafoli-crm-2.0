@@ -158,15 +158,7 @@ export const updateUserRole = mutation({
 export const getAllUsers = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
-    
-    const currentUser = await ctx.db.get(userId);
-    // Allow all authenticated users to view the user list (needed for assignment dropdowns)
-    if (!currentUser) {
-      throw new Error("User not found");
-    }
-    
+    // Frontend handles authorization - just return all users
     return await ctx.db.query("users").collect();
   },
 });
