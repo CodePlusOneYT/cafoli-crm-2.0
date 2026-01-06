@@ -11,14 +11,14 @@ export function useAuth() {
 
   const api = getConvexApiRuntime();
 
-  // Only run queries if API is loaded
+  // Add safety check for api before using it
   const user = useQuery(
-    api?.users?.getUser,
+    api?.users?.getUser ?? null,
     userId && api ? { id: userId } : "skip"
   );
 
-  const login = useMutation(api?.users?.login);
-  const createLog = useMutation(api?.activityLogs?.createLog);
+  const login = useMutation(api?.users?.login ?? null);
+  const createLog = useMutation(api?.activityLogs?.createLog ?? null);
 
   const signIn = async (email: string, password: string) => {
     if (!api || !login) {

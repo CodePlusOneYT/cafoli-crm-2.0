@@ -3,14 +3,13 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { InstrumentationProvider } from "@/instrumentation.tsx";
 import { ConvexReactClient } from "convex/react";
 import { ConvexProvider } from "convex/react";
-import { StrictMode, lazy, Suspense, useEffect, useState } from "react";
+import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import "./index.css";
 import "./types/global.d.ts";
-import { setConvexApi } from "@/lib/convex-api";
 
 // Lazy load route components for better code splitting
 const Landing = lazy(() => import("./pages/Landing.tsx"));
@@ -130,44 +129,13 @@ const router = createBrowserRouter([
   },
 ]);
 
-// Wrapper component that waits for API to load
-function AppWithApiLoader() {
-  const [apiLoaded, setApiLoaded] = useState(false);
-
-  useEffect(() => {
-    // Construct the path dynamically to avoid TypeScript analysis
-    const basePath = "./convex/";
-    const generatedPath = "_generated/";
-    const fileName = "api.js";
-    const fullPath = basePath + generatedPath + fileName;
-    
-    // Use dynamic import with the constructed path
-    import(/* @vite-ignore */ fullPath)
-      .then((module) => {
-        setConvexApi(module.api);
-        setApiLoaded(true);
-      })
-      .catch((error) => {
-        console.error("Failed to load Convex API:", error);
-        // Set a fallback to prevent infinite loading
-        setApiLoaded(true);
-      });
-  }, []);
-
-  if (!apiLoaded) {
-    return <RouteLoading />;
-  }
-
-  return <RouterProvider router={router} />;
-}
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <VlyToolbar />
     <InstrumentationProvider>
       <ConvexProvider client={convex}>
         <Suspense fallback={<RouteLoading />}>
-          <AppWithApiLoader />
+          <RouterProvider router={router} />
         </Suspense>
         <Toaster />
       </ConvexProvider>
