@@ -209,24 +209,24 @@ export const generateAndSendAiReplyInternal = internalAction({
             }
           }
       } else if (aiAction.action === "intervention_request") {
+          // Send the AI's message to the customer
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
             message: aiAction.text,
           });
-          try {
-            // @ts-ignore
-            if (internal.interventionRequests && internal.interventionRequests.create) {
-                // @ts-ignore
-                await ctx.runMutation(internal.interventionRequests.create, { 
-                    leadId: args.leadId, 
-                    reason: aiAction.reason || "AI Request",
-                    status: "pending"
-                });
-            }
-          } catch (e) {
-              console.error("Failed to create intervention request", e);
-          }
+          
+          // Get lead details to determine assignment
+          const lead = await ctx.runQuery(internal.leads.queries.basic.getLeadByIdInternal, { leadId: args.leadId });
+          
+          // Create intervention request
+          await ctx.runMutation(internal.interventionRequests.createInterventionRequestInternal, { 
+            leadId: args.leadId,
+            assignedTo: (lead && lead.assignedTo && !lead.isColdCallerLead) ? lead.assignedTo : undefined,
+            requestedProduct: aiAction.resource_name,
+            customerMessage: args.prompt,
+            aiDraftedMessage: aiAction.reason || "Customer needs human assistance with their inquiry.",
+          });
       } else if (aiAction.action === "contact_request") {
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,

@@ -29,6 +29,7 @@ import { MandatoryFollowUpPopup } from "./MandatoryFollowUpPopup";
 import { ColdCallerPopup } from "@/components/ColdCallerPopup";
 import { ProductUploadDialog } from "@/components/products/ProductUploadDialog";
 import { InterventionPopup } from "./InterventionPopup";
+import { FollowUpReminderPopup } from "./FollowUpReminderPopup";
 import { getConvexApi } from "@/lib/convex-api";
 
 const api = getConvexApi() as any;
@@ -309,6 +310,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <>
           <LeadReminders />
           {user && <InterventionPopup userId={user._id} />}
+          {user && <FollowUpReminderPopup userId={user._id} />}
         </>
       )}
 

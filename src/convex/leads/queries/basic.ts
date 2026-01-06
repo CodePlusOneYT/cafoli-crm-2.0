@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query } from "../../_generated/server";
+import { query, internalQuery } from "../../_generated/server";
 import { ROLES } from "../../schema";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
@@ -60,6 +60,24 @@ export const getLead = query({
     }
 
     return lead;
+  },
+});
+
+export const getLeadById = query({
+  args: { 
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.leadId);
+  },
+});
+
+export const getLeadByIdInternal = internalQuery({
+  args: { 
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.leadId);
   },
 });
 
