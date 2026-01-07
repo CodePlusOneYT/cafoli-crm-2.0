@@ -136,15 +136,15 @@ export function ProductListManager() {
                               <ImageIcon className="h-3 w-3" /> Bridge Card
                             </Button>
                           )}
-                          {product.visuelet && (
+                          {product.visualaid && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="gap-1 h-7"
-                              onClick={() => handlePreview(product.visuelet, "pdf", "Visuelet")}
+                              onClick={() => handlePreview(product.visualaid, "pdf", "Visual Aid")}
                             >
                               <Eye className="h-3 w-3" />
-                              <FileText className="h-3 w-3" /> Visuelet
+                              <FileText className="h-3 w-3" /> Visual Aid
                             </Button>
                           )}
                           {product.pageLink && (
