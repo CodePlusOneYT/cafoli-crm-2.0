@@ -32,6 +32,7 @@ import { useState } from "react";
 export function ProductListManager() {
   const products = useQuery(api.products.listProducts) || [];
   const deleteProduct = useMutation(api.products.deleteProduct);
+  const getStorageUrl = useMutation(api.products.getStorageUrl);
   const [previewFile, setPreviewFile] = useState<{ url: string; type: string; name: string } | null>(null);
 
   const handleDelete = async (productId: any) => {
@@ -44,13 +45,19 @@ export function ProductListManager() {
     }
   };
 
-  const handlePreview = (storageId: string, type: string, name: string) => {
-    // Construct proper Convex storage URL with correct content type handling
-    const convexUrl = import.meta.env.VITE_CONVEX_URL;
-    // Remove any trailing slash from convexUrl
-    const baseUrl = convexUrl.endsWith('/') ? convexUrl.slice(0, -1) : convexUrl;
-    const url = `${baseUrl}/api/storage/${storageId}`;
-    setPreviewFile({ url, type, name });
+  const handlePreview = async (storageId: string, type: string, name: string) => {
+    try {
+      // Use Convex's proper storage URL generation
+      const url = await getStorageUrl({ storageId: storageId as any });
+      if (url) {
+        setPreviewFile({ url, type, name });
+      } else {
+        toast.error("Failed to load file");
+      }
+    } catch (error) {
+      console.error("Error loading file:", error);
+      toast.error("Failed to load file");
+    }
   };
 
   return (
