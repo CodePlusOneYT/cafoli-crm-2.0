@@ -108,101 +108,112 @@ export const sendMedia = internalAction({
     try {
       const { accessToken, phoneNumberId } = getWhatsAppCredentials();
       
-      // Get file directly from storage
-      console.log(`[SEND_MEDIA] Fetching from storage: ${args.storageId}`);
-      const fileBlob = await ctx.storage.get(args.storageId);
-      
-      if (!fileBlob) {
-        throw new Error(`File not found: ${args.storageId}`);
-      }
-      
-      console.log(`[SEND_MEDIA] File size: ${fileBlob.size} bytes`);
-
-      // Upload to WhatsApp
-      const formData = new FormData();
-      formData.append("file", fileBlob, args.fileName);
-      formData.append("messaging_product", "whatsapp");
-
-      const uploadResponse = await fetch(
-        `https://graph.facebook.com/v20.0/${phoneNumberId}/media`,
-        {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${accessToken}` },
-          body: formData,
-        }
-      );
-
-      const uploadData = await uploadResponse.json();
-      
-      if (!uploadResponse.ok) {
-        console.error(`[SEND_MEDIA] Upload failed:`, uploadData);
-        throw new Error(`Upload error: ${JSON.stringify(uploadData)}`);
-      }
-
-      const mediaId = uploadData.id;
-      if (!mediaId) throw new Error("No media ID returned");
-      
-      console.log(`[SEND_MEDIA] Uploaded, media ID: ${mediaId}`);
+      // Check cache first
+      const cached = await ctx.runQuery(internal.whatsapp.mediaCache.get, { storageId: args.storageId });
+      let mediaId = cached?.mediaId;
+      let mediaType: string;
 
       // Determine media type
-      let mediaType: string;
       if (args.mimeType.startsWith("image/")) mediaType = "image";
       else if (args.mimeType.startsWith("video/")) mediaType = "video";
       else if (args.mimeType.startsWith("audio/")) mediaType = "audio";
       else mediaType = "document";
 
-      // Send message
-      const messagePayload: any = {
-        messaging_product: "whatsapp",
-        to: args.phoneNumber,
-        type: mediaType,
-        [mediaType]: { id: mediaId },
-      };
-
-      if (args.message) {
-        messagePayload[mediaType].caption = args.message;
-      }
-
-      if (mediaType === "document") {
-        messagePayload[mediaType].filename = args.fileName;
-      }
-
-      const response = await fetch(
-        `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(messagePayload),
+      if (mediaId) {
+        console.log(`[SEND_MEDIA] Found cached media ID: ${mediaId}`);
+        // Try sending with cached ID
+        try {
+          const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
+          
+          // Log success and return
+          const fileUrl = await ctx.storage.getUrl(args.storageId);
+          await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            content: args.message || "",
+            direction: "outbound",
+            status: "sent",
+            externalId: result.messages?.[0]?.id || "",
+            messageType: mediaType,
+            mediaUrl: fileUrl,
+            mediaName: args.fileName,
+            mediaMimeType: args.mimeType,
+          });
+          return { success: true, messageId: result.messages?.[0]?.id };
+        } catch (e) {
+          console.warn(`[SEND_MEDIA] Failed to send with cached ID, retrying with upload...`, e);
+          // Invalidate cache
+          await ctx.runMutation(internal.whatsapp.mediaCache.remove, { storageId: args.storageId });
+          mediaId = undefined;
         }
-      );
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error(`[SEND_MEDIA] Send failed:`, data);
-        throw new Error(`Send error: ${JSON.stringify(data)}`);
       }
 
-      const fileUrl = await ctx.storage.getUrl(args.storageId);
+      if (!mediaId) {
+        // Get file directly from storage
+        console.log(`[SEND_MEDIA] Fetching from storage: ${args.storageId}`);
+        const fileBlob = await ctx.storage.get(args.storageId);
+        
+        if (!fileBlob) {
+          throw new Error(`File not found: ${args.storageId}`);
+        }
+        
+        console.log(`[SEND_MEDIA] File size: ${fileBlob.size} bytes`);
 
-      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
-        leadId: args.leadId,
-        phoneNumber: args.phoneNumber,
-        content: args.message || "",
-        direction: "outbound",
-        status: "sent",
-        externalId: data.messages?.[0]?.id || "",
-        messageType: mediaType,
-        mediaUrl: fileUrl,
-        mediaName: args.fileName,
-        mediaMimeType: args.mimeType,
-      });
+        // Upload to WhatsApp
+        const formData = new FormData();
+        formData.append("file", fileBlob, args.fileName);
+        formData.append("messaging_product", "whatsapp");
 
-      console.log(`[SEND_MEDIA] Success!`);
-      return { success: true, messageId: data.messages?.[0]?.id };
+        const uploadResponse = await fetch(
+          `https://graph.facebook.com/v20.0/${phoneNumberId}/media`,
+          {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${accessToken}` },
+            body: formData,
+          }
+        );
+
+        const uploadData = await uploadResponse.json();
+        
+        if (!uploadResponse.ok) {
+          console.error(`[SEND_MEDIA] Upload failed:`, uploadData);
+          throw new Error(`Upload error: ${JSON.stringify(uploadData)}`);
+        }
+
+        mediaId = uploadData.id;
+        if (!mediaId) throw new Error("No media ID returned");
+        
+        console.log(`[SEND_MEDIA] Uploaded, media ID: ${mediaId}`);
+        
+        // Cache the new media ID
+        await ctx.runMutation(internal.whatsapp.mediaCache.save, {
+          storageId: args.storageId,
+          mediaId: mediaId,
+          mimeType: args.mimeType,
+          fileName: args.fileName,
+        });
+
+        // Send message
+        const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
+
+        const fileUrl = await ctx.storage.getUrl(args.storageId);
+
+        await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+          leadId: args.leadId,
+          phoneNumber: args.phoneNumber,
+          content: args.message || "",
+          direction: "outbound",
+          status: "sent",
+          externalId: result.messages?.[0]?.id || "",
+          messageType: mediaType,
+          mediaUrl: fileUrl,
+          mediaName: args.fileName,
+          mediaMimeType: args.mimeType,
+        });
+
+        console.log(`[SEND_MEDIA] Success!`);
+        return { success: true, messageId: result.messages?.[0]?.id };
+      }
       
     } catch (error) {
       console.error("[SEND_MEDIA] ERROR:", error);
@@ -223,6 +234,44 @@ export const sendMedia = internalAction({
     }
   },
 });
+
+// Helper function to send the media message
+async function sendMediaMessage(accessToken: string, phoneNumberId: string, to: string, type: string, mediaId: string, caption?: string, filename?: string) {
+  const messagePayload: any = {
+    messaging_product: "whatsapp",
+    to: to,
+    type: type,
+    [type]: { id: mediaId },
+  };
+
+  if (caption) {
+    messagePayload[type].caption = caption;
+  }
+
+  if (type === "document" && filename) {
+    messagePayload[type].filename = filename;
+  }
+
+  const response = await fetch(
+    `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(messagePayload),
+    }
+  );
+
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(`Send error: ${JSON.stringify(data)}`);
+  }
+  
+  return data;
+}
 
 export const markMessagesAsRead = internalAction({
   args: {

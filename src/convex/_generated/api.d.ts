@@ -67,6 +67,7 @@ import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
 import type * as whatsapp_config from "../whatsapp/config.js";
 import type * as whatsapp_internal from "../whatsapp/internal.js";
+import type * as whatsapp_mediaCache from "../whatsapp/mediaCache.js";
 import type * as whatsapp_messages from "../whatsapp/messages.js";
 import type * as whatsapp_status from "../whatsapp/status.js";
 import type * as whatsapp_webhook from "../whatsapp/webhook.js";
@@ -147,6 +148,7 @@ declare const fullApi: ApiFromModules<{
   whatsapp: typeof whatsapp;
   "whatsapp/config": typeof whatsapp_config;
   "whatsapp/internal": typeof whatsapp_internal;
+  "whatsapp/mediaCache": typeof whatsapp_mediaCache;
   "whatsapp/messages": typeof whatsapp_messages;
   "whatsapp/status": typeof whatsapp_status;
   "whatsapp/webhook": typeof whatsapp_webhook;

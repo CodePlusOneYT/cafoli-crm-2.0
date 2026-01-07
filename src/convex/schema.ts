@@ -386,4 +386,12 @@ export default defineSchema({
     key: v.string(),
     value: v.string(),
   }).index("by_key", ["key"]),
+
+  whatsappMediaCache: defineTable({
+    storageId: v.id("_storage"),
+    mediaId: v.string(),
+    mimeType: v.string(),
+    fileName: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_storageId", ["storageId"]),
 });
