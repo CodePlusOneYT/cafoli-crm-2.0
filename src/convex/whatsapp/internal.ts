@@ -199,10 +199,18 @@ export const sendMedia = internalAction({
 
       const data = await response.json();
       console.log(`[SEND_MEDIA] WhatsApp API response status: ${response.status}`);
+      console.log(`[SEND_MEDIA] WhatsApp API response:`, JSON.stringify(data, null, 2));
       
       if (!response.ok) {
         console.error(`[SEND_MEDIA] WhatsApp API error:`, JSON.stringify(data));
         throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
+      }
+
+      // Log the message ID to verify it was accepted
+      if (data.messages?.[0]?.id) {
+        console.log(`[SEND_MEDIA] WhatsApp accepted message with ID: ${data.messages[0].id}`);
+      } else {
+        console.warn(`[SEND_MEDIA] WhatsApp response missing message ID:`, data);
       }
 
       console.log(`[SEND_MEDIA] Message sent successfully, storing in database...`);
