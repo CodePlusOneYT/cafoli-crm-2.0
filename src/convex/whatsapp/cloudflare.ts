@@ -44,6 +44,10 @@ export const sendFilesViaWorker = internalAction({
         if (response.status === 401) {
           throw new Error(`Cloudflare Worker Unauthorized. Check CLOUDFLARE_WORKER_TOKEN in Convex matches WORKER_AUTH_TOKEN in Cloudflare. Sent token length: ${workerToken.length}`);
         }
+
+        if (text.includes("WORKER_AUTH_TOKEN not set")) {
+           throw new Error("CONFIGURATION ERROR: 'WORKER_AUTH_TOKEN' is missing in Cloudflare. Go to Cloudflare Dashboard > Workers > [Your Worker] > Settings > Variables and add it.");
+        }
         
         throw new Error(`Cloudflare Worker failed (${response.status}): ${text}`);
       }

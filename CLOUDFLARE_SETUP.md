@@ -15,6 +15,17 @@ In the Cloudflare Worker settings (Settings > Variables), add these variables:
 - `WA_PHONE_NUMBER_ID`: Your WhatsApp Phone Number ID.
 - `WORKER_AUTH_TOKEN`: A secure random string (e.g., "my-secret-token-123").
 
+**CRITICAL TROUBLESHOOTING:**
+If you see "Server Error: WORKER_AUTH_TOKEN not set", it means the variable is NOT saved in the Worker environment.
+
+1. Go to **Cloudflare Dashboard** > **Workers & Pages**.
+2. Click on your Worker name.
+3. Click **Settings** tab (top bar).
+4. Click **Variables** (left sidebar).
+5. Under **Environment Variables**, click **Edit Variables**.
+6. Ensure `WORKER_AUTH_TOKEN` is listed there.
+7. **IMPORTANT**: Click **Deploy** or **Save** if prompted. Variables do not apply until saved/deployed.
+
 **Note**: Ensure there are no extra spaces at the start or end of the values.
 
 ## 3. Configure Convex Environment Variables
