@@ -62,9 +62,14 @@ export const sendFilesViaWorker = internalAction({
       const result = await response.json();
       console.log(`[CLOUDFLARE_RELAY] Worker Response:`, JSON.stringify(result));
       
-      if (result.errors && result.errors.length > 0) {
-        console.error(`[CLOUDFLARE_RELAY] Some files failed to send:`, result.errors);
-        // We don't throw here if some succeeded, but you might want to depending on requirements
+      // Check if any files failed inside the worker
+      if (result.results) {
+        const failures = result.results.filter((r: any) => r.status === "failed");
+        if (failures.length > 0) {
+          console.error(`[CLOUDFLARE_RELAY] Partial failure: ${failures.length} files failed to send.`);
+          // We throw here to trigger the fallback in whatsappAi.ts
+          throw new Error(`Worker reported failures: ${JSON.stringify(failures)}`);
+        }
       }
       
       return result;
