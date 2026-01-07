@@ -113,11 +113,21 @@ export const generateAndSendAiReplyInternal = internalAction({
           // Collect all files to send
           const filesToSend = [];
           
+          // Helper to get extension from metadata
+          const getExtension = async (storageId: string) => {
+             const meta = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: storageId as any });
+             if (meta?.contentType === "image/png") return "png";
+             if (meta?.contentType === "image/jpeg" || meta?.contentType === "image/jpg") return "jpg";
+             if (meta?.contentType === "application/pdf") return "pdf";
+             return "jpg"; // Default for images
+          };
+
           // Main Image
           if (product.mainImage) {
+            const ext = await getExtension(product.mainImage);
             filesToSend.push({
               storageId: product.mainImage,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_main.jpg`,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_main.${ext}`,
               type: "image",
               label: "Main Image"
             });
@@ -125,9 +135,10 @@ export const generateAndSendAiReplyInternal = internalAction({
           
           // Flyer
           if (product.flyer) {
+            const ext = await getExtension(product.flyer);
             filesToSend.push({
               storageId: product.flyer,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_flyer.jpg`,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_flyer.${ext}`,
               type: "image",
               label: "Flyer"
             });
@@ -135,9 +146,10 @@ export const generateAndSendAiReplyInternal = internalAction({
           
           // Bridge Card
           if (product.bridgeCard) {
+            const ext = await getExtension(product.bridgeCard);
             filesToSend.push({
               storageId: product.bridgeCard,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_bridge_card.jpg`,
+              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_bridge_card.${ext}`,
               type: "image",
               label: "Bridge Card"
             });

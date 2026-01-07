@@ -1,6 +1,12 @@
+/**
+ * Cloudflare Worker for WhatsApp Media Uploads
+ * Handles fetching files from Convex and uploading to WhatsApp Graph API
+ * Includes Magic Byte Detection to fix MIME type mismatches (e.g. PNGs labeled as JPGs)
+ */
+
 export default {
   async fetch(request, env) {
-    // Handle CORS preflight requests
+    // Handle CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -15,9 +21,10 @@ export default {
       return new Response("Cloudflare Worker is running! Method must be POST to send files.", { status: 200 });
     }
 
+    // Verify Auth Token
     const authHeader = request.headers.get("Authorization");
     if (!authHeader || authHeader !== `Bearer ${env.WORKER_AUTH_TOKEN}`) {
-      return new Response("Unauthorized: Invalid or missing WORKER_AUTH_TOKEN", { status: 401 });
+      return new Response("Unauthorized: Invalid WORKER_AUTH_TOKEN", { status: 401 });
     }
 
     try {
@@ -27,8 +34,8 @@ export default {
         return new Response("Invalid request body", { status: 400 });
       }
 
-      // Send a processing message first
-      await sendWhatsAppMessage(env, phoneNumber, "text", { body: "[System] Processing media files... (Optimized)" });
+      // Send a processing message first (optional, helps debug)
+      await sendWhatsAppMessage(env, phoneNumber, "text", { body: "🤖 [System] Processing media files..." });
 
       const results = [];
 
@@ -36,39 +43,43 @@ export default {
         try {
           console.log(`Processing file: ${file.fileName}`);
           
-          // 1. Fetch the file
+          // 1. Fetch file from Convex
           const fileResponse = await fetch(file.url);
-          if (!fileResponse.ok) throw new Error(`Failed to fetch file from URL: ${fileResponse.status}`);
+          if (!fileResponse.ok) throw new Error(`Failed to fetch file: ${fileResponse.statusText}`);
           
-          const arrayBuffer = await fileResponse.arrayBuffer();
+          const fileBuffer = await fileResponse.arrayBuffer();
           
-          // 2. Detect MIME type via Magic Bytes (CRITICAL FIX)
-          // WhatsApp is very strict about MIME types matching the actual file content
-          const detectedMime = getMimeTypeFromMagicBytes(arrayBuffer) || file.mimeType || "application/octet-stream";
-          console.log(`MIME Detection: Provided=${file.mimeType}, Detected=${detectedMime}`);
+          // 2. MAGIC BYTE DETECTION (Fixes "Sent but not received" issues)
+          // Detect real mime type from file content, ignoring what Convex says
+          const realMimeType = getMimeTypeFromMagicBytes(fileBuffer, file.mimeType);
+          
+          // Fix filename extension if needed
+          let finalFileName = file.fileName;
+          if (realMimeType === 'image/png' && !finalFileName.toLowerCase().endsWith('.png')) {
+             finalFileName = finalFileName.replace(/\.[^/.]+$/, "") + ".png";
+          } else if ((realMimeType === 'image/jpeg' || realMimeType === 'image/jpg') && !finalFileName.match(/\.jpe?g$/i)) {
+             finalFileName = finalFileName.replace(/\.[^/.]+$/, "") + ".jpg";
+          }
+
+          console.log(`Detected MIME: ${realMimeType}, Final Filename: ${finalFileName}`);
 
           // 3. Upload to WhatsApp
-          const mediaId = await uploadToWhatsApp(env, arrayBuffer, detectedMime, file.fileName);
-          console.log(`Media Uploaded: ${mediaId}`);
+          const mediaId = await uploadToWhatsApp(env, fileBuffer, realMimeType, finalFileName);
           
           // 4. Send Message
-          const messageType = detectedMime.startsWith("image/") ? "image" : 
-                              detectedMime.startsWith("video/") ? "video" : 
-                              detectedMime.startsWith("audio/") ? "audio" : "document";
+          const messageType = realMimeType.startsWith('image') ? 'image' : 
+                              realMimeType.startsWith('video') ? 'video' : 
+                              realMimeType.startsWith('audio') ? 'audio' : 'document';
                               
           const messageBody = { id: mediaId };
-          if (messageType === "document") messageBody.filename = file.fileName;
+          if (messageType === 'document') messageBody.filename = finalFileName;
           
-          // Add caption if it's the first file (optional, can be customized)
-          // if (results.length === 0) messageBody.caption = "Here are the requested files.";
-
           await sendWhatsAppMessage(env, phoneNumber, messageType, messageBody);
-          console.log(`Message Sent!`);
           
-          results.push({ fileName: file.fileName, status: "sent", mediaId });
+          results.push({ fileName: finalFileName, status: "sent", mediaId });
           
         } catch (error) {
-          console.error(`Failed to process ${file.fileName}:`, error);
+          console.error(`Failed to send ${file.fileName}:`, error);
           results.push({ fileName: file.fileName, status: "failed", error: error.message });
         }
       }
@@ -77,84 +88,74 @@ export default {
         headers: { "Content-Type": "application/json" }
       });
 
-    } catch (e) {
-      return new Response(`Worker Error: ${e.message}`, { status: 500 });
+    } catch (error) {
+      return new Response(`Worker Error: ${error.message}`, { status: 500 });
     }
-  }
+  },
 };
 
-// Helper: Magic Bytes Detection
-function getMimeTypeFromMagicBytes(buffer) {
-  const arr = new Uint8Array(buffer).subarray(0, 4);
-  let header = "";
-  for (let i = 0; i < arr.length; i++) {
-    header += arr[i].toString(16).toUpperCase();
-  }
+// --- Helpers ---
 
-  // JPEG (FF D8 FF)
-  if (header.startsWith("FFD8FF")) return "image/jpeg";
-  // PNG (89 50 4E 47)
-  if (header === "89504E47") return "image/png";
-  // PDF (25 50 44 46)
-  if (header.startsWith("25504446")) return "application/pdf";
-  // GIF (47 49 46 38)
-  if (header.startsWith("47494638")) return "image/gif";
-  // WEBP (RIFF....WEBP) - simplified check for RIFF
-  if (header.startsWith("52494646")) return "image/webp"; 
-  // MP4 (ftyp) - simplified check
-  if (header.includes("66747970")) return "video/mp4";
+function getMimeTypeFromMagicBytes(buffer, fallbackMime) {
+  const bytes = new Uint8Array(buffer).subarray(0, 4);
+  const header = bytes.reduce((acc, byte) => acc + byte.toString(16).padStart(2, '0'), '');
 
-  return null;
+  // PNG: 89 50 4E 47
+  if (header.startsWith('89504e47')) return 'image/png';
+  
+  // JPEG: FF D8 FF
+  if (header.startsWith('ffd8ff')) return 'image/jpeg';
+  
+  // PDF: 25 50 44 46
+  if (header.startsWith('25504446')) return 'application/pdf';
+  
+  // GIF: 47 49 46 38
+  if (header.startsWith('47494638')) return 'image/gif';
+
+  return fallbackMime || 'application/octet-stream';
 }
 
-// Helper: Upload to WhatsApp
-async function uploadToWhatsApp(env, arrayBuffer, mimeType, fileName) {
+async function uploadToWhatsApp(env, buffer, mimeType, fileName) {
   const formData = new FormData();
-  const blob = new Blob([arrayBuffer], { type: mimeType });
+  const blob = new Blob([buffer], { type: mimeType });
   formData.append("file", blob, fileName);
   formData.append("messaging_product", "whatsapp");
 
-  const url = `https://graph.facebook.com/v20.0/${env.WA_PHONE_NUMBER_ID}/media`;
-  
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${env.CLOUD_API_ACCESS_TOKEN}`
-    },
-    body: formData
-  });
+  const response = await fetch(
+    `https://graph.facebook.com/v20.0/${env.WA_PHONE_NUMBER_ID}/media`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.CLOUD_API_ACCESS_TOKEN}`,
+      },
+      body: formData,
+    }
+  );
 
   const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`WhatsApp Upload Failed: ${JSON.stringify(data)}`);
-  }
-  
+  if (!response.ok) throw new Error(`WhatsApp Upload Error: ${JSON.stringify(data)}`);
   return data.id;
 }
 
-// Helper: Send Message
 async function sendWhatsAppMessage(env, to, type, content) {
-  const url = `https://graph.facebook.com/v20.0/${env.WA_PHONE_NUMBER_ID}/messages`;
-  
-  const body = {
-    messaging_product: "whatsapp",
-    to: to,
-    type: type,
-    [type]: content
-  };
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${env.CLOUD_API_ACCESS_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
+  const response = await fetch(
+    `https://graph.facebook.com/v20.0/${env.WA_PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.CLOUD_API_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type,
+        [type]: content,
+      }),
+    }
+  );
 
   const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`WhatsApp Send Failed: ${JSON.stringify(data)}`);
-  }
+  if (!response.ok) throw new Error(`WhatsApp Send Error: ${JSON.stringify(data)}`);
   return data;
 }
