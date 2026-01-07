@@ -53,8 +53,9 @@ If the logs say "Sent successfully" but you don't receive the message:
 
 3. **Check Phone Number Format**: Ensure the number includes the country code but NO `+` sign or leading zeros (e.g., `919876543210` for India).
 
-4. **REDEPLOY THE WORKER**:
-   - We have updated the worker code to improve file handling.
+4. **REDEPLOY THE WORKER (CRITICAL)**:
+   - We have updated the worker code to use a safer method for handling binary image data (`response.blob()`).
    - Copy the code from `cloudflare/worker.js` again.
    - Paste it into your Cloudflare Worker editor.
    - Click **Deploy**.
+   - This fixes issues where the image is sent but appears blank or is not received due to data corruption.
