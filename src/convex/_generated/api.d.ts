@@ -65,6 +65,7 @@ import type * as tags from "../tags.js";
 import type * as test_utils from "../test_utils.js";
 import type * as users from "../users.js";
 import type * as whatsapp from "../whatsapp.js";
+import type * as whatsapp_cloudflare from "../whatsapp/cloudflare.js";
 import type * as whatsapp_config from "../whatsapp/config.js";
 import type * as whatsapp_internal from "../whatsapp/internal.js";
 import type * as whatsapp_mediaCache from "../whatsapp/mediaCache.js";
@@ -146,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   test_utils: typeof test_utils;
   users: typeof users;
   whatsapp: typeof whatsapp;
+  "whatsapp/cloudflare": typeof whatsapp_cloudflare;
   "whatsapp/config": typeof whatsapp_config;
   "whatsapp/internal": typeof whatsapp_internal;
   "whatsapp/mediaCache": typeof whatsapp_mediaCache;

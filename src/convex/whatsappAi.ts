@@ -110,15 +110,11 @@ export const generateAndSendAiReplyInternal = internalAction({
             await new Promise(resolve => setTimeout(resolve, 300));
           }
           
-          // Send all product images and files
-          console.log(`[PRODUCT_SEND] Starting to send files for product: ${product.name}`);
-          console.log(`[PRODUCT_SEND] Product has - mainImage: ${!!product.mainImage}, flyer: ${!!product.flyer}, bridgeCard: ${!!product.bridgeCard}, visualaid: ${!!product.visualaid}`);
-          
+          // Collect all files to send
           const filesToSend = [];
           
           // Main Image
           if (product.mainImage) {
-            console.log(`[PRODUCT_SEND] Adding mainImage to queue: ${product.mainImage}`);
             filesToSend.push({
               storageId: product.mainImage,
               fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_main.jpg`,
@@ -129,7 +125,6 @@ export const generateAndSendAiReplyInternal = internalAction({
           
           // Flyer
           if (product.flyer) {
-            console.log(`[PRODUCT_SEND] Adding flyer to queue: ${product.flyer}`);
             filesToSend.push({
               storageId: product.flyer,
               fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_flyer.jpg`,
@@ -140,7 +135,6 @@ export const generateAndSendAiReplyInternal = internalAction({
           
           // Bridge Card
           if (product.bridgeCard) {
-            console.log(`[PRODUCT_SEND] Adding bridgeCard to queue: ${product.bridgeCard}`);
             filesToSend.push({
               storageId: product.bridgeCard,
               fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_bridge_card.jpg`,
@@ -151,7 +145,6 @@ export const generateAndSendAiReplyInternal = internalAction({
           
           // Visual Aid (PDF)
           if (product.visualaid) {
-            console.log(`[PRODUCT_SEND] Adding visualaid to queue: ${product.visualaid}`);
             filesToSend.push({
               storageId: product.visualaid,
               fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_visualaid.pdf`,
@@ -159,48 +152,77 @@ export const generateAndSendAiReplyInternal = internalAction({
               label: "Visual Aid"
             });
           }
-          
-          console.log(`[PRODUCT_SEND] Total files to send: ${filesToSend.length}`);
-          
-          // Send all files
-          for (let i = 0; i < filesToSend.length; i++) {
-            const file = filesToSend[i];
-            try {
-              console.log(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Sending ${file.label} for ${product.name}. StorageId: ${file.storageId}`);
-              
-              const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: file.storageId });
-              console.log(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] ${file.label} metadata retrieved:`, metadata);
-              
-              if (!metadata) {
-                console.error(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Metadata is null for storageId: ${file.storageId}. File might be missing or corrupted.`);
-                continue;
-              }
 
-              // Determine correct mime type - fix for old uploads with wrong content type
-              let correctMimeType = metadata?.contentType;
-              if (!correctMimeType || correctMimeType === "application/octet-stream" || correctMimeType === "text/html") {
-                // Fallback based on file type
-                correctMimeType = file.type === "pdf" ? "application/pdf" : "image/jpeg";
-                console.log(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Correcting mime type from ${metadata?.contentType} to ${correctMimeType}`);
-              }
+          // CHECK FOR CLOUDFLARE WORKER CONFIGURATION
+          const useCloudflare = !!process.env.CLOUDFLARE_WORKER_URL;
 
-              await ctx.runAction(internal.whatsapp.messages.sendMedia, {
-                leadId: args.leadId,
-                phoneNumber: args.phoneNumber,
-                storageId: file.storageId,
-                fileName: file.fileName,
-                mimeType: correctMimeType,
-                message: undefined
-              });
-              
-              console.log(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] ${file.label} sent successfully for ${product.name}`);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            } catch (error) {
-              console.error(`[PRODUCT_SEND] [${i + 1}/${filesToSend.length}] Failed to send ${file.label} for ${product.name}:`, error);
+          if (useCloudflare && filesToSend.length > 0) {
+             console.log(`[PRODUCT_SEND] Using Cloudflare Worker Relay for ${filesToSend.length} files`);
+             
+             // Prepare files with signed URLs
+             const filesWithUrls = [];
+             for (const file of filesToSend) {
+                const url = await ctx.storage.getUrl(file.storageId);
+                const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: file.storageId });
+                
+                // Determine correct mime type
+                let correctMimeType = metadata?.contentType;
+                if (!correctMimeType || correctMimeType === "application/octet-stream" || correctMimeType === "text/html") {
+                  correctMimeType = file.type === "pdf" ? "application/pdf" : "image/jpeg";
+                }
+
+                if (url) {
+                  filesWithUrls.push({
+                    url,
+                    fileName: file.fileName,
+                    mimeType: correctMimeType || "application/octet-stream"
+                  });
+                }
+             }
+
+             // Call the worker action
+             try {
+               await ctx.runAction(internal.whatsapp.cloudflare.sendFilesViaWorker, {
+                 phoneNumber: args.phoneNumber,
+                 files: filesWithUrls
+               });
+               console.log(`[PRODUCT_SEND] Cloudflare Worker successfully triggered`);
+             } catch (err) {
+               console.error(`[PRODUCT_SEND] Cloudflare Worker failed, falling back to direct send:`, err);
+               // Fallback logic could go here, or just let it fail and log
+             }
+
+          } else {
+            // ORIGINAL DIRECT SEND LOGIC (Fallback)
+            console.log(`[PRODUCT_SEND] Using Direct Convex Send (No Cloudflare configured or fallback)`);
+            
+            for (let i = 0; i < filesToSend.length; i++) {
+              const file = filesToSend[i];
+              try {
+                const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: file.storageId });
+                
+                if (!metadata) continue;
+
+                let correctMimeType = metadata?.contentType;
+                if (!correctMimeType || correctMimeType === "application/octet-stream" || correctMimeType === "text/html") {
+                  correctMimeType = file.type === "pdf" ? "application/pdf" : "image/jpeg";
+                }
+
+                await ctx.runAction(internal.whatsapp.messages.sendMedia, {
+                  leadId: args.leadId,
+                  phoneNumber: args.phoneNumber,
+                  storageId: file.storageId,
+                  fileName: file.fileName,
+                  mimeType: correctMimeType,
+                  message: undefined
+                });
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              } catch (error) {
+                console.error(`[PRODUCT_SEND] Failed to send ${file.label}:`, error);
+              }
             }
           }
-          
-          console.log(`[PRODUCT_SEND] Finished sending all files for ${product.name}`);
           
           // Format and send product details
           let detailsMessage = `📦 *${product.name}*\n\n`;
@@ -270,17 +292,14 @@ export const generateAndSendAiReplyInternal = internalAction({
             }
           }
       } else if (aiAction.action === "intervention_request") {
-          // Send the AI's message to the customer
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
             message: aiAction.text,
           });
           
-          // Get lead details to determine assignment
           const lead = await ctx.runQuery(internal.leads.queries.basic.getLeadByIdInternal, { leadId: args.leadId });
           
-          // Create intervention request
           await ctx.runMutation(internal.interventionRequests.createInterventionRequestInternal, { 
             leadId: args.leadId,
             assignedTo: (lead && lead.assignedTo && !lead.isColdCallerLead) ? lead.assignedTo : undefined,
@@ -295,11 +314,9 @@ export const generateAndSendAiReplyInternal = internalAction({
             message: aiAction.text,
           });
           
-          // Get lead details to determine who to assign the contact request to
           const lead = await ctx.runQuery(internal.leads.queries.basic.getLeadByIdInternal, { leadId: args.leadId });
           
           if (lead && lead.assignedTo) {
-            // Create contact request for the assigned user
             await ctx.runMutation(internal.contactRequests.createContactRequestInternal, { 
               leadId: args.leadId,
               assignedTo: lead.assignedTo,
