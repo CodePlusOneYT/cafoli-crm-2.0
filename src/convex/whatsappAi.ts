@@ -155,6 +155,7 @@ export const generateAndSendAiReplyInternal = internalAction({
 
           // CHECK FOR CLOUDFLARE WORKER CONFIGURATION
           const useCloudflare = !!process.env.CLOUDFLARE_WORKER_URL;
+          let sentViaCloudflare = false;
 
           if (useCloudflare && filesToSend.length > 0) {
              console.log(`[PRODUCT_SEND] Using Cloudflare Worker Relay for ${filesToSend.length} files`);
@@ -187,12 +188,14 @@ export const generateAndSendAiReplyInternal = internalAction({
                  files: filesWithUrls
                });
                console.log(`[PRODUCT_SEND] Cloudflare Worker successfully triggered`);
+               sentViaCloudflare = true;
              } catch (err) {
                console.error(`[PRODUCT_SEND] Cloudflare Worker failed, falling back to direct send:`, err);
-               // Fallback logic could go here, or just let it fail and log
+               // Fallback logic will execute below because sentViaCloudflare is false
              }
-
-          } else {
+          } 
+          
+          if (!sentViaCloudflare) {
             // ORIGINAL DIRECT SEND LOGIC (Fallback)
             console.log(`[PRODUCT_SEND] Using Direct Convex Send (No Cloudflare configured or fallback)`);
             

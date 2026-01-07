@@ -19,6 +19,9 @@ In the Cloudflare Worker settings (Settings > Variables), add these variables:
 In your Convex Dashboard (Settings > Environment Variables), add:
 
 - `CLOUDFLARE_WORKER_URL`: The URL of your deployed worker (e.g., `https://my-worker.username.workers.dev`).
-- `CLOUDFLARE_WORKER_TOKEN`: The same `WORKER_AUTH_TOKEN` you set in Cloudflare.
+- `CLOUDFLARE_WORKER_TOKEN`: **MUST MATCH EXACTLY** the `WORKER_AUTH_TOKEN` you set in Cloudflare.
+
+**Troubleshooting:**
+If you see "Unauthorized", it means `CLOUDFLARE_WORKER_TOKEN` in Convex does not match `WORKER_AUTH_TOKEN` in Cloudflare. Double check for spaces or typos.
 
 Once these are set, the system will automatically start using the Worker for sending product files.
