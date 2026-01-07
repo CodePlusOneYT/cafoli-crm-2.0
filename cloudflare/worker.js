@@ -1,6 +1,6 @@
 export default {
   async fetch(request, env) {
-    // Handle CORS
+    // Handle CORS Preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -13,36 +13,31 @@ export default {
 
     // Health Check
     if (request.method === "GET") {
-      return new Response("Cloudflare Worker is running! Method must be POST to send files.", { status: 200 });
+      return new Response("Cloudflare Worker is running! Use POST to send files.", { status: 200 });
     }
 
     if (request.method !== "POST") {
       return new Response("Method not allowed", { status: 405 });
     }
 
-    // 1. Validate Environment Variables
-    const WORKER_TOKEN = env.WORKER_AUTH_TOKEN;
-    const WA_TOKEN = env.CLOUD_API_ACCESS_TOKEN;
-    const PHONE_ID = env.WA_PHONE_NUMBER_ID;
+    // 1. Validate Configuration
+    const WORKER_TOKEN = env.WORKER_AUTH_TOKEN?.trim();
+    const WA_TOKEN = env.CLOUD_API_ACCESS_TOKEN?.trim();
+    const PHONE_ID = env.WA_PHONE_NUMBER_ID?.trim();
 
-    if (!WORKER_TOKEN || !WA_TOKEN || !PHONE_ID) {
-      return new Response(
-        JSON.stringify({ 
-          error: "Configuration Error", 
-          details: "Missing WORKER_AUTH_TOKEN, CLOUD_API_ACCESS_TOKEN, or WA_PHONE_NUMBER_ID in Cloudflare Variables." 
-        }), 
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    if (!WORKER_TOKEN) return new Response("Error: WORKER_AUTH_TOKEN not set in Cloudflare", { status: 500 });
+    if (!WA_TOKEN) return new Response("Error: CLOUD_API_ACCESS_TOKEN not set in Cloudflare", { status: 500 });
+    if (!PHONE_ID) return new Response("Error: WA_PHONE_NUMBER_ID not set in Cloudflare", { status: 500 });
 
-    // 2. Validate Request Token
+    // 2. Validate Request Authorization
     const authHeader = request.headers.get("Authorization");
-    if (!authHeader || authHeader.replace("Bearer ", "").trim() !== WORKER_TOKEN.trim()) {
+    if (!authHeader || authHeader.replace("Bearer ", "").trim() !== WORKER_TOKEN) {
       return new Response("Unauthorized: Invalid Token", { status: 401 });
     }
 
     try {
-      const { phoneNumber, files } = await request.json();
+      const payload = await request.json();
+      const { phoneNumber, files } = payload;
 
       if (!phoneNumber || !files || !Array.isArray(files)) {
         return new Response("Invalid request body", { status: 400 });
@@ -51,30 +46,28 @@ export default {
       console.log(`[START] Processing ${files.length} files for ${phoneNumber}`);
 
       // 3. Send Debug Text Message (To confirm connectivity)
-      const debugRes = await fetch(
-        `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${WA_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: phoneNumber,
-            type: "text",
-            text: { body: `[System] Processing ${files.length} file(s)...` },
-          }),
-        }
-      );
-      
-      if (!debugRes.ok) {
-        const errText = await debugRes.text();
-        console.error(`[DEBUG_MSG_FAIL] ${errText}`);
-        // We continue anyway to try sending the file
-      } else {
+      // We send this first to ensure the user knows something is happening
+      try {
+        await fetch(
+          `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${WA_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to: phoneNumber,
+              type: "text",
+              text: { body: "🤖 [System] Processing media files... please wait." },
+            }),
+          }
+        );
         console.log("[DEBUG_MSG_SENT] System message sent.");
+      } catch (e) {
+        console.error("[DEBUG_MSG_FAIL] Failed to send system message:", e);
       }
 
       const results = [];
@@ -84,74 +77,101 @@ export default {
         try {
           console.log(`[FILE] Processing: ${file.fileName} (${file.mimeType})`);
 
-          // A. Download from Convex
-          const fileRes = await fetch(file.url);
-          if (!fileRes.ok) throw new Error(`Failed to download file: ${fileRes.status}`);
+          // A. Download File
+          const fileResponse = await fetch(file.url, {
+            headers: { "User-Agent": "CloudflareWorker/1.0" }
+          });
           
-          const originalBlob = await fileRes.blob();
-          
-          // CRITICAL: Enforce MIME type to prevent corruption
-          const blob = originalBlob.slice(0, originalBlob.size, file.mimeType);
-          
-          console.log(`[FILE] Downloaded ${blob.size} bytes. Type: ${blob.type}`);
-
-          if (blob.size < 100) {
-             console.warn(`[WARNING] File is suspiciously small (${blob.size} bytes). Might be an error text.`);
+          if (!fileResponse.ok) {
+            throw new Error(`Failed to download file: ${fileResponse.statusText}`);
           }
 
-          // B. Upload to WhatsApp
-          const formData = new FormData();
-          formData.append("file", blob, file.fileName);
-          formData.append("messaging_product", "whatsapp");
-          formData.append("type", file.mimeType); 
+          const arrayBuffer = await fileResponse.arrayBuffer();
+          
+          if (arrayBuffer.byteLength < 100) {
+             // Check if it's a text error
+             const text = new TextDecoder().decode(arrayBuffer);
+             console.warn(`[FILE] Suspiciously small file (${arrayBuffer.byteLength} bytes): ${text}`);
+             if (text.includes("Error") || text.includes("NotFound")) {
+                throw new Error(`Downloaded file appears to be an error message: ${text}`);
+             }
+          }
 
-          const uploadRes = await fetch(
+          console.log(`[FILE] Downloaded ${arrayBuffer.byteLength} bytes.`);
+
+          // B. MAGIC BYTE DETECTION (Crucial Fix)
+          // Detect the REAL mime type from the file header
+          const headerBytes = new Uint8Array(arrayBuffer.slice(0, 12));
+          let detectedMime = null;
+
+          if (headerBytes[0] === 0xFF && headerBytes[1] === 0xD8 && headerBytes[2] === 0xFF) {
+            detectedMime = "image/jpeg";
+          } else if (headerBytes[0] === 0x89 && headerBytes[1] === 0x50 && headerBytes[2] === 0x4E && headerBytes[3] === 0x47) {
+            detectedMime = "image/png";
+          } else if (headerBytes[0] === 0x25 && headerBytes[1] === 0x50 && headerBytes[2] === 0x44 && headerBytes[3] === 0x46) {
+            detectedMime = "application/pdf";
+          } else if (headerBytes[0] === 0x52 && headerBytes[1] === 0x49 && headerBytes[2] === 0x46 && headerBytes[3] === 0x46 && headerBytes[8] === 0x57 && headerBytes[9] === 0x45 && headerBytes[10] === 0x42 && headerBytes[11] === 0x50) {
+            detectedMime = "image/webp";
+          }
+
+          // Use detected mime if found, otherwise fallback to provided
+          const finalMimeType = detectedMime || file.mimeType || "application/octet-stream";
+          
+          if (detectedMime && detectedMime !== file.mimeType) {
+            console.log(`[FILE] MIME CORRECTION: Declared '${file.mimeType}' -> Detected '${detectedMime}'`);
+          }
+
+          // C. Create Blob with Correct Type
+          const fileBlob = new Blob([arrayBuffer], { type: finalMimeType });
+
+          // D. Upload to WhatsApp
+          const formData = new FormData();
+          formData.append("file", fileBlob, file.fileName);
+          formData.append("messaging_product", "whatsapp");
+          formData.append("type", finalMimeType); // Explicitly state type
+
+          const uploadResponse = await fetch(
             `https://graph.facebook.com/v20.0/${PHONE_ID}/media`,
             {
               method: "POST",
-              headers: {
-                "Authorization": `Bearer ${WA_TOKEN}`,
-                // DO NOT SET CONTENT-TYPE HERE! Let fetch set the boundary.
-              },
+              headers: { "Authorization": `Bearer ${WA_TOKEN}` },
               body: formData,
             }
           );
 
-          const uploadData = await uploadRes.json();
-          if (!uploadRes.ok) {
+          const uploadData = await uploadResponse.json();
+
+          if (!uploadResponse.ok || !uploadData.id) {
             throw new Error(`Upload failed: ${JSON.stringify(uploadData)}`);
           }
 
           const mediaId = uploadData.id;
-          console.log(`[FILE] Uploaded. Media ID: ${mediaId}`);
+          console.log(`[FILE] Uploaded. Media ID: ${mediaId} (Type: ${finalMimeType})`);
 
-          // C. Send Media Message
-          // Determine type: image, video, audio, document
-          let type = "document";
-          if (file.mimeType.startsWith("image/")) type = "image";
-          else if (file.mimeType.startsWith("video/")) type = "video";
-          else if (file.mimeType.startsWith("audio/")) type = "audio";
+          // E. Send Message
+          // Determine message type based on FINAL mime type
+          let messageType = "document";
+          if (finalMimeType.startsWith("image/")) messageType = "image";
+          else if (finalMimeType.startsWith("video/")) messageType = "video";
+          else if (finalMimeType.startsWith("audio/")) messageType = "audio";
 
           const messagePayload = {
             messaging_product: "whatsapp",
             recipient_type: "individual",
             to: phoneNumber,
-            type: type,
-            [type]: {
+            type: messageType,
+            [messageType]: {
               id: mediaId,
-              // Caption is allowed for images/videos/documents
-              caption: file.fileName 
+              // Add caption if it's an image/video to ensure it renders nicely
+              caption: messageType === "image" || messageType === "video" ? file.fileName : undefined,
+              // Add filename for documents
+              filename: messageType === "document" ? file.fileName : undefined
             }
           };
-          
-          // For documents, we can also specify filename
-          if (type === "document") {
-            messagePayload[type].filename = file.fileName;
-          }
 
-          console.log(`[FILE] Sending message with ID: ${mediaId} as ${type}...`);
+          console.log(`[FILE] Sending message with ID: ${mediaId} as ${messageType}...`);
 
-          const sendRes = await fetch(
+          const sendResponse = await fetch(
             `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,
             {
               method: "POST",
@@ -163,29 +183,45 @@ export default {
             }
           );
 
-          const sendData = await sendRes.json();
-          
-          if (!sendRes.ok) {
-            console.error(`[FILE] Send Failed: ${JSON.stringify(sendData)}`);
-            throw new Error(`Send message failed: ${JSON.stringify(sendData)}`);
+          const sendData = await sendResponse.json();
+
+          if (!sendResponse.ok) {
+            throw new Error(`Send failed: ${JSON.stringify(sendData)}`);
           }
 
           console.log(`[FILE] Message Sent! ID: ${sendData.messages?.[0]?.id}`);
-          results.push({ fileName: file.fileName, status: "sent", messageId: sendData.messages?.[0]?.id });
+          results.push({ status: "sent", fileName: file.fileName, messageId: sendData.messages?.[0]?.id });
 
-        } catch (err) {
-          console.error(`[FILE_ERROR] ${file.fileName}: ${err.message}`);
-          results.push({ fileName: file.fileName, status: "failed", error: err.message });
+        } catch (error) {
+          console.error(`[FILE] Error processing ${file.fileName}:`, error);
+          results.push({ status: "failed", fileName: file.fileName, error: error.message });
+          
+          // Try to send error notification to user
+          try {
+             await fetch(
+              `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,
+              {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  messaging_product: "whatsapp",
+                  to: phoneNumber,
+                  type: "text",
+                  text: { body: `⚠️ Failed to send ${file.fileName}. Please contact support.` }
+                }),
+              }
+            );
+          } catch (e) {}
         }
       }
 
-      return new Response(JSON.stringify({ status: "completed", results }), {
+      return new Response(JSON.stringify({ results }), {
         headers: { "Content-Type": "application/json" },
       });
 
     } catch (err) {
-      console.error(`[FATAL] ${err.message}`);
-      return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+      console.error("[WORKER] Critical Error:", err);
+      return new Response(`Worker Error: ${err.message}`, { status: 500 });
     }
   },
 };

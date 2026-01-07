@@ -45,20 +45,20 @@ In your Convex Dashboard (Settings > Environment Variables), add:
 ## 5. Troubleshooting "Sent but not received"
 If the logs say "Sent successfully" but you don't receive the message:
 
-1. **Check the Debug Text**: The updated worker sends a text message "[System] Processing X file(s)..." before the image.
-   - If you receive the text but NOT the image: The image file is likely corrupted or too large.
-   - If you receive NOTHING: The phone number is likely incorrect or you are sending to yourself.
+1. **Check the Debug Text**: The updated worker sends a text message "[System] Processing media files..." before the image.
+   - If you receive the text but NOT the image: The image file is likely corrupted or has a MIME type mismatch (e.g., a PNG saved as .jpg).
+   - **FIXED IN LATEST VERSION**: The worker now automatically detects the *real* file type (Magic Bytes) and corrects it before sending.
 
-2. **Do NOT Send to Yourself**: WhatsApp Business API does **not** allow sending messages to the same number as the business account. You must test with a different phone number.
-
-3. **Check Phone Number Format**: Ensure the number includes the country code but NO `+` sign or leading zeros (e.g., `919876543210` for India).
-
-4. **REDEPLOY THE WORKER (CRITICAL)**:
-   - We have updated the worker code to use a safer method for handling binary image data (`response.blob()` with explicit slicing).
+2. **REDEPLOY THE WORKER (CRITICAL)**:
+   - We have updated the worker code to include **Magic Byte Detection**.
+   - This fixes issues where WhatsApp silently drops images because the file extension doesn't match the actual content (e.g., PNG vs JPG).
    - Copy the code from `cloudflare/worker.js` again.
    - Paste it into your Cloudflare Worker editor.
    - Click **Deploy**.
-   - This fixes issues where the image is sent but appears blank or is not received due to data corruption.
+
+3. **Do NOT Send to Yourself**: WhatsApp Business API does **not** allow sending messages to the same number as the business account. You must test with a different phone number.
+
+4. **Check Phone Number Format**: Ensure the number includes the country code but NO `+` sign or leading zeros (e.g., `919876543210` for India).
 
 5. **Check Worker Logs**:
    - Go to Cloudflare Dashboard > Workers > [Your Worker] > Logs > Begin Log Stream.
