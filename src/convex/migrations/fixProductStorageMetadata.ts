@@ -121,6 +121,22 @@ function detectMimeTypeFromBytes(bytes: Uint8Array): string | null {
   return null;
 }
 
+// Helper mutation to generate upload URL
+export const generateUploadUrl = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Helper mutation to get storage URL
+export const getStorageUrl = internalMutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
+
 // Action to fix files with incorrect metadata
 export const fixFiles = action({
   args: {},
@@ -163,8 +179,8 @@ export const fixFiles = action({
             continue;
           }
 
-          // Get the file URL and fetch the content
-          const url = await ctx.storage.getUrl(storageId);
+          // Get the file URL using mutation
+          const url = await ctx.runMutation(internal.migrations.fixProductStorageMetadata.getStorageUrl, { storageId });
           if (!url) {
             failures.push({ productName: product.name, field, error: "Could not get file URL" });
             continue;
@@ -190,8 +206,8 @@ export const fixFiles = action({
           // Create a blob with the correct MIME type
           const blob = new Blob([bytes], { type: correctMimeType });
 
-          // Upload the file with correct metadata
-          const uploadUrl = await ctx.storage.generateUploadUrl();
+          // Upload the file with correct metadata using mutation
+          const uploadUrl = await ctx.runMutation(internal.migrations.fixProductStorageMetadata.generateUploadUrl);
           const uploadResponse = await fetch(uploadUrl, {
             method: "POST",
             headers: { "Content-Type": correctMimeType },
