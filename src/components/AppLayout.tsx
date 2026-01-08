@@ -22,7 +22,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { LeadReminders } from "./LeadReminders";
@@ -45,7 +45,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
   
   const ensureRole = useMutation(api.users.ensureRole);
-  const runMigration = useMutation(api.migrations.fixProductStorageMetadata.runMigration);
+  const runMigration = useAction(api.migrations.fixProductStorageMetadata.runMigration);
+  const fixFiles = useAction(api.migrations.fixProductStorageMetadata.fixFiles);
   
   // Mandatory Follow Up Logic
   const leadsWithoutFollowUp = useQuery(
@@ -224,6 +225,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   };
 
   const [isMigrating, setIsMigrating] = useState(false);
+  const [isFixing, setIsFixing] = useState(false);
 
   const handleMigrationClick = async () => {
     if (!isAdmin) return;
@@ -236,7 +238,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
           duration: 5000,
         });
       } else {
-        // Show detailed list of problematic products
         const productList = result.products?.map((p: any) => 
           `• ${p.name}: ${p.issues.join(", ")}`
         ).join("\n") || "";
@@ -244,6 +245,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
         toast.error(result.message, {
           description: productList,
           duration: 15000,
+          action: {
+            label: "Fix Now",
+            onClick: () => handleFixFiles(),
+          },
         });
         
         console.log("Problematic products:", result.products);
@@ -253,6 +258,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
       toast.error('Failed to check product files. See console for details.');
     } finally {
       setIsMigrating(false);
+    }
+  };
+
+  const handleFixFiles = async () => {
+    if (!isAdmin) return;
+    setIsFixing(true);
+    toast.info("Fixing product files with incorrect metadata...");
+    try {
+      const result = await fixFiles({}) as any;
+      if (result.success) {
+        toast.success(`✅ ${result.message}`, {
+          duration: 5000,
+        });
+      } else {
+        const failureList = result.failed?.map((f: any) => 
+          `• ${f.productName} (${f.field}): ${f.error}`
+        ).join("\n") || "";
+        
+        toast.warning(`${result.message}\n\nFailed:\n${failureList}`, {
+          duration: 15000,
+        });
+        
+        console.log("Fix failures:", result.failed);
+      }
+    } catch (error) {
+      console.error('Fix error:', error);
+      toast.error('Failed to fix product files. See console for details.');
+    } finally {
+      setIsFixing(false);
     }
   };
 
@@ -310,10 +344,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
               variant="outline" 
               className="w-full justify-start gap-2 mb-4"
               onClick={handleMigrationClick}
-              disabled={isMigrating}
+              disabled={isMigrating || isFixing}
             >
-              <Database className={`h-4 w-4 ${isMigrating ? 'animate-spin' : ''}`} />
-              {isMigrating ? "Migrating..." : "Fix Product Files"}
+              <Database className={`h-4 w-4 ${(isMigrating || isFixing) ? 'animate-spin' : ''}`} />
+              {isMigrating ? "Scanning..." : isFixing ? "Fixing..." : "Fix Product Files"}
             </Button>
           </>
         )}
