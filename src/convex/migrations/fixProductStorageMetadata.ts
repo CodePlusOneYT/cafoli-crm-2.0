@@ -146,7 +146,11 @@ export const fixFiles = action({
     fixed: number;
     failed: Array<{ productName: string; field: string; error: string }>;
   }> => {
+    console.log("🔧 Starting fixFiles action...");
+    
     const problematic: Array<{ _id: any; name: string; issues: string[] }> = await ctx.runQuery(internal.migrations.fixProductStorageMetadata.findProblematicProducts);
+    
+    console.log(`📊 Found ${problematic.length} products with issues:`, problematic);
     
     if (problematic.length === 0) {
       return {
@@ -161,7 +165,11 @@ export const fixFiles = action({
     const failures: Array<{ productName: string; field: string; error: string }> = [];
 
     for (const product of problematic) {
+      console.log(`\n🔍 Processing product: ${product.name}`);
+      
       for (const field of product.issues) {
+        console.log(`  📁 Fixing field: ${field}`);
+        
         try {
           // Get the product to access the storage ID
           const productData = await ctx.runQuery(internal.migrations.fixProductStorageMetadata.getProductForFix, { 
@@ -169,39 +177,56 @@ export const fixFiles = action({
           });
           
           if (!productData) {
-            failures.push({ productName: product.name, field, error: "Product not found" });
+            const error = "Product not found";
+            console.error(`  ❌ ${error}`);
+            failures.push({ productName: product.name, field, error });
             continue;
           }
 
           const storageId = (productData as any)[field];
           if (!storageId) {
-            failures.push({ productName: product.name, field, error: "Storage ID not found" });
+            const error = "Storage ID not found";
+            console.error(`  ❌ ${error}`);
+            failures.push({ productName: product.name, field, error });
             continue;
           }
+
+          console.log(`  📦 Storage ID: ${storageId}`);
 
           // Get the file URL using mutation
           const url = await ctx.runMutation(internal.migrations.fixProductStorageMetadata.getStorageUrl, { storageId });
           if (!url) {
-            failures.push({ productName: product.name, field, error: "Could not get file URL" });
+            const error = "Could not get file URL";
+            console.error(`  ❌ ${error}`);
+            failures.push({ productName: product.name, field, error });
             continue;
           }
+
+          console.log(`  🌐 File URL obtained`);
 
           // Fetch the file content
           const response = await fetch(url);
           if (!response.ok) {
-            failures.push({ productName: product.name, field, error: `Failed to fetch file: ${response.statusText}` });
+            const error = `Failed to fetch file: ${response.statusText}`;
+            console.error(`  ❌ ${error}`);
+            failures.push({ productName: product.name, field, error });
             continue;
           }
 
           const arrayBuffer = await response.arrayBuffer();
           const bytes = new Uint8Array(arrayBuffer);
+          console.log(`  📥 Downloaded ${bytes.length} bytes`);
 
           // Detect correct MIME type
           const correctMimeType = detectMimeTypeFromBytes(bytes);
           if (!correctMimeType) {
-            failures.push({ productName: product.name, field, error: "Could not detect file type" });
+            const error = `Could not detect file type (first bytes: ${Array.from(bytes.slice(0, 12)).map(b => b.toString(16).padStart(2, '0')).join(' ')})`;
+            console.error(`  ❌ ${error}`);
+            failures.push({ productName: product.name, field, error });
             continue;
           }
+
+          console.log(`  🎯 Detected MIME type: ${correctMimeType}`);
 
           // Create a blob with the correct MIME type
           const blob = new Blob([bytes], { type: correctMimeType });
@@ -215,11 +240,14 @@ export const fixFiles = action({
           });
 
           if (!uploadResponse.ok) {
-            failures.push({ productName: product.name, field, error: "Failed to upload corrected file" });
+            const error = `Failed to upload corrected file: ${uploadResponse.statusText}`;
+            console.error(`  ❌ ${error}`);
+            failures.push({ productName: product.name, field, error });
             continue;
           }
 
           const { storageId: newStorageId } = await uploadResponse.json();
+          console.log(`  📤 Uploaded with new storage ID: ${newStorageId}`);
 
           // Update the product with the new storage ID
           await ctx.runMutation(internal.migrations.fixProductStorageMetadata.updateProductFile, {
@@ -229,17 +257,23 @@ export const fixFiles = action({
             oldStorageId: storageId,
           });
 
+          console.log(`  ✅ Successfully fixed ${field} for ${product.name}`);
           fixedCount++;
         } catch (error: any) {
+          const errorMsg = error.message || String(error);
+          console.error(`  ❌ Error fixing ${field}:`, errorMsg);
+          console.error(`  Stack:`, error.stack);
           failures.push({ 
             productName: product.name, 
             field, 
-            error: error.message || "Unknown error" 
+            error: errorMsg
           });
         }
       }
     }
 
+    console.log(`\n📈 Fix complete: ${fixedCount} fixed, ${failures.length} failed`);
+    
     return {
       success: failures.length === 0,
       message: `Fixed ${fixedCount} file(s). ${failures.length > 0 ? `${failures.length} failed.` : ""}`,
