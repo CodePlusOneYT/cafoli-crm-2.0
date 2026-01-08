@@ -417,6 +417,7 @@ export default defineSchema({
     shouldStop: v.boolean(),
     processed: v.number(),
     failed: v.number(),
+    status: v.optional(v.string()), // queued, running, completed, stopped
     updatedAt: v.number(),
   }).index("by_process_id", ["processId"]),
 });

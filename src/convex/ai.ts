@@ -1,5 +1,5 @@
 "use node";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { generateWithGemini, getGeminiKeys, gemmaModel } from "./lib/gemini";
 import { internal } from "./_generated/api";
@@ -405,6 +405,227 @@ export const scoreLeadsJob = action({
 
     console.log(`Successfully scored ${scored} leads`);
     return { scored, total: leads.length };
+  },
+});
+
+// Internal background action for batch processing
+export const batchProcessLeadsBackground = internalAction({
+  args: {
+    processType: v.union(v.literal("summaries"), v.literal("scores"), v.literal("both")),
+    processId: v.string(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    console.log(`Starting background batch processing: ${args.processType} (ID: ${args.processId})`);
+
+    // Mark as running
+    await ctx.runMutation(internal.aiMutations.updateBatchStatus, {
+      processId: args.processId,
+      status: "running",
+    });
+
+    // Get all available API keys
+    const allKeys = await getGeminiKeys(ctx);
+    const numKeys = allKeys.length;
+
+    console.log(`Using ${numKeys} API keys for parallel processing`);
+
+    let offset = 0;
+    let totalProcessed = 0;
+    let totalFailed = 0;
+    let hasMore = true;
+
+    try {
+      while (hasMore) {
+        // Check if stop has been requested
+        const shouldStop = await ctx.runQuery(internal.aiMutations.checkBatchProcessStop, {
+          processId: args.processId,
+        });
+
+        if (shouldStop) {
+          console.log(`Batch processing stopped by user (ID: ${args.processId})`);
+          await ctx.runMutation(internal.aiMutations.updateBatchStatus, {
+            processId: args.processId,
+            status: "stopped",
+          });
+          return;
+        }
+
+        // Fetch leads in batches equal to number of API keys
+        const leads: Array<any> = await ctx.runQuery(internal.aiMutations.getAllLeadsForBatchProcessing, {
+          offset,
+          limit: numKeys,
+        });
+
+        if (leads.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        console.log(`Processing ${leads.length} leads in parallel (offset: ${offset})`);
+
+        // Process leads in parallel - one lead per API key
+        const promises = leads.map(async (lead, index) => {
+          try {
+            const whatsappMessages = await ctx.runQuery(internal.aiMutations.getLeadWhatsAppMessages, {
+              leadId: lead._id,
+            });
+
+            const comments = await ctx.runQuery(internal.aiMutations.getLeadComments, {
+              leadId: lead._id,
+            });
+
+            let summary: string | undefined;
+
+            if (args.processType === "summaries" || args.processType === "both") {
+              const systemPrompt = `You are a CRM assistant. Generate a concise 1-2 sentence summary of this lead for quick prioritization. Focus on: lead quality, urgency, key action needed, and recent engagement. Be brief and actionable.`;
+
+              const leadInfo = {
+                name: lead.name,
+                subject: lead.subject,
+                source: lead.source,
+                status: lead.status,
+                type: lead.type,
+                message: lead.message,
+                recentComments: comments.slice(0, 3),
+                whatsappActivity: whatsappMessages.length > 0 ? {
+                  messageCount: whatsappMessages.length,
+                  recentMessages: whatsappMessages.slice(0, 5).map(m => `${m.direction}: ${m.content.substring(0, 100)}`),
+                } : null,
+              };
+
+              const prompt = `Summarize this lead in 1-2 sentences:\n\n${JSON.stringify(leadInfo, null, 2)}`;
+              const { text } = await generateWithGemini(ctx, systemPrompt, prompt, { useGemma: true });
+
+              summary = text;
+              const lastActivityHash = `${lead.lastActivity}`;
+              await ctx.runMutation(internal.aiMutations.storeSummary, {
+                leadId: lead._id,
+                summary: text,
+                lastActivityHash,
+              });
+            }
+
+            if (args.processType === "scores" || args.processType === "both") {
+              if (!summary) {
+                const existingSummary = await ctx.runQuery(internal.aiMutations.getSummary, {
+                  leadId: lead._id,
+                  lastActivityHash: `${lead.lastActivity}`,
+                });
+                summary = existingSummary?.summary;
+              }
+
+              const systemPrompt = `You are an AI lead scoring expert for pharmaceutical CRM. Score leads 0-100 based on:
+    - Engagement (comments, messages, follow-ups)
+    - Recency of activity
+    - Lead type and status
+    - Source quality
+    - WhatsApp conversation quality and engagement
+    - AI-generated summary insights
+
+    Return JSON with: { "score": <number 0-100>, "tier": "<High|Medium|Low>", "rationale": "<brief explanation>" }`;
+
+              const daysSinceCreated = (Date.now() - lead._creationTime) / (1000 * 60 * 60 * 24);
+              const daysSinceActivity = (Date.now() - lead.lastActivity) / (1000 * 60 * 60 * 24);
+
+              const whatsappEngagement = whatsappMessages.length > 0 ? {
+                totalMessages: whatsappMessages.length,
+                inboundCount: whatsappMessages.filter(m => m.direction === "inbound").length,
+                outboundCount: whatsappMessages.filter(m => m.direction === "outbound").length,
+                recentActivity: whatsappMessages.slice(0, 3).map(m => `${m.direction}: ${m.content.substring(0, 80)}`),
+              } : null;
+
+              const leadInfo = {
+                source: lead.source,
+                status: lead.status,
+                type: lead.type,
+                isAssigned: !!lead.assignedTo,
+                hasFollowUp: !!lead.nextFollowUpDate,
+                tagCount: lead.tags?.length || 0,
+                commentCount: comments.length,
+                messageCount: whatsappMessages.length,
+                daysSinceCreated: Math.round(daysSinceCreated),
+                daysSinceActivity: Math.round(daysSinceActivity),
+                aiSummary: summary,
+                whatsappEngagement,
+              };
+
+              const prompt = `Score this lead:\n\n${JSON.stringify(leadInfo, null, 2)}`;
+              const { text } = await generateWithGemini(ctx, systemPrompt, prompt, { jsonMode: true, useGemma: true });
+
+              let parsed;
+              try {
+                parsed = JSON.parse(text);
+              } catch {
+                parsed = { score: 50, tier: "Medium", rationale: "Unable to generate AI score" };
+              }
+
+              await ctx.runMutation(internal.aiMutations.storeScore, {
+                leadId: lead._id,
+                score: parsed.score,
+                tier: parsed.tier,
+                rationale: parsed.rationale,
+              });
+            }
+
+            return { success: true };
+          } catch (error) {
+            console.error(`Failed to process lead ${lead._id}:`, error);
+            return { success: false };
+          }
+        });
+
+        const results = await Promise.all(
+          promises.map(p => p.catch(() => ({ success: false })))
+        );
+
+        results.forEach((result) => {
+          if (result.success) {
+            totalProcessed++;
+          } else {
+            totalFailed++;
+          }
+        });
+
+        console.log(`Batch complete: ${results.filter(r => r.success).length}/${results.length} succeeded`);
+        offset += leads.length;
+
+        await ctx.runMutation(internal.aiMutations.updateBatchProgress, {
+          processId: args.processId,
+          processed: totalProcessed,
+          failed: totalFailed,
+        });
+
+        const shouldStopAfterBatch = await ctx.runQuery(internal.aiMutations.checkBatchProcessStop, {
+          processId: args.processId,
+        });
+
+        if (shouldStopAfterBatch) {
+          console.log(`Batch processing stopped by user after batch (ID: ${args.processId})`);
+          await ctx.runMutation(internal.aiMutations.updateBatchStatus, {
+            processId: args.processId,
+            status: "stopped",
+          });
+          return;
+        }
+
+        console.log(`Cooling down for 15 seconds before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, 15000));
+      }
+
+      await ctx.runMutation(internal.aiMutations.updateBatchStatus, {
+        processId: args.processId,
+        status: "completed",
+      });
+
+      console.log(`Batch processing complete. Processed: ${totalProcessed}, Failed: ${totalFailed}`);
+    } catch (error) {
+      console.error(`Batch processing error:`, error);
+      await ctx.runMutation(internal.aiMutations.updateBatchStatus, {
+        processId: args.processId,
+        status: "error",
+      });
+      throw error;
+    }
   },
 });
 

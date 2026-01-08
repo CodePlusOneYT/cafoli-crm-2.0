@@ -50,17 +50,19 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState("users");
   const [deduplicationResult, setDeduplicationResult] = useState<any>(null);
   const [isDeduplicating, setIsDeduplicating] = useState(false);
-  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [currentProcessId, setCurrentProcessId] = useState<string | null>(null);
   const [batchProcessResult, setBatchProcessResult] = useState<any>(null);
   const clearAllSummaries = useMutation(api.aiMutations.clearAllSummaries);
   const clearAllScores = useMutation(api.aiMutations.clearAllScores);
   const setBatchProcessStop = useMutation(api.aiMutations.setBatchProcessStop);
+  const startBatchProcess = useMutation(api.aiMutations.startBatchProcess);
 
   const batchProgress = useQuery(
     api.aiMutations.getBatchProgress,
     currentProcessId ? { processId: currentProcessId } : "skip"
   );
+
+  const isBatchProcessing = batchProgress?.status === "queued" || batchProgress?.status === "running";
 
   if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "uploader")) {
     return <div className="p-8 text-center">You do not have permission to view this page.</div>;
@@ -105,34 +107,17 @@ export default function Admin() {
 
   const handleBatchProcess = async (processType: "summaries" | "scores" | "both") => {
     if (!currentUser) return;
-    setIsBatchProcessing(true);
     setBatchProcessResult(null);
 
-    // Generate unique process ID
-    const processId = `batch_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    setCurrentProcessId(processId);
-
     const typeLabel = processType === "both" ? "summaries and scores" : processType;
-    toast.info(`Starting batch processing of ${typeLabel}...`);
 
     try {
-      const result = await batchProcessLeads({
-        processType,
-        processId,
-      });
+      const { processId } = await startBatchProcess({ processType });
+      setCurrentProcessId(processId);
 
-      setBatchProcessResult(result);
-
-      if (result.stopped) {
-        toast.warning(`Batch processing stopped. Processed ${result.processed} leads, ${result.failed} failed.`);
-      } else {
-        toast.success(`Batch processing complete! Processed ${result.processed} leads, ${result.failed} failed.`);
-      }
+      toast.success(`Batch processing started! Processing ${typeLabel} in the background. You can close this tab and it will continue running.`);
     } catch (error: any) {
-      toast.error(error.message || "Failed to batch process leads");
-    } finally {
-      setIsBatchProcessing(false);
-      setCurrentProcessId(null);
+      toast.error(error.message || "Failed to start batch processing");
     }
   };
 
@@ -283,8 +268,8 @@ export default function Admin() {
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
                     Process all leads to generate AI summaries and priority scores using Gemma 3 27B IT model.
-                    Each available API key processes one lead at a time in parallel. Batches are processed sequentially with a 15-second cooldown between batches.
-                    WhatsApp chat history is included in the analysis.
+                    Processing runs in the background - you can close this tab and it will continue. Each available API key processes one lead at a time in parallel.
+                    Batches are processed sequentially with a 15-second cooldown between batches. WhatsApp chat history is included in the analysis.
                   </p>
 
                   <div className="flex flex-wrap gap-2">
@@ -319,14 +304,31 @@ export default function Admin() {
                     )}
                   </div>
 
-                  {isBatchProcessing && batchProgress && (
-                    <div className="p-4 bg-muted/20 rounded-md border">
-                      <h4 className="font-semibold mb-2">Processing Status:</h4>
+                  {batchProgress && (batchProgress.status === "queued" || batchProgress.status === "running" || batchProgress.status === "completed" || batchProgress.status === "stopped") && (
+                    <div className={`p-4 rounded-md border ${
+                      batchProgress.status === "completed" ? "bg-green-50 border-green-200" :
+                      batchProgress.status === "stopped" ? "bg-yellow-50 border-yellow-200" :
+                      "bg-muted/20"
+                    }`}>
+                      <h4 className="font-semibold mb-2">
+                        Processing Status: {
+                          batchProgress.status === "queued" ? "Queued" :
+                          batchProgress.status === "running" ? "Running" :
+                          batchProgress.status === "completed" ? "Completed" :
+                          batchProgress.status === "stopped" ? "Stopped" :
+                          "Unknown"
+                        }
+                      </h4>
                       <div className="space-y-1 text-sm">
                         <p>Processed: {batchProgress.processed}</p>
                         <p>Failed: {batchProgress.failed}</p>
                         <p>Total: {batchProgress.processed + batchProgress.failed}</p>
                       </div>
+                      {(batchProgress.status === "queued" || batchProgress.status === "running") && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          This process will continue running even if you close this tab.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -376,6 +378,7 @@ export default function Admin() {
                   <div className="mt-4 p-4 bg-muted/20 rounded-md">
                     <h4 className="font-semibold mb-2">How it works:</h4>
                     <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
+                      <li>Runs in background - close tab anytime, processing continues</li>
                       <li>Each API key processes one lead at a time in parallel</li>
                       <li>Batch size equals number of available Gemini API keys</li>
                       <li>15-second cooldown between batches to prevent rate limiting</li>

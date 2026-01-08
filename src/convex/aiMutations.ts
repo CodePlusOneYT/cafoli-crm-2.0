@@ -1,5 +1,6 @@
 import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 // Store AI summary
 export const storeSummary = internalMutation({
@@ -315,6 +316,58 @@ export const getBatchProgress = query({
       processed: control.processed,
       failed: control.failed,
       shouldStop: control.shouldStop,
+      status: control.status || "running",
     };
+  },
+});
+
+// Update batch process status
+export const updateBatchStatus = internalMutation({
+  args: {
+    processId: v.string(),
+    status: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const control = await ctx.db
+      .query("batchProcessControl")
+      .withIndex("by_process_id", (q) => q.eq("processId", args.processId))
+      .first();
+
+    if (control) {
+      await ctx.db.patch(control._id, {
+        status: args.status,
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});
+
+// Start batch process in background
+export const startBatchProcess = mutation({
+  args: {
+    processType: v.union(v.literal("summaries"), v.literal("scores"), v.literal("both")),
+  },
+  handler: async (ctx, args) => {
+    // Generate unique process ID
+    const processId = `batch_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Create control record
+    await ctx.db.insert("batchProcessControl", {
+      processId,
+      shouldStop: false,
+      processed: 0,
+      failed: 0,
+      status: "queued",
+      updatedAt: Date.now(),
+    });
+
+    // Schedule the batch processing action to run in background
+    // @ts-ignore - internal is available at runtime
+    await ctx.scheduler.runAfter(0, internal.ai.batchProcessLeadsBackground, {
+      processType: args.processType,
+      processId,
+    });
+
+    return { processId };
   },
 });
