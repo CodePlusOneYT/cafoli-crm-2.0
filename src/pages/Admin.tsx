@@ -52,6 +52,8 @@ export default function Admin() {
   const [isDeduplicating, setIsDeduplicating] = useState(false);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProcessResult, setBatchProcessResult] = useState<any>(null);
+  const clearAllSummaries = useMutation(api.aiMutations.clearAllSummaries);
+  const clearAllScores = useMutation(api.aiMutations.clearAllScores);
 
   if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "uploader")) {
     return <div className="p-8 text-center">You do not have permission to view this page.</div>;
@@ -251,7 +253,7 @@ export default function Admin() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Process all leads to generate AI summaries and priority scores using Gemma 3 27B model. 
+                    Process all leads to generate AI summaries and priority scores using Gemma 2 27B IT model. 
                     Each available API key processes one lead at a time in parallel. Batches are processed sequentially to ensure completion.
                     WhatsApp chat history is included in the analysis.
                   </p>
@@ -276,6 +278,35 @@ export default function Admin() {
                       disabled={isBatchProcessing}
                     >
                       {isBatchProcessing ? "Processing..." : "Generate Both (Summaries + Scores)"}
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-4 border-t">
+                    <Button
+                      onClick={async () => {
+                        if (confirm("Clear all AI summaries? This cannot be undone.")) {
+                          await clearAllSummaries();
+                          toast.success("All summaries cleared");
+                        }
+                      }}
+                      disabled={isBatchProcessing}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      Clear All Summaries
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        if (confirm("Clear all AI scores? This cannot be undone.")) {
+                          await clearAllScores();
+                          toast.success("All scores cleared");
+                        }
+                      }}
+                      disabled={isBatchProcessing}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      Clear All Scores
                     </Button>
                   </div>
 

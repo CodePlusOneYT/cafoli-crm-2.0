@@ -382,8 +382,8 @@ export const scoreLeadsJob = action({
     for (const lead of leads) {
       try {
         // Get comment and message counts
-        const comments = await ctx.runQuery(internal.aiMutations.getCommentCount, { leadId: lead._id });
-        const messages = await ctx.runQuery(internal.aiMutations.getMessageCount, { leadId: lead._id });
+        const comments = await ctx.runQuery(internal.aiMutations.getLeadComments, { leadId: lead._id });
+        const messages = await ctx.runQuery(internal.aiMutations.getLeadWhatsAppMessages, { leadId: lead._id });
 
         await scoreLeadHelper(ctx, lead._id, {
           name: lead.name,
@@ -395,7 +395,7 @@ export const scoreLeadsJob = action({
           lastActivity: lead.lastActivity,
           nextFollowUpDate: lead.nextFollowUpDate,
           createdAt: lead._creationTime,
-        }, comments, messages);
+        }, comments.length, messages.length);
         
         scored++;
       } catch (error) {

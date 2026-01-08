@@ -1,6 +1,7 @@
-import { internalMutation, internalQuery } from "./_generated/server";
+import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
+// Store AI summary
 export const storeSummary = internalMutation({
   args: {
     leadId: v.id("leads"),
@@ -8,17 +9,15 @@ export const storeSummary = internalMutation({
     lastActivityHash: v.string(),
   },
   handler: async (ctx, args) => {
-    // Check if summary exists
     const existing = await ctx.db
       .query("leadSummaries")
-      .withIndex("by_lead_and_hash", (q) => 
-        q.eq("leadId", args.leadId).eq("lastActivityHash", args.lastActivityHash)
-      )
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
       .first();
 
     if (existing) {
       await ctx.db.patch(existing._id, {
         summary: args.summary,
+        lastActivityHash: args.lastActivityHash,
         generatedAt: Date.now(),
       });
     } else {
@@ -32,6 +31,7 @@ export const storeSummary = internalMutation({
   },
 });
 
+// Get AI summary
 export const getSummary = internalQuery({
   args: {
     leadId: v.id("leads"),
@@ -47,6 +47,7 @@ export const getSummary = internalQuery({
   },
 });
 
+// Store AI score
 export const storeScore = internalMutation({
   args: {
     leadId: v.id("leads"),
@@ -64,77 +65,60 @@ export const storeScore = internalMutation({
   },
 });
 
+// Get leads to score
 export const getLeadsToScore = internalQuery({
   args: { since: v.number() },
   handler: async (ctx, args) => {
     return await ctx.db
       .query("leads")
-      .withIndex("by_last_activity", (q) => q.gte("lastActivity", args.since))
-      .filter((q) => q.neq(q.field("type"), "Irrelevant"))
-      .take(100); // Batch size
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("status"), "irrelevant"),
+          q.gte(q.field("lastActivity"), args.since)
+        )
+      )
+      .take(100);
   },
 });
 
-export const getCommentCount = internalQuery({
-  args: { leadId: v.id("leads") },
-  handler: async (ctx, args) => {
-    const comments = await ctx.db
-      .query("comments")
-      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
-      .collect();
-    return comments.length;
-  },
-});
-
-export const getMessageCount = internalQuery({
-  args: { leadId: v.id("leads") },
-  handler: async (ctx, args) => {
-    const chat = await ctx.db
-      .query("chats")
-      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
-      .first();
-    
-    if (!chat) return 0;
-
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
-      .collect();
-    
-    return messages.length;
-  },
-});
-
+// Get all leads for batch processing
 export const getAllLeadsForBatchProcessing = internalQuery({
-  args: { 
+  args: {
     offset: v.number(),
     limit: v.number(),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const leads = await ctx.db
       .query("leads")
-      .filter((q) => q.neq(q.field("type"), "Irrelevant"))
-      .order("asc")
-      .take(args.limit);
+      .filter((q) => q.neq(q.field("status"), "irrelevant"))
+      .order("desc")
+      .take(args.limit + args.offset);
+    
+    return leads.slice(args.offset, args.offset + args.limit);
   },
 });
 
+// Get lead WhatsApp messages
 export const getLeadWhatsAppMessages = internalQuery({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
+    // Find chat for this lead
     const chat = await ctx.db
       .query("chats")
       .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
       .first();
-    
-    if (!chat) return [];
 
+    if (!chat) {
+      return [];
+    }
+
+    // Get messages for this chat
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
       .order("desc")
-      .take(20); // Last 20 messages for context
-    
+      .take(20);
+
     return messages.map(m => ({
       direction: m.direction,
       content: m.content,
@@ -143,6 +127,7 @@ export const getLeadWhatsAppMessages = internalQuery({
   },
 });
 
+// Get lead comments
 export const getLeadComments = internalQuery({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
@@ -151,7 +136,40 @@ export const getLeadComments = internalQuery({
       .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
       .order("desc")
       .take(10);
+
+    return comments.map(c => c.content || "").filter(Boolean);
+  },
+});
+
+// Clear all summaries
+export const clearAllSummaries = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const summaries = await ctx.db.query("leadSummaries").collect();
+    for (const summary of summaries) {
+      await ctx.db.delete(summary._id);
+    }
+    return { deleted: summaries.length };
+  },
+});
+
+// Clear all scores
+export const clearAllScores = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const leads = await ctx.db
+      .query("leads")
+      .filter((q) => q.neq(q.field("aiScore"), undefined))
+      .collect();
     
-    return comments.map(c => c.content);
+    for (const lead of leads) {
+      await ctx.db.patch(lead._id, {
+        aiScore: undefined,
+        aiScoreTier: undefined,
+        aiScoreRationale: undefined,
+        aiScoredAt: undefined,
+      });
+    }
+    return { cleared: leads.length };
   },
 });
