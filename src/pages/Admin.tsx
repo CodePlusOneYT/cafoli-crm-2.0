@@ -103,6 +103,7 @@ export default function Admin() {
             {currentUser.role === "admin" && <TabsTrigger value="users">User Management</TabsTrigger>}
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="ranges">Range PDFs</TabsTrigger>
+            {currentUser.role === "admin" && <TabsTrigger value="api-keys">API Keys</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="deduplication">Deduplication</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="logs">System Logs</TabsTrigger>}
           </TabsList>
@@ -193,6 +194,28 @@ export default function Admin() {
               <RangePdfListManager />
             </div>
           </TabsContent>
+
+          {currentUser.role === "admin" && (
+            <TabsContent value="api-keys" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Brevo API Keys</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <BrevoKeyManager userId={currentUser._id} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Gemini API Keys</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <GeminiKeyManager userId={currentUser._id} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
           {currentUser.role === "admin" && (
             <TabsContent value="deduplication" className="space-y-4">

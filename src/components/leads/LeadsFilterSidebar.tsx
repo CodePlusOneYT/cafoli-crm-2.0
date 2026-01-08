@@ -19,6 +19,8 @@ interface LeadsFilterSidebarProps {
   setSelectedTags: (v: string[]) => void;
   selectedAssignedTo: string[];
   setSelectedAssignedTo: (v: string[]) => void;
+  selectedAiScoreTiers: string[];
+  setSelectedAiScoreTiers: (v: string[]) => void;
   allTags: Doc<"tags">[];
   uniqueSources: string[];
   allUsers: Doc<"users">[];
@@ -37,6 +39,8 @@ export function LeadsFilterSidebar({
   setSelectedTags,
   selectedAssignedTo,
   setSelectedAssignedTo,
+  selectedAiScoreTiers,
+  setSelectedAiScoreTiers,
   allTags,
   uniqueSources,
   allUsers,
@@ -57,13 +61,18 @@ export function LeadsFilterSidebar({
     setSelectedSources([]);
     setSelectedTags([]);
     setSelectedAssignedTo([]);
+    setSelectedAiScoreTiers([]);
   };
 
   const hasActiveFilters = selectedStatuses.length > 0 || selectedSources.length > 0 || 
-                          selectedTags.length > 0 || selectedAssignedTo.length > 0;
+                          selectedTags.length > 0 || selectedAssignedTo.length > 0 ||
+                          selectedAiScoreTiers.length > 0;
 
   const activeFilterCount = selectedStatuses.length + selectedSources.length + 
-                           selectedTags.length + selectedAssignedTo.length;
+                           selectedTags.length + selectedAssignedTo.length +
+                           selectedAiScoreTiers.length;
+
+  const aiScoreTiers = ["High", "Medium", "Low"];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -79,7 +88,7 @@ export function LeadsFilterSidebar({
             )}
           </SheetTitle>
           <SheetDescription>
-            Filter leads by status, source, tags, and assignment
+            Filter leads by status, source, tags, AI score, and assignment
           </SheetDescription>
         </SheetHeader>
 
@@ -98,6 +107,25 @@ export function LeadsFilterSidebar({
                   checked={selectedStatuses.includes(status)}
                   onCheckedChange={() => toggleFilter(status, selectedStatuses, setSelectedStatuses)}
                   label={status}
+                />
+              ))}
+            </FilterSection>
+
+            <Separator />
+
+            {/* AI Score Filter */}
+            <FilterSection
+              title="AI Priority Score"
+              hasActiveFilters={selectedAiScoreTiers.length > 0}
+              onClear={() => setSelectedAiScoreTiers([])}
+            >
+              {aiScoreTiers.map((tier) => (
+                <FilterCheckboxItem
+                  key={tier}
+                  id={`ai-score-${tier}`}
+                  checked={selectedAiScoreTiers.includes(tier)}
+                  onCheckedChange={() => toggleFilter(tier, selectedAiScoreTiers, setSelectedAiScoreTiers)}
+                  label={`${tier} Priority`}
                 />
               ))}
             </FilterSection>

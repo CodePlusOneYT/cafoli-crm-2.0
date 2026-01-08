@@ -149,7 +149,8 @@ export default function Leads() {
   const whatsAppLead = state.whatsAppLeadId && filteredLeads ? filteredLeads.find(l => l._id === state.whatsAppLeadId) : null;
 
   const activeFilterCount = state.selectedStatuses.length + state.selectedSources.length + 
-                           state.selectedTags.length + state.selectedAssignedTo.length;
+                           state.selectedTags.length + state.selectedAssignedTo.length +
+                           state.selectedAiScoreTiers.length;
 
   return (
     <AppLayout>
@@ -240,9 +241,11 @@ export default function Leads() {
           setSelectedTags={state.setSelectedTags}
           selectedAssignedTo={state.selectedAssignedTo}
           setSelectedAssignedTo={state.setSelectedAssignedTo}
-          allTags={allTags}
+          selectedAiScoreTiers={state.selectedAiScoreTiers}
+          setSelectedAiScoreTiers={state.setSelectedAiScoreTiers}
+          allTags={allTags || []}
           uniqueSources={uniqueSources}
-          allUsers={allUsers}
+          allUsers={allUsers || []}
           isAdmin={isAdmin}
           availableStatuses={availableStatuses}
         />

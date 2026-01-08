@@ -10,6 +10,8 @@ export const modelsToTry = [
   "gemini-2.5-flash"
 ];
 
+export const gemmaModel = "gemma-3-27b";
+
 export function extractJsonFromMarkdown(text: string): string {
   // Try to find JSON inside markdown code blocks
   // Using new RegExp with hex code for backtick (\x60) to avoid markdown parsing issues
@@ -50,6 +52,7 @@ export async function generateWithGemini(
   config: {
     jsonMode?: boolean;
     model?: string;
+    useGemma?: boolean;
   } = {}
 ) {
   const allKeys = await getGeminiKeys(ctx);
@@ -59,8 +62,11 @@ export async function generateWithGemini(
   let generatedText = "";
   let usedModel = "";
 
+  // Determine which models to try
+  const modelsToAttempt = config.useGemma ? [gemmaModel] : (config.model ? [config.model] : modelsToTry);
+
   // Try models sequentially
-  for (const modelName of modelsToTry) {
+  for (const modelName of modelsToAttempt) {
     // For each model, try all available keys
     for (const key of allKeys) {
       const genAI = new GoogleGenerativeAI(key.apiKey);

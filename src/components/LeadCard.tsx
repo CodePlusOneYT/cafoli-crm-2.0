@@ -4,6 +4,9 @@ import { LeadCardHeader } from "@/components/leads/LeadCardHeader";
 import { LeadCardTags } from "@/components/leads/LeadCardTags";
 import { LeadCardBadges } from "@/components/leads/LeadCardBadges";
 import { LeadCardActions } from "@/components/leads/LeadCardActions";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Sparkles, TrendingUp } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface LeadCardProps {
   lead: Doc<"leads"> & { 
@@ -22,6 +25,8 @@ interface LeadCardProps {
   onAssignToUser: (leadId: Id<"leads">, userId: Id<"users">) => void;
   onUnassign?: (leadId: Id<"leads">) => void;
   onOpenWhatsApp?: (leadId: Id<"leads">) => void;
+  aiSummary?: string;
+  aiSummaryLoading?: boolean;
 }
 
 export function LeadCard({
@@ -36,8 +41,19 @@ export function LeadCard({
   onAssignToUser,
   onUnassign,
   onOpenWhatsApp,
+  aiSummary,
+  aiSummaryLoading,
 }: LeadCardProps) {
   const hasUnreadMessages = (lead.unreadCount ?? 0) > 0;
+  
+  const getScoreBadgeColor = (tier?: string) => {
+    switch (tier) {
+      case "High": return "bg-green-100 text-green-700 border-green-300";
+      case "Medium": return "bg-yellow-100 text-yellow-700 border-yellow-300";
+      case "Low": return "bg-gray-100 text-gray-600 border-gray-300";
+      default: return "bg-gray-50 text-gray-500 border-gray-200";
+    }
+  };
   
   return (
     <Card
@@ -59,6 +75,37 @@ export function LeadCard({
         />
         
         <p className="text-sm text-muted-foreground truncate mb-2">{lead.subject}</p>
+        
+        {/* AI Summary */}
+        {aiSummaryLoading ? (
+          <div className="mb-2 space-y-1">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-3/4" />
+          </div>
+        ) : aiSummary ? (
+          <div className="mb-2 p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-900 line-clamp-2 flex items-start gap-1">
+            <Sparkles className="h-3 w-3 mt-0.5 flex-shrink-0 text-purple-600" />
+            <span>{aiSummary}</span>
+          </div>
+        ) : null}
+
+        {/* AI Score Badge */}
+        {lead.aiScoreTier && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border mb-2 ${getScoreBadgeColor(lead.aiScoreTier)}`}>
+                  <TrendingUp className="h-3 w-3" />
+                  {lead.aiScoreTier} Priority
+                  {lead.aiScore && <span className="ml-1">({Math.round(lead.aiScore)})</span>}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs max-w-xs">{lead.aiScoreRationale || "AI-generated priority score"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
         
         <LeadCardTags tags={lead.tagsData || []} />
 

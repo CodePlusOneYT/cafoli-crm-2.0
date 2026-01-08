@@ -22,6 +22,7 @@ export function useLeadsPageState() {
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedAssignedTo, setSelectedAssignedTo] = useState<string[]>([]);
+  const [selectedAiScoreTiers, setSelectedAiScoreTiers] = useState<string[]>([]);
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false);
   const [whatsAppLeadId, setWhatsAppLeadId] = useState<Id<"leads"> | null>(null);
   const [filterSidebarOpen, setFilterSidebarOpen] = useState(false);
@@ -60,6 +61,8 @@ export function useLeadsPageState() {
     setSelectedTags,
     selectedAssignedTo,
     setSelectedAssignedTo,
+    selectedAiScoreTiers,
+    setSelectedAiScoreTiers,
     whatsAppDialogOpen,
     setWhatsAppDialogOpen,
     whatsAppLeadId,

@@ -78,4 +78,12 @@ crons.cron(
   { reportType: "yearly" }
 );
 
+// Score leads daily at 2 AM IST (8:30 PM UTC previous day)
+crons.cron(
+  "score_leads_daily",
+  "30 20 * * *",
+  internal.ai.scoreLeadsJob,
+  {}
+);
+
 export default crons;

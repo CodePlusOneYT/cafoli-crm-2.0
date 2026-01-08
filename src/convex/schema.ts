@@ -79,6 +79,12 @@ export default defineSchema({
     nextFollowUpDate: v.optional(v.number()),
     lastActivity: v.number(),
 
+    // AI-powered fields
+    aiScore: v.optional(v.number()),
+    aiScoreTier: v.optional(v.string()),
+    aiScoreRationale: v.optional(v.string()),
+    aiScoredAt: v.optional(v.number()),
+
     // Special flags
     adminAssignmentRequired: v.optional(v.boolean()),
     isColdCallerLead: v.optional(v.boolean()),
@@ -124,6 +130,8 @@ export default defineSchema({
   .index("by_cold_caller_assigned_to", ["coldCallerAssignedTo"])
   .index("by_is_cold_caller", ["isColdCallerLead"])
   .index("by_type", ["type"])
+  .index("by_ai_score", ["aiScore"])
+  .index("by_ai_score_tier", ["aiScoreTier"])
   .searchIndex("search_name", {
     searchField: "name",
     filterFields: ["assignedTo"],
@@ -381,6 +389,15 @@ export default defineSchema({
     usageCount: v.number(),
   })
   .index("by_category", ["category"]),
+
+  leadSummaries: defineTable({
+    leadId: v.id("leads"),
+    summary: v.string(),
+    lastActivityHash: v.string(),
+    generatedAt: v.number(),
+  })
+  .index("by_lead", ["leadId"])
+  .index("by_lead_and_hash", ["leadId", "lastActivityHash"]),
 
   whatsappConfig: defineTable({
     key: v.string(),

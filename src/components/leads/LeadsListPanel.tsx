@@ -1,6 +1,8 @@
 import { Doc, Id } from "@/convex/_generated/dataModel";
 import { LeadCard } from "@/components/LeadCard";
 import { Loader2 } from "lucide-react";
+import { useLeadSummaries } from "@/hooks/useLeadSummaries";
+import { useEffect } from "react";
 
 interface LeadsListPanelProps {
   leads: Doc<"leads">[];
@@ -33,6 +35,25 @@ export function LeadsListPanel({
   isLoadingMore,
   isDone,
 }: LeadsListPanelProps) {
+  const { summaries, loading, fetchSummary } = useLeadSummaries();
+
+  // Fetch summaries for visible leads
+  useEffect(() => {
+    leads.slice(0, 20).forEach(lead => {
+      if (!summaries[lead._id] && !loading[lead._id]) {
+        fetchSummary(lead._id, {
+          name: lead.name,
+          subject: lead.subject,
+          source: lead.source,
+          status: lead.status,
+          type: lead.type,
+          message: lead.message,
+          lastActivity: lead.lastActivity,
+        });
+      }
+    });
+  }, [leads]);
+
   return (
     <div className={`${selectedLeadId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-1/3 lg:w-1/4 min-w-[300px] border rounded-lg bg-card shadow-sm overflow-hidden`}>
       <div className="p-2 border-b bg-muted/50 text-sm font-medium text-muted-foreground flex justify-between items-center">
@@ -58,6 +79,8 @@ export function LeadsListPanel({
             onAssignToUser={onAssignToUser}
             onUnassign={filter === "mine" || isAdmin ? onUnassign : undefined}
             onOpenWhatsApp={onOpenWhatsApp}
+            aiSummary={summaries[lead._id]}
+            aiSummaryLoading={loading[lead._id]}
           />
         ))}
         {isLoadingMore && !isDone && (
