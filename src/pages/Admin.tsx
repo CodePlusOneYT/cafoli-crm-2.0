@@ -252,7 +252,7 @@ export default function Admin() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Process all leads to generate AI summaries and priority scores. This uses all available API keys in parallel for faster processing.
+                    Process all leads to generate AI summaries and priority scores. Each available API key processes one lead at a time in parallel for high-quality results.
                     WhatsApp chat history is included in the analysis.
                   </p>
                   
@@ -296,8 +296,8 @@ export default function Admin() {
                   <div className="mt-4 p-4 bg-muted/20 rounded-md">
                     <h4 className="font-semibold mb-2">How it works:</h4>
                     <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
-                      <li>Processes leads in batches of 50 for efficiency</li>
-                      <li>Uses all available Gemini API keys in parallel</li>
+                      <li>Each API key processes one lead at a time in parallel</li>
+                      <li>Batch size equals number of available Gemini API keys</li>
                       <li>Includes WhatsApp chat history in analysis</li>
                       <li>Summaries use recent comments and messages</li>
                       <li>Scores consider engagement, recency, and AI summary</li>

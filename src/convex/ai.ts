@@ -1,7 +1,7 @@
 "use node";
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { generateWithGemini } from "./lib/gemini";
+import { generateWithGemini, getGeminiKeys, gemmaModel } from "./lib/gemini";
 import { internal } from "./_generated/api";
 
 export const generate = action({
@@ -410,22 +410,27 @@ export const scoreLeadsJob = action({
 
 export const batchProcessLeads = action({
   args: {
-    batchSize: v.optional(v.number()),
     processType: v.union(v.literal("summaries"), v.literal("scores"), v.literal("both")),
   },
   handler: async (ctx, args): Promise<{ processed: number; failed: number; total: number }> => {
-    const batchSize = args.batchSize || 50;
+    console.log(`Starting batch processing: ${args.processType}`);
+
+    // Get all available API keys
+    const allKeys = await getGeminiKeys(ctx);
+    const numKeys = allKeys.length;
+    
+    console.log(`Using ${numKeys} API keys for parallel processing`);
+
     let offset = 0;
     let totalProcessed = 0;
     let totalFailed = 0;
     let hasMore = true;
 
-    console.log(`Starting batch processing: ${args.processType}`);
-
     while (hasMore) {
+      // Fetch leads in batches equal to number of API keys
       const leads: Array<any> = await ctx.runQuery(internal.aiMutations.getAllLeadsForBatchProcessing, {
         offset,
-        limit: batchSize,
+        limit: numKeys,
       });
 
       if (leads.length === 0) {
@@ -433,10 +438,13 @@ export const batchProcessLeads = action({
         break;
       }
 
-      console.log(`Processing batch: ${offset} to ${offset + leads.length}`);
+      console.log(`Processing ${leads.length} leads in parallel (offset: ${offset})`);
 
-      // Process leads in parallel using Promise.allSettled
-      const promises = leads.map(async (lead) => {
+      // Process leads in parallel - one lead per API key
+      const promises = leads.map(async (lead, index) => {
+        // Assign a specific API key to this lead
+        const assignedKey = allKeys[index % numKeys];
+        
         try {
           // Get WhatsApp messages
           const whatsappMessages = await ctx.runQuery(internal.aiMutations.getLeadWhatsAppMessages, {
@@ -563,8 +571,8 @@ export const batchProcessLeads = action({
 
       offset += leads.length;
       
-      // Small delay between batches to avoid overwhelming the system
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Small delay between batches
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     console.log(`Batch processing complete. Processed: ${totalProcessed}, Failed: ${totalFailed}`);
