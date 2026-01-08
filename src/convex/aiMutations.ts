@@ -103,7 +103,6 @@ export const getAllLeadsForBatchProcessing = internalQuery({
 export const getLeadWhatsAppMessages = internalQuery({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
-    // Find chat for this lead
     const chat = await ctx.db
       .query("chats")
       .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
@@ -113,7 +112,6 @@ export const getLeadWhatsAppMessages = internalQuery({
       return [];
     }
 
-    // Get messages for this chat
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
@@ -149,7 +147,6 @@ export const clearAllSummaries = mutation({
     let totalDeleted = 0;
     let hasMore = true;
 
-    // Process in small batches - delete in parallel within each batch
     while (hasMore) {
       const summaries = await ctx.db.query("leadSummaries").take(50);
 
@@ -158,7 +155,6 @@ export const clearAllSummaries = mutation({
         break;
       }
 
-      // Delete all summaries in this batch in parallel
       const deletePromises = summaries.map(summary => ctx.db.delete(summary._id));
       await Promise.all(deletePromises);
 
@@ -176,7 +172,6 @@ export const clearAllScores = mutation({
     let totalCleared = 0;
     let hasMore = true;
 
-    // Process in small batches - clear in parallel within each batch
     while (hasMore) {
       const leads = await ctx.db
         .query("leads")
@@ -188,7 +183,6 @@ export const clearAllScores = mutation({
         break;
       }
 
-      // Clear all scores in this batch in parallel
       const patchPromises = leads.map(lead =>
         ctx.db.patch(lead._id, {
           aiScore: undefined,
@@ -321,7 +315,7 @@ export const getBatchProgress = query({
   },
 });
 
-// Update batch process status
+// Update batch process status (simplified to avoid circular deps)
 export const updateBatchStatus = internalMutation({
   args: {
     processId: v.string(),
@@ -338,6 +332,15 @@ export const updateBatchStatus = internalMutation({
         status: args.status,
         updatedAt: Date.now(),
       });
+    } else {
+      await ctx.db.insert("batchProcessControl", {
+        processId: args.processId,
+        shouldStop: false,
+        processed: 0,
+        failed: 0,
+        status: args.status,
+        updatedAt: Date.now(),
+      });
     }
   },
 });
@@ -348,10 +351,8 @@ export const startBatchProcess = mutation({
     processType: v.union(v.literal("summaries"), v.literal("scores"), v.literal("both")),
   },
   handler: async (ctx, args) => {
-    // Generate unique process ID
     const processId = `batch_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Create control record
     await ctx.db.insert("batchProcessControl", {
       processId,
       shouldStop: false,
@@ -361,9 +362,7 @@ export const startBatchProcess = mutation({
       updatedAt: Date.now(),
     });
 
-    // Schedule the batch processing action to run in background
-    // @ts-ignore - internal is available at runtime
-    await ctx.scheduler.runAfter(0, internal.ai.batchProcessLeadsBackground, {
+    await ctx.scheduler.runAfter(0, internal.aiBackground.batchProcessLeadsBackground, {
       processType: args.processType,
       processId,
     });

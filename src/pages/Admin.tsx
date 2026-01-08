@@ -45,7 +45,6 @@ export default function Admin() {
   const deleteUser = useMutation(api.users.deleteUser);
   const updateUserRole = useMutation(api.users.updateUserRole);
   const deduplicateLeads = useMutation(api.leads.deduplication.deduplicateLeads);
-  const batchProcessLeads = useAction(api.ai.batchProcessLeads);
   
   const [activeTab, setActiveTab] = useState("users");
   const [deduplicationResult, setDeduplicationResult] = useState<any>(null);
@@ -360,20 +359,6 @@ export default function Admin() {
                       Clear All Scores
                     </Button>
                   </div>
-
-                  {batchProcessResult && (
-                    <Alert className="border-green-500">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <AlertDescription>
-                        <div className="space-y-2">
-                          <p className="font-semibold">Batch Processing Complete!</p>
-                          <p>Total leads: {batchProcessResult.total}</p>
-                          <p>Successfully processed: {batchProcessResult.processed}</p>
-                          <p>Failed: {batchProcessResult.failed}</p>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-                  )}
 
                   <div className="mt-4 p-4 bg-muted/20 rounded-md">
                     <h4 className="font-semibold mb-2">How it works:</h4>
