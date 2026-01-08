@@ -104,7 +104,6 @@ export default function Admin() {
     
     try {
       const result = await batchProcessLeads({
-        batchSize: 50,
         processType,
       });
       
