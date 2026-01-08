@@ -145,11 +145,25 @@ export const getLeadComments = internalQuery({
 export const clearAllSummaries = mutation({
   args: {},
   handler: async (ctx) => {
-    const summaries = await ctx.db.query("leadSummaries").collect();
-    for (const summary of summaries) {
-      await ctx.db.delete(summary._id);
+    let totalDeleted = 0;
+    let hasMore = true;
+
+    // Process in batches to avoid loading entire table into memory
+    while (hasMore) {
+      const summaries = await ctx.db.query("leadSummaries").take(100);
+
+      if (summaries.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const summary of summaries) {
+        await ctx.db.delete(summary._id);
+        totalDeleted++;
+      }
     }
-    return { deleted: summaries.length };
+
+    return { deleted: totalDeleted };
   },
 });
 
@@ -157,20 +171,33 @@ export const clearAllSummaries = mutation({
 export const clearAllScores = mutation({
   args: {},
   handler: async (ctx) => {
-    const leads = await ctx.db
-      .query("leads")
-      .filter((q) => q.neq(q.field("aiScore"), undefined))
-      .collect();
+    let totalCleared = 0;
+    let hasMore = true;
 
-    for (const lead of leads) {
-      await ctx.db.patch(lead._id, {
-        aiScore: undefined,
-        aiScoreTier: undefined,
-        aiScoreRationale: undefined,
-        aiScoredAt: undefined,
-      });
+    // Process in batches to avoid loading entire table into memory
+    while (hasMore) {
+      const leads = await ctx.db
+        .query("leads")
+        .filter((q) => q.neq(q.field("aiScore"), undefined))
+        .take(100);
+
+      if (leads.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const lead of leads) {
+        await ctx.db.patch(lead._id, {
+          aiScore: undefined,
+          aiScoreTier: undefined,
+          aiScoreRationale: undefined,
+          aiScoredAt: undefined,
+        });
+        totalCleared++;
+      }
     }
-    return { cleared: leads.length };
+
+    return { cleared: totalCleared };
   },
 });
 
