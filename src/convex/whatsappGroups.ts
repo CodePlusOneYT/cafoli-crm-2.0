@@ -26,7 +26,7 @@ export const createGroup = action({
     }
 
     try {
-      // Create group via WhatsApp Cloud API
+      // Create group via WhatsApp Cloud API with proper schema
       const response = await fetch(
         `https://graph.facebook.com/v20.0/${phoneNumberId}/groups`,
         {
@@ -36,7 +36,8 @@ export const createGroup = action({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            name: args.name,
+            messaging_product: "whatsapp",
+            subject: args.name,
             description: args.description || "",
           }),
         }
