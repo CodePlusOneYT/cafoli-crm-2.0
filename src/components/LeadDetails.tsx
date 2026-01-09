@@ -294,7 +294,7 @@ export default function LeadDetails({ leadId, onClose }: LeadDetailsProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-auto p-6">
         <LeadInfo 
           lead={lead} 
           isEditing={isEditing} 
