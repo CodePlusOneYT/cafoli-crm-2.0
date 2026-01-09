@@ -123,22 +123,23 @@ export const getLeadsWithChatStatus = query({
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    // Get leads with pagination - ordered by lastActivity descending (latest first)
-    let leadsQuery = args.filter === "mine" && args.userId
-      ? ctx.db
-          .query("leads")
-          .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
-          .order("desc")
-      : ctx.db
-          .query("leads")
-          .withIndex("by_last_activity")
-          .order("desc");
-
-    const result = await leadsQuery.paginate(args.paginationOpts);
+    // Get all leads first, then filter and sort in memory
+    let allLeads;
+    
+    if (args.filter === "mine" && args.userId) {
+      allLeads = await ctx.db
+        .query("leads")
+        .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
+        .collect();
+    } else {
+      allLeads = await ctx.db
+        .query("leads")
+        .collect();
+    }
 
     // Enrich leads with chat status
     const leadsWithChatStatus = await Promise.all(
-      result.page.map(async (lead) => {
+      allLeads.map(async (lead) => {
         const chat = await ctx.db
           .query("chats")
           .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
@@ -165,10 +166,24 @@ export const getLeadsWithChatStatus = query({
       return b.lastMessageAt - a.lastMessageAt;
     });
 
+    // Manual pagination
+    const cursor = args.paginationOpts.cursor;
+    const numItems = args.paginationOpts.numItems;
+
+    let startIndex = 0;
+    if (cursor) {
+      const cursorIndex = sortedLeads.findIndex(l => l._id === cursor);
+      startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    }
+
+    const page = sortedLeads.slice(startIndex, startIndex + numItems);
+    const isDone = startIndex + numItems >= sortedLeads.length;
+    const continueCursor = isDone ? null : page[page.length - 1]?._id || null;
+
     return {
-      page: sortedLeads,
-      isDone: result.isDone,
-      continueCursor: result.continueCursor,
+      page,
+      isDone,
+      continueCursor,
     };
   },
 });
