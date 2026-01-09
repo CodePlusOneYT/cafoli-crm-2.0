@@ -666,8 +666,13 @@ export const dailySummaryAndScoreRegeneration = internalAction({
     let scoresGenerated = 0;
     let failed = 0;
 
-    // Process in batches to avoid overwhelming the system
-    const batchSize = 50;
+    // Get all available API keys
+    const allKeys = await getGeminiKeys(ctx);
+    const numKeys = allKeys.length;
+    console.log(`Using ${numKeys} API keys for parallel processing`);
+
+    // Process 10 leads at a time in parallel (or number of keys if less than 10)
+    const parallelCount = Math.min(10, numKeys);
 
     // Step 1: Generate summaries for leads that need them
     console.log("Fetching leads that need summaries...");
@@ -678,26 +683,43 @@ export const dailySummaryAndScoreRegeneration = internalAction({
 
     console.log(`Found ${leadsNeedingSummaries.length} leads needing summaries`);
 
-    // Process summaries in batches
-    for (let i = 0; i < leadsNeedingSummaries.length; i += batchSize) {
-      const batch = leadsNeedingSummaries.slice(i, i + batchSize);
+    // Process summaries in parallel batches of 10
+    for (let i = 0; i < leadsNeedingSummaries.length; i += parallelCount) {
+      const batch = leadsNeedingSummaries.slice(i, i + parallelCount);
 
-      for (const lead of batch) {
+      console.log(`Processing summary batch ${Math.floor(i / parallelCount) + 1} (${batch.length} leads in parallel)`);
+
+      // Process each lead in parallel, each assigned to a different API key
+      const promises = batch.map(async (lead, index) => {
         try {
           await ctx.runAction(internal.ai.generateLeadSummaryWithChatInternal, {
             leadId: lead._id,
           });
-          summariesGenerated++;
-          console.log(`Generated summary for lead ${lead._id} (${summariesGenerated}/${leadsNeedingSummaries.length})`);
+          return { success: true, leadId: lead._id };
         } catch (error) {
           console.error(`Failed to generate summary for lead ${lead._id}:`, error);
+          return { success: false, leadId: lead._id, error };
+        }
+      });
+
+      // Wait for all parallel operations to complete
+      const results = await Promise.all(promises);
+
+      // Count successes and failures
+      results.forEach((result) => {
+        if (result.success) {
+          summariesGenerated++;
+        } else {
           failed++;
         }
-      }
+      });
 
-      // Small delay between batches
-      if (i + batchSize < leadsNeedingSummaries.length) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
+      console.log(`Summary batch complete: ${results.filter(r => r.success).length}/${results.length} succeeded (Total: ${summariesGenerated}/${leadsNeedingSummaries.length})`);
+
+      // 10 second cooldown between batches
+      if (i + parallelCount < leadsNeedingSummaries.length) {
+        console.log(`Cooling down for 10 seconds before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, 10000));
       }
     }
 
@@ -710,26 +732,43 @@ export const dailySummaryAndScoreRegeneration = internalAction({
 
     console.log(`Found ${leadsNeedingScores.length} leads needing scores`);
 
-    // Process scores in batches
-    for (let i = 0; i < leadsNeedingScores.length; i += batchSize) {
-      const batch = leadsNeedingScores.slice(i, i + batchSize);
+    // Process scores in parallel batches of 10
+    for (let i = 0; i < leadsNeedingScores.length; i += parallelCount) {
+      const batch = leadsNeedingScores.slice(i, i + parallelCount);
 
-      for (const lead of batch) {
+      console.log(`Processing score batch ${Math.floor(i / parallelCount) + 1} (${batch.length} leads in parallel)`);
+
+      // Process each lead in parallel, each assigned to a different API key
+      const promises = batch.map(async (lead, index) => {
         try {
           await ctx.runAction(internal.ai.scoreLeadWithContextInternal, {
             leadId: lead._id,
           });
-          scoresGenerated++;
-          console.log(`Generated score for lead ${lead._id} (${scoresGenerated}/${leadsNeedingScores.length})`);
+          return { success: true, leadId: lead._id };
         } catch (error) {
           console.error(`Failed to generate score for lead ${lead._id}:`, error);
+          return { success: false, leadId: lead._id, error };
+        }
+      });
+
+      // Wait for all parallel operations to complete
+      const results = await Promise.all(promises);
+
+      // Count successes and failures
+      results.forEach((result) => {
+        if (result.success) {
+          scoresGenerated++;
+        } else {
           failed++;
         }
-      }
+      });
 
-      // Small delay between batches
-      if (i + batchSize < leadsNeedingScores.length) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
+      console.log(`Score batch complete: ${results.filter(r => r.success).length}/${results.length} succeeded (Total: ${scoresGenerated}/${leadsNeedingScores.length})`);
+
+      // 10 second cooldown between batches
+      if (i + parallelCount < leadsNeedingScores.length) {
+        console.log(`Cooling down for 10 seconds before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, 10000));
       }
     }
 
