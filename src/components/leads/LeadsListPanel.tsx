@@ -110,7 +110,7 @@ export function LeadsListPanel({
   };
 
   return (
-    <div className={`${selectedLeadId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-1/3 lg:w-1/4 min-w-[300px] border rounded-lg bg-card shadow-sm overflow-hidden`}>
+    <div className={`${selectedLeadId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-[42%] lg:w-[31%] min-w-[375px] border rounded-lg bg-card shadow-sm overflow-hidden`}>
       <div className="p-2 border-b bg-muted/50 text-sm font-medium text-muted-foreground flex justify-between items-center">
         <span>{leads.length} Leads</span>
         {filter === "all" && (
