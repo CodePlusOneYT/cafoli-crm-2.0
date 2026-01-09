@@ -25,10 +25,12 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
   const [isCreating, setIsCreating] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const createGroup = useAction(api.whatsappGroups.createGroup);
 
   const handleCreate = async () => {
+    setError(null);
     if (!name.trim()) {
       toast.error("Please enter a group name");
       return;
@@ -57,11 +59,14 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
         toast.success("Group created successfully!");
         setInviteLink(result.inviteLink || "");
       } else {
-        toast.error(result.error || "Failed to create group");
+        const msg = result.error || "Failed to create group";
+        toast.error(msg);
+        setError(msg);
       }
     } catch (error) {
       toast.error("Failed to create group");
       console.error(error);
+      setError("An unexpected error occurred");
     } finally {
       setIsCreating(false);
     }
@@ -82,6 +87,7 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
     setParticipants("");
     setInviteLink("");
     setCopied(false);
+    setError(null);
     onOpenChange(false);
   };
 
@@ -94,6 +100,12 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
 
         {!inviteLink ? (
           <div className="space-y-4">
+            {error && (
+              <div className="p-3 bg-destructive/15 text-destructive text-sm rounded-md border border-destructive/20">
+                <p className="font-medium">Creation Failed</p>
+                <p>{error}</p>
+              </div>
+            )}
             <div>
               <Label htmlFor="group-name">Group Name *</Label>
               <Input

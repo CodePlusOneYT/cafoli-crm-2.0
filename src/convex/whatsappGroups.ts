@@ -48,6 +48,13 @@ export const createGroup = action({
       if (!response.ok) {
         console.error("WhatsApp group creation error:", data);
         
+        let errorMessage = data.error?.message || "Failed to create group";
+        
+        // Check for eligibility error (Code 100, Subcode 2388090 is common for this, or text match)
+        if (errorMessage.includes("not eligible") || (data.error?.code === 100 && data.error?.error_subcode === 2388090)) {
+           errorMessage = "This WhatsApp Business phone number is not eligible for the Groups API (Beta). Please contact Meta support or check your business verification status.";
+        }
+
         // Store failed group attempt
         const groupId: string = await ctx.runMutation(internal.whatsappGroupsMutations.storeGroup, {
           name: args.name,
@@ -59,7 +66,7 @@ export const createGroup = action({
 
         return {
           success: false,
-          error: data.error?.message || "Failed to create group",
+          error: errorMessage,
           groupId,
         };
       }
