@@ -1,6 +1,13 @@
 import { internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
+export const getLeadByIdInternal = internalQuery({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.leadId);
+  },
+});
+
 export const getBatchControlInternal = internalQuery({
   args: { processId: v.string() },
   handler: async (ctx, args) => {

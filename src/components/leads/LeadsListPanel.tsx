@@ -3,6 +3,10 @@ import { LeadCard } from "@/components/LeadCard";
 import { Loader2 } from "lucide-react";
 import { useLeadSummaries } from "@/hooks/useLeadSummaries";
 import { useEffect } from "react";
+import { useQuery } from "convex/react";
+import { getConvexApi } from "@/lib/convex-api";
+
+const api = getConvexApi() as any;
 
 interface LeadsListPanelProps {
   leads: Doc<"leads">[];
@@ -35,7 +39,7 @@ export function LeadsListPanel({
   isLoadingMore,
   isDone,
 }: LeadsListPanelProps) {
-  const { summaries, loading, fetchSummary } = useLeadSummaries();
+  const { summaries, loading, fetchSummary, updateSummary } = useLeadSummaries();
 
   // Fetch summaries for visible leads
   useEffect(() => {
@@ -53,6 +57,22 @@ export function LeadsListPanel({
       }
     });
   }, [leads]);
+
+  // Poll for cached summaries for visible loading leads
+  const visibleLeadIds = leads.slice(0, 20).map(l => l._id);
+  const firstLoadingLeadId = visibleLeadIds.find(id => loading[id]);
+
+  // Query one at a time to check for completion
+  const cachedSummary = useQuery(
+    api.aiMutations.getCachedSummary,
+    firstLoadingLeadId ? { leadId: firstLoadingLeadId } : "skip"
+  );
+
+  useEffect(() => {
+    if (cachedSummary?.summary && firstLoadingLeadId && loading[firstLoadingLeadId]) {
+      updateSummary(firstLoadingLeadId, cachedSummary.summary);
+    }
+  }, [cachedSummary, firstLoadingLeadId]);
 
   return (
     <div className={`${selectedLeadId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-1/3 lg:w-1/4 min-w-[300px] border rounded-lg bg-card shadow-sm overflow-hidden`}>

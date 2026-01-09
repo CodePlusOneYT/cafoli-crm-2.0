@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAction } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Id } from "@/convex/_generated/dataModel";
 import { getConvexApi } from "@/lib/convex-api";
 
@@ -16,34 +16,51 @@ interface LeadSummaryData {
 }
 
 export function useLeadSummaries() {
-  const generateSummary = useAction(api.ai.generateLeadSummary);
+  const queueSummary = useMutation(api.aiMutations.queueLeadSummary);
   const [summaries, setSummaries] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [queuedLeads, setQueuedLeads] = useState<Set<string>>(new Set());
 
   const fetchSummary = async (leadId: Id<"leads">, leadData: LeadSummaryData, recentComments?: string[]) => {
-    if (summaries[leadId] || loading[leadId]) return;
+    // Skip if already have summary, currently loading, or already queued
+    if (summaries[leadId] || loading[leadId] || queuedLeads.has(leadId)) return;
 
     setLoading(prev => ({ ...prev, [leadId]: true }));
+    setQueuedLeads(prev => new Set(prev).add(leadId));
 
     try {
-      const summary = await generateSummary({
-        leadId,
-        leadData,
-        recentComments,
-      });
-      setSummaries(prev => ({ ...prev, [leadId]: summary }));
+      // Queue the summary generation in background
+      await queueSummary({ leadId });
+
+      // Note: The summary will be fetched via polling in the component
+      // that uses this hook by checking getCachedSummary query
     } catch (error: any) {
       const errorMsg = error?.message || "Unknown error";
-      console.error(`Failed to generate summary for lead ${leadId}:`, errorMsg, error);
+      console.error(`Failed to queue summary for lead ${leadId}:`, errorMsg, error);
       setSummaries(prev => ({ ...prev, [leadId]: `Summary unavailable: ${errorMsg}` }));
-    } finally {
       setLoading(prev => ({ ...prev, [leadId]: false }));
+      setQueuedLeads(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(leadId);
+        return newSet;
+      });
     }
+  };
+
+  const updateSummary = (leadId: Id<"leads">, summary: string) => {
+    setSummaries(prev => ({ ...prev, [leadId]: summary }));
+    setLoading(prev => ({ ...prev, [leadId]: false }));
+    setQueuedLeads(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(leadId);
+      return newSet;
+    });
   };
 
   return {
     summaries,
     loading,
     fetchSummary,
+    updateSummary,
   };
 }

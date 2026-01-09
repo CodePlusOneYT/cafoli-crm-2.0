@@ -120,54 +120,71 @@ export const generateLeadSummary = action({
   },
 });
 
-export const generateLeadSummaryWithChat = action({
+// Internal version for background scheduling
+export const generateLeadSummaryWithChatInternal = internalAction({
   args: {
     leadId: v.id("leads"),
-    leadData: v.object({
-      name: v.string(),
-      subject: v.string(),
-      source: v.string(),
-      status: v.optional(v.string()),
-      type: v.optional(v.string()),
-      message: v.optional(v.string()),
-      lastActivity: v.number(),
-    }),
-    recentComments: v.optional(v.array(v.string())),
-    whatsappMessages: v.optional(v.array(v.object({
-      direction: v.string(),
-      content: v.string(),
-      timestamp: v.number(),
-    }))),
   },
   handler: async (ctx, args) => {
+    // Fetch lead data
+    const lead = await ctx.runQuery(internal.aiBackgroundHelpers.getLeadByIdInternal, {
+      leadId: args.leadId,
+    });
+
+    if (!lead) {
+      throw new Error("Lead not found");
+    }
+
+    // Fetch WhatsApp messages
+    const whatsappMessages = await ctx.runQuery(internal.aiBackgroundHelpers.getWhatsAppMessagesInternal, {
+      leadId: args.leadId,
+    });
+
+    // Fetch comments
+    const comments = await ctx.runQuery(internal.aiBackgroundHelpers.getCommentsInternal, {
+      leadId: args.leadId,
+    });
+
     const systemPrompt = `You are a CRM assistant. Generate a concise 1-2 sentence summary of this lead for quick prioritization. Focus on: lead quality, urgency, key action needed, and recent engagement. Be brief and actionable.`;
 
     const leadInfo = {
-      name: args.leadData.name,
-      subject: args.leadData.subject,
-      source: args.leadData.source,
-      status: args.leadData.status,
-      type: args.leadData.type,
-      message: args.leadData.message,
-      recentComments: args.recentComments?.slice(0, 3) || [],
-      whatsappActivity: args.whatsappMessages ? {
-        messageCount: args.whatsappMessages.length,
-        recentMessages: args.whatsappMessages.slice(0, 5).map(m => `${m.direction}: ${m.content.substring(0, 100)}`),
+      name: lead.name,
+      subject: lead.subject,
+      source: lead.source,
+      status: lead.status,
+      type: lead.type,
+      message: lead.message,
+      recentComments: comments.slice(0, 3),
+      whatsappActivity: whatsappMessages.length > 0 ? {
+        messageCount: whatsappMessages.length,
+        recentMessages: whatsappMessages.slice(0, 5).map((m: any) => `${m.direction}: ${m.content.substring(0, 100)}`),
       } : null,
     };
 
     const prompt = `Summarize this lead in 1-2 sentences:\n\n${JSON.stringify(leadInfo, null, 2)}`;
 
     const { text } = await generateWithGemini(ctx, systemPrompt, prompt, { useGemma: true });
-    
-    const lastActivityHash = `${args.leadData.lastActivity}`;
-    await ctx.runMutation(internal.aiMutations.storeSummary, {
+
+    const lastActivityHash = `${lead.lastActivity}`;
+    await ctx.runMutation(internal.aiBackgroundHelpers.storeSummaryInternal, {
       leadId: args.leadId,
       summary: text,
       lastActivityHash,
     });
 
     return text;
+  },
+});
+
+export const generateLeadSummaryWithChat: any = action({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args): Promise<string> => {
+    // Just delegate to the internal version
+    return await ctx.runAction(internal.ai.generateLeadSummaryWithChatInternal, {
+      leadId: args.leadId,
+    });
   },
 });
 
@@ -237,30 +254,37 @@ export const scoreLead = action({
   },
 });
 
-export const scoreLeadWithContext = action({
+// Internal version for background scheduling
+export const scoreLeadWithContextInternal = internalAction({
   args: {
     leadId: v.id("leads"),
-    leadData: v.object({
-      name: v.string(),
-      source: v.string(),
-      status: v.optional(v.string()),
-      type: v.optional(v.string()),
-      assignedTo: v.optional(v.id("users")),
-      tags: v.optional(v.array(v.id("tags"))),
-      lastActivity: v.number(),
-      nextFollowUpDate: v.optional(v.number()),
-      createdAt: v.number(),
-    }),
-    commentCount: v.number(),
-    messageCount: v.number(),
-    summary: v.optional(v.string()),
-    whatsappMessages: v.optional(v.array(v.object({
-      direction: v.string(),
-      content: v.string(),
-      timestamp: v.number(),
-    }))),
   },
   handler: async (ctx, args) => {
+    // Fetch lead data
+    const lead = await ctx.runQuery(internal.aiBackgroundHelpers.getLeadByIdInternal, {
+      leadId: args.leadId,
+    });
+
+    if (!lead) {
+      throw new Error("Lead not found");
+    }
+
+    // Fetch WhatsApp messages
+    const whatsappMessages = await ctx.runQuery(internal.aiBackgroundHelpers.getWhatsAppMessagesInternal, {
+      leadId: args.leadId,
+    });
+
+    // Fetch comments
+    const comments = await ctx.runQuery(internal.aiBackgroundHelpers.getCommentsInternal, {
+      leadId: args.leadId,
+    });
+
+    // Try to get existing summary
+    const existingSummary = await ctx.runQuery(internal.aiBackgroundHelpers.getSummaryInternal, {
+      leadId: args.leadId,
+      lastActivityHash: `${lead.lastActivity}`,
+    });
+
     const systemPrompt = `You are an AI lead scoring expert for pharmaceutical CRM. Score leads 0-100 based on:
     - Engagement (comments, messages, follow-ups)
     - Recency of activity
@@ -268,38 +292,38 @@ export const scoreLeadWithContext = action({
     - Source quality
     - WhatsApp conversation quality and engagement
     - AI-generated summary insights
-    
+
     Return JSON with: { "score": <number 0-100>, "tier": "<High|Medium|Low>", "rationale": "<brief explanation>" }`;
 
-    const daysSinceCreated = (Date.now() - args.leadData.createdAt) / (1000 * 60 * 60 * 24);
-    const daysSinceActivity = (Date.now() - args.leadData.lastActivity) / (1000 * 60 * 60 * 24);
-    
-    const whatsappEngagement = args.whatsappMessages ? {
-      totalMessages: args.whatsappMessages.length,
-      inboundCount: args.whatsappMessages.filter(m => m.direction === "inbound").length,
-      outboundCount: args.whatsappMessages.filter(m => m.direction === "outbound").length,
-      recentActivity: args.whatsappMessages.slice(0, 3).map(m => `${m.direction}: ${m.content.substring(0, 80)}`),
+    const daysSinceCreated = (Date.now() - lead._creationTime) / (1000 * 60 * 60 * 24);
+    const daysSinceActivity = (Date.now() - lead.lastActivity) / (1000 * 60 * 60 * 24);
+
+    const whatsappEngagement = whatsappMessages.length > 0 ? {
+      totalMessages: whatsappMessages.length,
+      inboundCount: whatsappMessages.filter((m: any) => m.direction === "inbound").length,
+      outboundCount: whatsappMessages.filter((m: any) => m.direction === "outbound").length,
+      recentActivity: whatsappMessages.slice(0, 3).map((m: any) => `${m.direction}: ${m.content.substring(0, 80)}`),
     } : null;
 
     const leadInfo = {
-      source: args.leadData.source,
-      status: args.leadData.status,
-      type: args.leadData.type,
-      isAssigned: !!args.leadData.assignedTo,
-      hasFollowUp: !!args.leadData.nextFollowUpDate,
-      tagCount: args.leadData.tags?.length || 0,
-      commentCount: args.commentCount,
-      messageCount: args.messageCount,
+      source: lead.source,
+      status: lead.status,
+      type: lead.type,
+      isAssigned: !!lead.assignedTo,
+      hasFollowUp: !!lead.nextFollowUpDate,
+      tagCount: lead.tags?.length || 0,
+      commentCount: comments.length,
+      messageCount: whatsappMessages.length,
       daysSinceCreated: Math.round(daysSinceCreated),
       daysSinceActivity: Math.round(daysSinceActivity),
-      aiSummary: args.summary,
+      aiSummary: existingSummary?.summary,
       whatsappEngagement,
     };
 
     const prompt = `Score this lead:\n\n${JSON.stringify(leadInfo, null, 2)}`;
 
     const { text } = await generateWithGemini(ctx, systemPrompt, prompt, { jsonMode: true, useGemma: true });
-    
+
     let parsed;
     try {
       parsed = JSON.parse(text);
@@ -307,7 +331,7 @@ export const scoreLeadWithContext = action({
       parsed = { score: 50, tier: "Medium", rationale: "Unable to generate AI score" };
     }
 
-    await ctx.runMutation(internal.aiMutations.storeScore, {
+    await ctx.runMutation(internal.aiBackgroundHelpers.storeScoreInternal, {
       leadId: args.leadId,
       score: parsed.score,
       tier: parsed.tier,
@@ -315,6 +339,18 @@ export const scoreLeadWithContext = action({
     });
 
     return parsed;
+  },
+});
+
+export const scoreLeadWithContext: any = action({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    // Just delegate to the internal version
+    return await ctx.runAction(internal.ai.scoreLeadWithContextInternal, {
+      leadId: args.leadId,
+    });
   },
 });
 
@@ -484,7 +520,7 @@ export const batchProcessLeads = action({
               recentComments: comments.slice(0, 3),
               whatsappActivity: whatsappMessages.length > 0 ? {
                 messageCount: whatsappMessages.length,
-                recentMessages: whatsappMessages.slice(0, 5).map(m => `${m.direction}: ${m.content.substring(0, 100)}`),
+                recentMessages: whatsappMessages.slice(0, 5).map((m: any) => `${m.direction}: ${m.content.substring(0, 100)}`),
               } : null,
             };
 
@@ -526,9 +562,9 @@ export const batchProcessLeads = action({
 
             const whatsappEngagement = whatsappMessages.length > 0 ? {
               totalMessages: whatsappMessages.length,
-              inboundCount: whatsappMessages.filter(m => m.direction === "inbound").length,
-              outboundCount: whatsappMessages.filter(m => m.direction === "outbound").length,
-              recentActivity: whatsappMessages.slice(0, 3).map(m => `${m.direction}: ${m.content.substring(0, 80)}`),
+              inboundCount: whatsappMessages.filter((m: any) => m.direction === "inbound").length,
+              outboundCount: whatsappMessages.filter((m: any) => m.direction === "outbound").length,
+              recentActivity: whatsappMessages.slice(0, 3).map((m: any) => `${m.direction}: ${m.content.substring(0, 80)}`),
             } : null;
 
             const leadInfo = {

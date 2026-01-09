@@ -34,6 +34,7 @@ export const batchProcessLeadsBackground = internalAction({
 
     while (hasMore) {
       // Check stop flag
+      // @ts-ignore - Type instantiation depth issue with internal helpers
       const control = await ctx.runQuery(internal.aiBackgroundHelpers.getBatchControlInternal, {
         processId: args.processId,
       });

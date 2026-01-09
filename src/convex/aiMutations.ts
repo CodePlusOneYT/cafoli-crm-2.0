@@ -1,6 +1,6 @@
 import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 // Store AI summary
 export const storeSummary = internalMutation({
@@ -362,12 +362,79 @@ export const startBatchProcess = mutation({
       updatedAt: Date.now(),
     });
 
-    await ctx.scheduler.runAfter(0, internal.aiBackground.batchProcessLeadsBackground, {
+    await ctx.scheduler.runAfter(0, (internal as any).aiBackground.batchProcessLeadsBackground, {
       processType: args.processType,
       processId,
     });
 
     return { processId };
+  },
+});
+
+// Queue single lead summary generation in background
+// Note: Individual lead summaries will continue in the background even after the tab closes
+export const queueLeadSummary = mutation({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    // Check if summary already exists and is recent
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return { queued: false, error: "Lead not found" };
+
+    const existingSummary = await ctx.db
+      .query("leadSummaries")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    // If summary exists and matches current activity, no need to regenerate
+    if (existingSummary && existingSummary.lastActivityHash === `${lead.lastActivity}`) {
+      return { queued: false, cached: true };
+    }
+
+    // Schedule the action in background - will continue even if tab closes
+    await ctx.scheduler.runAfter(0, internal.ai.generateLeadSummaryWithChatInternal, {
+      leadId: args.leadId,
+    });
+
+    // Note: Frontend will poll getCachedSummary to get the result once processed
+    return { queued: true };
+  },
+});
+
+// Queue single lead score generation in background
+// Note: Individual lead scores will continue in the background even after the tab closes
+export const queueLeadScore = mutation({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    // Get lead data
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return { queued: false, error: "Lead not found" };
+
+    // Schedule the action in background - will continue even if tab closes
+    await ctx.scheduler.runAfter(0, internal.ai.scoreLeadWithContextInternal, {
+      leadId: args.leadId,
+    });
+
+    // Note: Frontend will poll to check when score is available
+    return { queued: true };
+  },
+});
+
+// Get cached summary for a lead
+export const getCachedSummary = query({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    const summary = await ctx.db
+      .query("leadSummaries")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    return summary;
   },
 });
 
