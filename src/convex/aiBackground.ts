@@ -25,46 +25,25 @@ export const batchProcessLeadsBackground = internalAction({
     const allKeys = await getGeminiKeys(ctx);
     const numKeys = allKeys.length;
 
-    console.log(`Using ${numKeys} API keys for parallel processing`);
+    console.log(`Using ${numKeys} API keys`);
 
     let offset = 0;
     let totalProcessed = 0;
     let totalFailed = 0;
     let hasMore = true;
+    const failedLeads: any[] = [];
 
-    while (hasMore) {
-      // Check stop flag
-      // @ts-ignore - Type instantiation depth issue with internal helpers
-      const control = await ctx.runQuery(internal.aiBackgroundHelpers.getBatchControlInternal, {
-        processId: args.processId,
-      });
-
-      if (control?.shouldStop) {
-        console.log(`Batch processing stopped by user (ID: ${args.processId})`);
-        return { processed: totalProcessed, failed: totalFailed, total: totalProcessed + totalFailed, stopped: true };
-      }
-
-      // Get leads
-      const leads = await ctx.runQuery(internal.aiBackgroundHelpers.getLeadsForBatchInternal, {
-        offset,
-        limit: numKeys,
-      });
-
-      if (leads.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      console.log(`Processing ${leads.length} leads in parallel (offset: ${offset})`);
-
-      const promises = leads.map(async (lead) => {
+    // Helper to process a single lead
+    const processSingleLead = async (lead: any) => {
         try {
           // Get WhatsApp messages
+          // @ts-ignore
           const whatsappMessages = await ctx.runQuery(internal.aiBackgroundHelpers.getWhatsAppMessagesInternal, {
             leadId: lead._id,
           });
 
           // Get comments
+          // @ts-ignore
           const comments = await ctx.runQuery(internal.aiBackgroundHelpers.getCommentsInternal, {
             leadId: lead._id,
           });
@@ -88,12 +67,11 @@ export const batchProcessLeadsBackground = internalAction({
               } : null,
             };
 
-            const prompt = `Summarize this lead in 1-2 sentences:\n\n${JSON.stringify(leadInfo, null, 2)}`;
+            const prompt = `Summarize this lead in 1-2 sentences:\\n\\n${JSON.stringify(leadInfo, null, 2)}`;
             
-            const keys = await getGeminiKeys(ctx);
-            if (keys.length === 0) throw new Error("No Gemini API keys available");
+            const keyToUse = allKeys[Math.floor(Math.random() * allKeys.length)];
+            const genAI = new GoogleGenerativeAI(keyToUse.apiKey);
             
-            const genAI = new GoogleGenerativeAI(keys[0].apiKey);
             const model = genAI.getGenerativeModel({ model: gemmaModel });
             const result = await model.generateContent([systemPrompt, prompt]);
             const text = result.response.text();
@@ -102,6 +80,7 @@ export const batchProcessLeadsBackground = internalAction({
             const lastActivityHash = `${lead.lastActivity}`;
             
             // Store summary
+            // @ts-ignore
             await ctx.runMutation(internal.aiBackgroundHelpers.storeSummaryInternal, {
               leadId: lead._id,
               summary: text,
@@ -111,6 +90,7 @@ export const batchProcessLeadsBackground = internalAction({
 
           if (args.processType === "scores" || args.processType === "both") {
             if (!summary) {
+              // @ts-ignore
               const existingSummary = await ctx.runQuery(internal.aiBackgroundHelpers.getSummaryInternal, {
                 leadId: lead._id,
                 lastActivityHash: `${lead.lastActivity}`,
@@ -118,15 +98,7 @@ export const batchProcessLeadsBackground = internalAction({
               summary = existingSummary?.summary;
             }
 
-            const systemPrompt = `You are an AI lead scoring expert for pharmaceutical CRM. Score leads 0-100 based on:
-    - Engagement (comments, messages, follow-ups)
-    - Recency of activity
-    - Lead type and status
-    - Source quality
-    - WhatsApp conversation quality and engagement
-    - AI-generated summary insights
-
-    Return JSON with: { "score": <number 0-100>, "tier": "<High|Medium|Low>", "rationale": "<brief explanation>" }`;
+            const systemPrompt = `You are an AI lead scoring expert for pharmaceutical CRM. Score leads 0-100 based on:\n    - Engagement (comments, messages, follow-ups)\n    - Recency of activity\n    - Lead type and status\n    - Source quality\n    - WhatsApp conversation quality and engagement\n    - AI-generated summary insights\n\n    Return JSON with: { "score": <number 0-100>, "tier": "<High|Medium|Low>", "rationale": "<brief explanation>" }`;
 
             const daysSinceCreated = (Date.now() - lead._creationTime) / (1000 * 60 * 60 * 24);
             const daysSinceActivity = (Date.now() - lead.lastActivity) / (1000 * 60 * 60 * 24);
@@ -153,12 +125,11 @@ export const batchProcessLeadsBackground = internalAction({
               whatsappEngagement,
             };
 
-            const prompt = `Score this lead:\n\n${JSON.stringify(leadInfo, null, 2)}`;
+            const prompt = `Score this lead:\\n\\n${JSON.stringify(leadInfo, null, 2)}`;
             
-            const keys = await getGeminiKeys(ctx);
-            if (keys.length === 0) throw new Error("No Gemini API keys available");
+            const keyToUse = allKeys[Math.floor(Math.random() * allKeys.length)];
+            const genAI = new GoogleGenerativeAI(keyToUse.apiKey);
             
-            const genAI = new GoogleGenerativeAI(keys[0].apiKey);
             const model = genAI.getGenerativeModel({ 
               model: gemmaModel,
               generationConfig: { responseMimeType: "application/json" }
@@ -175,6 +146,7 @@ export const batchProcessLeadsBackground = internalAction({
             }
 
             // Store score
+            // @ts-ignore
             await ctx.runMutation(internal.aiBackgroundHelpers.storeScoreInternal, {
               leadId: lead._id,
               score: parsed.score,
@@ -188,47 +160,100 @@ export const batchProcessLeadsBackground = internalAction({
           console.error(`Failed to process lead ${lead._id}:`, error);
           return { success: false, leadId: lead._id, error };
         }
+    };
+
+    while (hasMore) {
+      // Check stop flag
+      // @ts-ignore
+      const control = await ctx.runQuery(internal.aiBackgroundHelpers.getBatchControlInternal, {
+        processId: args.processId,
       });
 
-      const results = await Promise.all(
-        promises.map(p => p.catch(err => ({ success: false, error: err })))
-      );
+      if (control?.shouldStop) {
+        console.log(`Batch processing stopped by user (ID: ${args.processId})`);
+        return { processed: totalProcessed, failed: totalFailed + failedLeads.length, total: totalProcessed + totalFailed + failedLeads.length, stopped: true };
+      }
 
-      results.forEach((result) => {
+      // Get leads
+      // @ts-ignore
+      const leads = await ctx.runQuery(internal.aiBackgroundHelpers.getLeadsForBatchInternal, {
+        offset,
+        limit: numKeys,
+      });
+
+      if (leads.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      console.log(`Processing ${leads.length} leads sequentially (offset: ${offset})`);
+
+      for (const lead of leads) {
+        const result = await processSingleLead(lead);
+        
         if (result.success) {
-          totalProcessed++;
+            totalProcessed++;
         } else {
-          totalFailed++;
-          console.error("Lead processing failed:", result.error);
+            console.log(`Lead ${lead._id} failed, adding to retry queue.`);
+            failedLeads.push(lead);
         }
-      });
 
-      console.log(`Batch complete: ${results.filter(r => r.success).length}/${results.length} succeeded`);
+        // Cooldown
+        console.log("Cooling down for 15 seconds...");
+        await new Promise(resolve => setTimeout(resolve, 15000));
+      }
+
       offset += leads.length;
 
       // Update progress
+      // @ts-ignore
       await ctx.runMutation(internal.aiBackgroundHelpers.updateBatchProgressInternal, {
         processId: args.processId,
         processed: totalProcessed,
         failed: totalFailed,
       });
+    }
 
-      // Check stop flag again
-      const controlAfterBatch = await ctx.runQuery(internal.aiBackgroundHelpers.getBatchControlInternal, {
-        processId: args.processId,
-      });
-      const shouldStopAfterBatch = controlAfterBatch?.shouldStop;
+    // Retry Phase
+    if (failedLeads.length > 0) {
+        console.log(`Starting retry phase for ${failedLeads.length} leads...`);
+        
+        for (const lead of failedLeads) {
+             // Check stop
+             // @ts-ignore
+             const control = await ctx.runQuery(internal.aiBackgroundHelpers.getBatchControlInternal, {
+                processId: args.processId,
+             });
+             if (control?.shouldStop) {
+                 console.log("Retry phase stopped by user");
+                 break;
+             }
 
-      if (shouldStopAfterBatch) {
-        console.log(`Batch processing stopped by user after batch (ID: ${args.processId})`);
-        return { processed: totalProcessed, failed: totalFailed, total: totalProcessed + totalFailed, stopped: true };
-      }
+             const result = await processSingleLead(lead);
+             
+             if (result.success) {
+                 totalProcessed++;
+             } else {
+                 totalFailed++;
+                 console.error(`Lead ${lead._id} failed on retry.`);
+             }
+             
+             // Update progress
+             // @ts-ignore
+             await ctx.runMutation(internal.aiBackgroundHelpers.updateBatchProgressInternal, {
+                processId: args.processId,
+                processed: totalProcessed,
+                failed: totalFailed,
+             });
 
-      console.log(`Cooling down for 15 seconds before next batch...`);
-      await new Promise(resolve => setTimeout(resolve, 15000));
+             // Cooldown
+             console.log("Cooling down for 15 seconds...");
+             await new Promise(resolve => setTimeout(resolve, 15000));
+        }
     }
 
     // Clear the control record
+    // @ts-ignore
     await ctx.runMutation(internal.aiBackgroundHelpers.deleteBatchControlInternal, {
       processId: args.processId,
     });
