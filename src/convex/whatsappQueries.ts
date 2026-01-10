@@ -123,24 +123,21 @@ export const getLeadsWithChatStatus = query({
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    // Get leads with pagination - limit to reasonable amount
+    // Build the base query based on filter
     let leadsQuery = args.filter === "mine" && args.userId
       ? ctx.db
           .query("leads")
           .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
-          .order("desc")
       : ctx.db
           .query("leads")
-          .withIndex("by_last_activity")
           .order("desc");
 
-    // Take more than requested to allow for sorting, but cap at 200
-    const takeAmount = Math.min(args.paginationOpts.numItems * 10, 200);
-    const allLeads = await leadsQuery.take(takeAmount);
+    // Use proper pagination from Convex
+    const paginationResult = await leadsQuery.paginate(args.paginationOpts);
 
     // Enrich leads with chat status
     const leadsWithChatStatus = await Promise.all(
-      allLeads.map(async (lead) => {
+      paginationResult.page.map(async (lead) => {
         const chat = await ctx.db
           .query("chats")
           .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
@@ -154,7 +151,7 @@ export const getLeadsWithChatStatus = query({
       })
     );
 
-    // Sort by last message time (most recent first), prioritizing those with messages
+    // Sort by last message time (most recent first)
     const sortedLeads = leadsWithChatStatus.sort((a, b) => {
       // Prioritize leads with actual messages
       const aHasMessages = a.lastMessageAt > 0;
@@ -167,24 +164,10 @@ export const getLeadsWithChatStatus = query({
       return b.lastMessageAt - a.lastMessageAt;
     });
 
-    // Manual pagination
-    const cursor = args.paginationOpts.cursor;
-    const numItems = args.paginationOpts.numItems;
-
-    let startIndex = 0;
-    if (cursor) {
-      const cursorIndex = sortedLeads.findIndex(l => l._id === cursor);
-      startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
-    }
-
-    const page = sortedLeads.slice(startIndex, startIndex + numItems);
-    const isDone = startIndex + numItems >= sortedLeads.length || sortedLeads.length < takeAmount;
-    const continueCursor = isDone ? null : page[page.length - 1]?._id || null;
-
     return {
-      page,
-      isDone,
-      continueCursor,
+      page: sortedLeads,
+      isDone: paginationResult.isDone,
+      continueCursor: paginationResult.continueCursor,
     };
   },
 });
