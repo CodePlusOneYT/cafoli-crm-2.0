@@ -57,14 +57,8 @@ export function ContactRequestPopup() {
 
   // Don't render if no requests or no lead data
   if (!currentRequest || !currentRequest.lead) {
-    console.log("ContactRequestPopup - Not rendering:", { 
-      hasRequest: !!currentRequest, 
-      hasLead: !!currentRequest?.lead 
-    });
     return null;
   }
-
-  console.log("ContactRequestPopup - Rendering popup for lead:", currentRequest.lead.name);
 
   const getInitials = (name: string) => {
     return name
