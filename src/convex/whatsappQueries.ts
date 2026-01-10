@@ -123,19 +123,20 @@ export const getLeadsWithChatStatus = query({
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    // Get all leads first, then filter and sort in memory
-    let allLeads;
-    
-    if (args.filter === "mine" && args.userId) {
-      allLeads = await ctx.db
-        .query("leads")
-        .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
-        .collect();
-    } else {
-      allLeads = await ctx.db
-        .query("leads")
-        .collect();
-    }
+    // Get leads with pagination - limit to reasonable amount
+    let leadsQuery = args.filter === "mine" && args.userId
+      ? ctx.db
+          .query("leads")
+          .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
+          .order("desc")
+      : ctx.db
+          .query("leads")
+          .withIndex("by_last_activity")
+          .order("desc");
+
+    // Take more than requested to allow for sorting, but cap at 200
+    const takeAmount = Math.min(args.paginationOpts.numItems * 10, 200);
+    const allLeads = await leadsQuery.take(takeAmount);
 
     // Enrich leads with chat status
     const leadsWithChatStatus = await Promise.all(
@@ -177,7 +178,7 @@ export const getLeadsWithChatStatus = query({
     }
 
     const page = sortedLeads.slice(startIndex, startIndex + numItems);
-    const isDone = startIndex + numItems >= sortedLeads.length;
+    const isDone = startIndex + numItems >= sortedLeads.length || sortedLeads.length < takeAmount;
     const continueCursor = isDone ? null : page[page.length - 1]?._id || null;
 
     return {
