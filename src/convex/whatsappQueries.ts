@@ -163,7 +163,7 @@ export const getLeadsWithChatStatus = query({
           .take(50);
       }
     } else {
-      // Standard list
+      // Standard list - use indexed queries for better performance
       if (args.filter === "mine" && args.userId) {
         leads = await ctx.db
           .query("leads")
