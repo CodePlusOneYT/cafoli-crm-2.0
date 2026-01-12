@@ -30,7 +30,10 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
     { initialNumItems: 50 }
   );
 
-  const messages = (messagesResult as any)?.page || [];
+  // Fix: correctly access results and reverse for display (Oldest -> Newest)
+  // usePaginatedQuery returns results in the order fetched (Newest -> Oldest due to desc order)
+  // We reverse it so the oldest messages are at the top of the chat window
+  const messages = messagesResult ? [...messagesResult].reverse() : [];
   const canLoadMore = status === "CanLoadMore";
   const isLoadingMessages = status === "LoadingFirstPage" || status === "LoadingMore";
   

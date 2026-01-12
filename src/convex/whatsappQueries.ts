@@ -41,21 +41,21 @@ export const getAllChats = query({
 export const getChatMessagesInternal = internalQuery({
   args: { leadId: v.id("leads") },
   handler: async (ctx, args) => {
-    const chats = await ctx.db
+    const chat = await ctx.db
       .query("chats")
       .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
-      .collect();
+      .first();
     
-    const allMessages = [];
-    for (const chat of chats) {
-      const messages = await ctx.db
-        .query("messages")
-        .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
-        .collect();
-      allMessages.push(...messages);
-    }
+    if (!chat) return [];
+
+    // Only fetch the last 20 messages for context
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+      .order("desc")
+      .take(20);
     
-    return allMessages;
+    return messages.reverse();
   },
 });
 
@@ -65,12 +65,12 @@ export const getChatMessages = query({
     paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const chats = await ctx.db
+    const chat = await ctx.db
       .query("chats")
       .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
-      .collect();
+      .first();
 
-    if (chats.length === 0) {
+    if (!chat) {
       return {
         page: [],
         isDone: true,
@@ -78,33 +78,13 @@ export const getChatMessages = query({
       };
     }
 
-    // Get ALL messages from all chats for this lead
-    const allMessages = [];
-    
-    for (const chat of chats) {
-      const messages = await ctx.db
-        .query("messages")
-        .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
-        .collect();
-      allMessages.push(...messages);
-    }
-
-    // Sort all messages by creation time descending (newest first) for pagination
-    const sortedMessages = allMessages.sort((a, b) => b._creationTime - a._creationTime);
-
-    // Apply pagination manually
-    const { numItems, cursor } = args.paginationOpts;
-    const startIndex = cursor ? parseInt(cursor) : 0;
-    const endIndex = startIndex + numItems;
-    
-    const paginatedMessages = sortedMessages.slice(startIndex, endIndex);
-    const hasMore = endIndex < sortedMessages.length;
-    
-    return {
-      page: paginatedMessages.reverse(), // Reverse back to ascending order for display
-      isDone: !hasMore,
-      continueCursor: hasMore ? endIndex.toString() : null,
-    };
+    // Use standard pagination on the messages table
+    // We order by desc (newest first) so pagination works efficiently from the most recent
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
@@ -115,7 +95,7 @@ export const getLeadsWithChatStatus = query({
     searchQuery: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Fetch ALL leads based on filter - no limits
+    // Fetch leads
     let leads;
     
     if (args.searchQuery) {
@@ -137,20 +117,22 @@ export const getLeadsWithChatStatus = query({
           .collect();
       }
     } else {
-      // Standard list - fetch ALL leads
+      // Standard list - fetch leads with limit to prevent timeout
+      const LIMIT = 100;
+
       if (args.filter === "mine" && args.userId) {
         leads = await ctx.db
           .query("leads")
           .withIndex("by_assigned_to_and_last_activity", (q) => q.eq("assignedTo", args.userId))
           .order("desc")
-          .collect();
+          .take(LIMIT);
       } else {
         // For all leads, prioritize those with recent activity
         leads = await ctx.db
           .query("leads")
           .withIndex("by_last_activity")
           .order("desc")
-          .collect();
+          .take(LIMIT);
       }
     }
 
