@@ -19,13 +19,26 @@ export const storeMessage = internalMutation({
     quotedMessageExternalId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const chat = await ctx.db
+    let chat = await ctx.db
       .query("chats")
       .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
       .first();
 
     if (!chat) {
-      throw new Error("Chat not found for this lead");
+      // Create new chat if it doesn't exist
+      const chatId = await ctx.db.insert("chats", {
+        leadId: args.leadId,
+        platform: "whatsapp",
+        externalId: args.phoneNumber,
+        lastMessageAt: Date.now(),
+        unreadCount: 0,
+      });
+      chat = await ctx.db.get(chatId);
+      console.log(`Created WhatsApp chat for lead ${args.leadId} inside storeMessage`);
+    }
+
+    if (!chat) {
+      throw new Error("Failed to find or create chat for this lead");
     }
 
     let quotedMessageId = args.quotedMessageId;
