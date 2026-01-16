@@ -1,3 +1,7 @@
 {
-  "plan": "1. Verify that the type error is resolved and the backend deploys successfully.\n2. Check if messages are loading correctly in the ChatWindow component.\n3. If messages are still not loading, investigate the `chats` and `messages` tables for data consistency."
+  "file_paths": [
+    "src/convex/schema.ts",
+    "src/components/whatsapp/ContactList.tsx"
+  ],
+  "replace_files_in_context": false
 }

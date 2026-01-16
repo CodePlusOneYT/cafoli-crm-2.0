@@ -41,6 +41,17 @@ export const storeMessage = internalMutation({
       throw new Error("Failed to find or create chat for this lead");
     }
 
+    // Update chat metadata (timestamp and unread count)
+    const updateFields: any = {
+      lastMessageAt: Date.now(),
+    };
+    
+    if (args.direction === "inbound") {
+      updateFields.unreadCount = (chat.unreadCount || 0) + 1;
+    }
+    
+    await ctx.db.patch(chat._id, updateFields);
+
     let quotedMessageId = args.quotedMessageId;
 
     // If we have an external ID for the quoted message but no internal ID, try to find it
