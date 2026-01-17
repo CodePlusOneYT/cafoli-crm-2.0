@@ -448,3 +448,5 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
+export default AppLayout;

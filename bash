@@ -1,1 +1,1 @@
-pnpm add web-push @types/web-push
+grep -r "assignedTo" src/convex/leads

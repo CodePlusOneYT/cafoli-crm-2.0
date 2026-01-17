@@ -84,6 +84,25 @@ export const storeMessage = internalMutation({
       lastActivity: Date.now(),
     });
 
+    // Send Push Notification for inbound messages
+    if (args.direction === "inbound") {
+      const lead = await ctx.db.get(args.leadId);
+      if (lead && lead.assignedTo) {
+        // Use try-catch to prevent failure if push notification fails or action is not found yet
+        try {
+          // Cast internal to any to avoid type errors while api types are regenerating
+          await ctx.scheduler.runAfter(0, (internal as any).pushNotificationsActions.sendPushNotification, {
+            userId: lead.assignedTo,
+            title: `New Message from ${lead.name}`,
+            body: args.content.substring(0, 50) + (args.content.length > 50 ? "..." : ""),
+            url: `/whatsapp?leadId=${lead._id}`,
+          });
+        } catch (e) {
+          console.error("Failed to schedule push notification:", e);
+        }
+      }
+    }
+
     // Log activity
     await ctx.scheduler.runAfter(0, internal.activityLogs.logActivity, {
       category: args.direction === "inbound" ? LOG_CATEGORIES.WHATSAPP_INCOMING : LOG_CATEGORIES.WHATSAPP_OUTGOING,

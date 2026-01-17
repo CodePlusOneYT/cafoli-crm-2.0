@@ -284,6 +284,17 @@ export const assignLead = mutation({
       action: `Assigned lead to ${assignedUserName}`,
       leadId: args.leadId,
     });
+
+    // Send Push Notification to the assigned user
+    if (args.userId !== currentUserId) {
+      // Cast internal to any to avoid type errors while api types are regenerating
+      await ctx.scheduler.runAfter(0, (internal as any).pushNotificationsActions.sendPushNotification, {
+        userId: args.userId,
+        title: "New Lead Assigned",
+        body: `You have been assigned a new lead: ${lead.name}`,
+        url: `/leads?leadId=${args.leadId}`,
+      });
+    }
   },
 });
 
