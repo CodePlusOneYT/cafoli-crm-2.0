@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "preview": "vite preview"
+    "dist": "pnpm run build && electron-builder --win --publish never"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",
