@@ -96,4 +96,26 @@
     "typescript-eslint": "^8.48.1",
     "vite": "^7.2.6"
   }
+  "build": {
+    "appId": "com.cafoli.crm",
+    "productName": "Cafoli CRM",
+    "directories": {
+      "output": "release"
+    },
+    "files": [ "dist/**/*", "electron/**/*" ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "CodePlusOneYT",
+      "repo": "cafoli-crm-2.0"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true
+    }
+  }
 }
