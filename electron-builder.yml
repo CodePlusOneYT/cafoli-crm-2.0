@@ -1,0 +1,26 @@
+appId: com.cafoli.connect
+productName: Cafoli Connect
+directories:
+  buildResources: build
+  output: dist-electron
+files:
+  - dist/**/*
+  - package.json
+publish:
+  provider: github
+  owner: CodePlusOneYT
+  repo: cafoli-crm-2.0
+  token: ${GH_TOKEN}
+mac:
+  category: public.app-category.business
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+    - portable
+linux:
+  target:
+    - AppImage
+    - deb

@@ -1,1 +1,3 @@
-grep -r "assignedTo" src/convex/leads
+export GH_TOKEN=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
+
+pnpm run electron:build

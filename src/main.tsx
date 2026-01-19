@@ -5,14 +5,14 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProvider } from "convex/react";
 import { StrictMode, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createHashRouter, RouterProvider } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import AppLayout from "@/components/AppLayout";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import "./index.css";
 import "./types/global.d.ts";
 
-// Lazy load route components for better code splitting
+// Lazy load route components
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
@@ -27,7 +27,7 @@ const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const Logs = lazy(() => import("./pages/Logs.tsx"));
 const Catalog = lazy(() => import("./pages/Catalog.tsx"));
 
-// Simple loading fallback for route transitions
+// Simple loading fallback
 function RouteLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -36,34 +36,17 @@ function RouteLoading() {
   );
 }
 
-// WORKAROUND: Fallback to hardcoded URL if env var is missing or empty
+// Ensure the URL is available
 const convexUrl = import.meta.env.VITE_CONVEX_URL || "https://polished-marmot-96.convex.cloud";
 
-console.log("Environment check:", {
-  convexUrl,
-  mode: import.meta.env.MODE,
-  prod: import.meta.env.PROD,
-});
-
 if (!convexUrl || convexUrl === 'undefined' || convexUrl === '') {
-  console.error("VITE_CONVEX_URL is not set or is empty. Value:", convexUrl);
-  document.getElementById("root")!.innerHTML = `
-    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="max-width: 500px; text-align: center;">
-        <h1 style="color: #dc2626; margin-bottom: 16px;">Configuration Error</h1>
-        <p style="color: #374151; margin-bottom: 24px;">
-          The VITE_CONVEX_URL environment variable is not set. 
-          Please configure it in your Cloudflare Pages dashboard.
-        </p>
-      </div>
-    </div>
-  `;
-  throw new Error("VITE_CONVEX_URL is required");
+  console.error("VITE_CONVEX_URL is not set.");
 }
 
 const convex = new ConvexReactClient(convexUrl);
 
-const router = createBrowserRouter([
+// FIX: Using HashRouter for Electron compatibility
+const router = createHashRouter([
   {
     errorElement: <ErrorBoundary />,
     children: [

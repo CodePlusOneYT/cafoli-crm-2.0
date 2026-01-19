@@ -1,3 +1,3 @@
-{
-  "plan": "1. Verify that the push notification system is working correctly.\n2. Check if there are any remaining TypeScript errors.\n3. Inform the user that push notifications have been implemented for lead assignments and incoming WhatsApp messages."
-}
+   "electron:dev": "electron .",
+   "electron:build": "vite build && electron-builder"
+   
