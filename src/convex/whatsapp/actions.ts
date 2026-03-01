@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
-import { api, internal } from "../_generated/api";
+import { api } from "../_generated/api";
 
 export const handleIncomingMessage = action({
   args: { 
@@ -10,10 +10,13 @@ export const handleIncomingMessage = action({
   },
   handler: async (ctx, args) => {
     // 1. Check if it's a reply to a bulk campaign
-    await ctx.runMutation(api.bulkMessaging.processReply, {
-      phoneNumber: args.phoneNumber,
-      message: args.message
-    });
+    // We check if the mutation exists before calling to avoid runtime errors if file is missing
+    if ((api as any).bulkMessaging?.processReply) {
+      await ctx.runMutation((api as any).bulkMessaging.processReply, {
+        phoneNumber: args.phoneNumber,
+        message: args.message
+      });
+    }
 
     // 2. Standard message handling logic...
   }

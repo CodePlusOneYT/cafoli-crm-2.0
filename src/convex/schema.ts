@@ -1,6 +1,12 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+export const ROLES = {
+  ADMIN: "admin",
+  STAFF: "staff",
+  UPLOADER: "uploader",
+} as const;
+
 export default defineSchema({
   users: defineTable({
     name: v.optional(v.string()),
@@ -8,7 +14,11 @@ export default defineSchema({
     image: v.optional(v.string()),
     role: v.optional(v.string()), // "admin", "staff", "uploader"
     tokenIdentifier: v.string(),
-  }).index("by_token", ["tokenIdentifier"]),
+    passwordHash: v.optional(v.string()),
+    preferences: v.optional(v.any()),
+    lastActivity: v.optional(v.number()),
+  }).index("by_token", ["tokenIdentifier"])
+    .index("email", ["email"]),
 
   leads: defineTable({
     name: v.string(),
@@ -34,14 +44,30 @@ export default defineSchema({
     indiamartUniqueId: v.optional(v.string()),
     priorityScore: v.optional(v.number()),
     tags: v.optional(v.array(v.id("tags"))),
+    aiScore: v.optional(v.number()),
+    aiScoreTier: v.optional(v.string()),
+    aiScoreRationale: v.optional(v.string()),
+    aiScoredAt: v.optional(v.number()),
+    adminAssignmentRequired: v.optional(v.boolean()),
+    isColdCallerLead: v.optional(v.boolean()),
+    coldCallerAssignedTo: v.optional(v.id("users")),
+    indiamartMetadata: v.optional(v.any()),
+    searchText: v.optional(v.string()),
+    welcomeEmailSent: v.optional(v.boolean()),
   }).index("by_mobile", ["mobile"])
     .index("by_assignedTo", ["assignedTo"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_assigned_to", ["assignedTo"])
+    .index("by_is_cold_caller", ["isColdCallerLead"])
+    .index("by_cold_caller_assigned_to", ["coldCallerAssignedTo"])
+    .index("by_last_activity", ["lastActivity"])
+    .index("by_assigned_to_and_last_activity", ["assignedTo", "lastActivity"]),
 
   tags: defineTable({
     name: v.string(),
     color: v.string(),
-  }),
+  }).index("by_name", ["name"])
+    .index("by_color", ["color"]),
 
   campaigns: defineTable({
     userId: v.id("users"),
@@ -59,7 +85,9 @@ export default defineSchema({
     blocks: v.array(v.any()),
     connections: v.array(v.any()),
     createdAt: v.number(),
-  }).index("by_userId", ["userId"]),
+    metrics: v.optional(v.any()),
+  }).index("by_userId", ["userId"])
+    .index("by_created_by", ["userId"]),
 
   bulkContacts: defineTable({
     adminId: v.id("users"),
@@ -95,7 +123,11 @@ export default defineSchema({
     usageCount: v.number(),
     lastUsedAt: v.number(),
     isActive: v.boolean(),
-  }).index("by_adminId", ["adminId"]),
+    lastResetAt: v.optional(v.number()),
+    order: v.optional(v.number()),
+  }).index("by_adminId", ["adminId"])
+    .index("by_order", ["order"])
+    .index("by_active", ["isActive"]),
 
   pushSubscriptions: defineTable({
     userId: v.id("users"),
@@ -108,7 +140,8 @@ export default defineSchema({
     createdAt: v.number(),
     lastUsedAt: v.number(),
   }).index("by_userId", ["userId"])
-    .index("by_endpoint", ["endpoint"]),
+    .index("by_endpoint", ["endpoint"])
+    .index("by_user", ["userId"]),
 
   contactRequests: defineTable({
     leadId: v.id("leads"),
@@ -116,7 +149,9 @@ export default defineSchema({
     customerMessage: v.string(),
     status: v.string(), // "pending", "acknowledged"
     createdAt: v.number(),
-  }).index("by_assignedTo_status", ["assignedTo", "status"]),
+    acknowledgedAt: v.optional(v.number()),
+  }).index("by_assignedTo_status", ["assignedTo", "status"])
+    .index("by_assignedTo_and_status", ["assignedTo", "status"]),
 
   productCategories: defineTable({
     name: v.string(),
@@ -124,6 +159,7 @@ export default defineSchema({
 
   products: defineTable({
     name: v.string(),
+    brandName: v.optional(v.string()),
     molecule: v.optional(v.string()),
     packaging: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -132,7 +168,11 @@ export default defineSchema({
     images: v.array(v.id("_storage")),
     flyer: v.optional(v.id("_storage")),
     bridgeCard: v.optional(v.id("_storage")),
-  }).index("by_categoryId", ["categoryId"]),
+    visualaid: v.optional(v.id("_storage")),
+    mrp: v.optional(v.string()),
+    pageLink: v.optional(v.string()),
+  }).index("by_categoryId", ["categoryId"])
+    .index("by_name", ["name"]),
 
   whatsappTemplates: defineTable({
     name: v.string(),
@@ -140,6 +180,12 @@ export default defineSchema({
     category: v.string(),
     language: v.string(),
     status: v.string(),
+    externalId: v.optional(v.string()),
+  }),
+
+  templates: defineTable({
+     name: v.string(),
+     content: v.string(),
   }),
 
   activityLogs: defineTable({
@@ -147,6 +193,136 @@ export default defineSchema({
     action: v.string(),
     details: v.string(),
     timestamp: v.number(),
-  }).index("by_timestamp", ["timestamp"]),
+    leadId: v.optional(v.id("leads")),
+    category: v.optional(v.string()),
+  }).index("by_timestamp", ["timestamp"])
+    .index("by_category", ["category"])
+    .index("by_user", ["userId"])
+    .index("by_lead", ["leadId"]),
+
+  geminiApiKeys: defineTable({
+    apiKey: v.string(),
+    label: v.optional(v.string()),
+    isActive: v.boolean(),
+    usageCount: v.optional(v.number()),
+  }).index("by_active", ["isActive"]),
+
+  activeChatSessions: defineTable({
+    leadId: v.id("leads"),
+    userId: v.id("users"),
+    lastActivity: v.number(),
+  }).index("by_leadId", ["leadId"]),
+
+  chats: defineTable({
+    leadId: v.id("leads"),
+    unreadCount: v.optional(v.number()),
+    lastMessageAt: v.optional(v.number()),
+  }).index("by_lead", ["leadId"]),
+
+  messages: defineTable({
+    chatId: v.id("chats"),
+    direction: v.string(),
+    content: v.string(),
+    messageType: v.string(),
+    externalId: v.optional(v.string()),
+    status: v.optional(v.string()),
+    mediaId: v.optional(v.string()),
+  }).index("by_chat", ["chatId"])
+    .index("by_external_id", ["externalId"])
+    .index("by_chat_status", ["chatId", "status"]),
+
+  comments: defineTable({
+    leadId: v.id("leads"),
+    userId: v.optional(v.id("users")),
+    content: v.string(),
+    isSystem: v.optional(v.boolean()),
+  }).index("by_lead", ["leadId"]),
+
+  leadSummaries: defineTable({
+    leadId: v.id("leads"),
+    summary: v.string(),
+    lastActivityHash: v.optional(v.string()),
+    generatedAt: v.optional(v.number()),
+  }).index("by_lead", ["leadId"])
+    .index("by_lead_and_hash", ["leadId", "lastActivityHash"]),
+
+  batchProcessControl: defineTable({
+    processId: v.string(),
+    shouldStop: v.optional(v.boolean()),
+    processed: v.optional(v.number()),
+    failed: v.optional(v.number()),
+    status: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+  }).index("by_process_id", ["processId"]),
+
+  interventionRequests: defineTable({
+    leadId: v.id("leads"),
+    assignedTo: v.id("users"),
+    status: v.string(),
+    claimedBy: v.optional(v.id("users")),
+    claimedAt: v.optional(v.number()),
+    requiresFollowUp: v.optional(v.boolean()),
+  }).index("by_status", ["status"])
+    .index("by_claimed_by", ["claimedBy"]),
+
+  rangePdfs: defineTable({
+    name: v.string(),
+    storageId: v.id("_storage"),
+  }),
+
+  whatsappConfig: defineTable({
+    key: v.string(),
+    value: v.string(),
+  }).index("by_key", ["key"]),
+
+  whatsappGroups: defineTable({
+    name: v.string(),
+    createdBy: v.id("users"),
+  }).index("by_created_by", ["createdBy"]),
+
+  whatsappMediaCache: defineTable({
+    storageId: v.id("_storage"),
+    mediaId: v.string(),
+  }).index("by_storageId", ["storageId"]),
+
+  emailTemplates: defineTable({
+    name: v.string(),
+    subject: v.string(),
+    content: v.string(),
+  }),
+
+  quickReplies: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    content: v.string(),
+    usageCount: v.optional(v.number()),
+  }),
+
+  exportLogs: defineTable({
+    userId: v.id("users"),
+    downloadNumber: v.number(),
+    fileName: v.string(),
+    leadCount: v.number(),
+    timestamp: v.number(),
+  }),
+
+  emailEnrollments: defineTable({
+    leadId: v.id("leads"),
+    campaignId: v.id("campaigns"),
+    status: v.string(),
+  }),
+
+  campaignEnrollments: defineTable({
+    leadId: v.id("leads"),
+    campaignId: v.id("campaigns"),
+    status: v.string(),
+  }).index("by_campaign", ["campaignId"]),
+
+  campaignExecutions: defineTable({
+    campaignId: v.id("campaigns"),
+    leadId: v.id("leads"),
+    status: v.string(),
+    scheduledFor: v.number(),
+  }).index("by_status", ["status"]),
 
 }, { schemaValidation: false });
