@@ -69,6 +69,8 @@ export function sortLeads(leads: any[], sortBy?: string) {
         return a._creationTime - b._creationTime;
       case "last_activity":
         return (b.lastActivity || 0) - (a.lastActivity || 0);
+      case "priority_score":
+        return (b.priorityScore || 0) - (a.priorityScore || 0);
       case "next_followup":
         if (a.nextFollowUpDate && b.nextFollowUpDate) return a.nextFollowUpDate - b.nextFollowUpDate;
         if (a.nextFollowUpDate) return -1;

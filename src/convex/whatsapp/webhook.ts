@@ -40,14 +40,26 @@ export const handleIncomingMessage = internalAction({
         leadId = matchingLeads[0]._id;
         console.log("✅ Found existing lead:", leadId);
       } else {
-        console.log(`⚠️ No lead found for phone number: ${args.from}. Creating new lead.`);
-        leadId = await ctx.runMutation(internal.whatsappMutations.createLeadFromWhatsApp, {
+        // Check if it's a bulk contact reply
+        const bulkLeadId = await ctx.runMutation(internal.bulkMessaging.processReply, {
           phoneNumber: args.from,
-          name: args.senderName,
           message: args.text,
         });
-        isNewLead = true;
-        console.log("✅ Created new lead:", leadId);
+
+        if (bulkLeadId) {
+           leadId = bulkLeadId;
+           isNewLead = true;
+           console.log("✅ Created new lead from bulk contact:", leadId);
+        } else {
+            console.log(`⚠️ No lead found for phone number: ${args.from}. Creating new lead.`);
+            leadId = await ctx.runMutation(internal.whatsappMutations.createLeadFromWhatsApp, {
+              phoneNumber: args.from,
+              name: args.senderName,
+              message: args.text,
+            });
+            isNewLead = true;
+            console.log("✅ Created new lead:", leadId);
+        }
       }
 
       if (leadId) {

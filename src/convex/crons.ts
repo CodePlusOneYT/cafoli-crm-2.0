@@ -94,4 +94,12 @@ crons.cron(
   {}
 );
 
+// Cleanup old bulk contacts daily at 1 AM IST (7:30 PM UTC previous day)
+crons.cron(
+  "cleanup_old_bulk_contacts",
+  "30 19 * * *",
+  internal.bulkMessaging.cleanupOldContacts,
+  {}
+);
+
 export default crons;

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, action } from "./_generated/server";
+import { mutation, query, action, internalMutation } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 
 export const getBulkContacts = query({
@@ -36,7 +36,7 @@ export const trackSentMessages = mutation({
   },
 });
 
-export const processReply = mutation({
+export const processReply = internalMutation({
   args: { phoneNumber: v.string(), message: v.string() },
   handler: async (ctx, args) => {
     const contact = await ctx.db
@@ -60,7 +60,7 @@ export const processReply = mutation({
 
       if (!existingLead) {
         // Create new lead from bulk contact reply
-        await ctx.db.insert("leads", {
+        const leadId = await ctx.db.insert("leads", {
           name: contact.name || "Bulk Contact",
           mobile: contact.phoneNumber,
           source: "Bulk Campaign Reply",
@@ -70,12 +70,15 @@ export const processReply = mutation({
           message: args.message,
           priorityScore: 50, // Default mid-score for replies
         });
+        return leadId;
       }
+      return existingLead._id;
     }
+    return null;
   },
 });
 
-export const cleanupOldContacts = mutation({
+export const cleanupOldContacts = internalMutation({
   handler: async (ctx) => {
     const hundredDaysAgo = Date.now() - (100 * 24 * 60 * 60 * 1000);
     

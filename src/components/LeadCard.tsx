@@ -144,6 +144,14 @@ export function LeadCard({
             </Tooltip>
           </TooltipProvider>
         )}
+
+        {/* Priority Score Badge */}
+        {lead.priorityScore !== undefined && (
+          <div className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium border mb-2 bg-blue-50 text-blue-700 border-blue-200 ml-2">
+            <TrendingUp className="h-3 w-3" />
+            Score: {lead.priorityScore}
+          </div>
+        )}
         
         <LeadCardTags tags={lead.tagsData || []} />
 

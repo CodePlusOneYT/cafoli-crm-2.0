@@ -115,6 +115,7 @@ export function LeadsToolbar({
               <SelectItem value="oldest">Oldest First</SelectItem>
               <SelectItem value="next_followup">Next Follow-up</SelectItem>
               <SelectItem value="last_contacted">Last Contacted</SelectItem>
+              <SelectItem value="priority_score">Priority Score</SelectItem>
             </SelectContent>
           </Select>
 

@@ -2,6 +2,14 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 
+export const LOG_CATEGORIES = {
+  WHATSAPP_INCOMING: "whatsapp_incoming",
+  WHATSAPP_OUTGOING: "whatsapp_outgoing",
+  WHATSAPP_STATUS: "whatsapp_status",
+  LEAD_INCOMING: "lead_incoming",
+  EMAIL: "email",
+} as const;
+
 export const log = mutation({
   args: {
     userId: v.id("users"),
