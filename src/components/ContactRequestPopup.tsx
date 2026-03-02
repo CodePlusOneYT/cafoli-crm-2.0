@@ -22,7 +22,7 @@ export function ContactRequestPopup() {
   const api = getConvexApi();
 
   const pendingRequests = useQuery(
-    (api as any).contactRequests.getPendingContactRequests,
+    (api as any).contactRequests.getPendingRequests,
     user ? { userId: user._id } : "skip"
   );
 
