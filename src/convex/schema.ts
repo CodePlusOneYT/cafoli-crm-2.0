@@ -156,7 +156,7 @@ export default defineSchema({
 
   productCategories: defineTable({
     name: v.string(),
-  }),
+  }).index("by_name", ["name"]),
 
   products: defineTable({
     name: v.string(),
@@ -187,9 +187,13 @@ export default defineSchema({
 
   templates: defineTable({
      name: v.string(),
-     content: v.string(),
+     content: v.optional(v.string()),
      category: v.optional(v.string()),
      language: v.optional(v.string()),
+     status: v.optional(v.string()),
+     externalId: v.optional(v.string()),
+     components: v.optional(v.array(v.any())),
+     lastSyncedAt: v.optional(v.number()),
   }),
 
   activityLogs: defineTable({
@@ -235,6 +239,10 @@ export default defineSchema({
     externalId: v.optional(v.string()),
     status: v.optional(v.string()),
     mediaId: v.optional(v.string()),
+    mediaUrl: v.optional(v.string()),
+    mediaName: v.optional(v.string()),
+    mediaMimeType: v.optional(v.string()),
+    quotedMessageId: v.optional(v.id("messages")),
   }).index("by_chat", ["chatId"])
     .index("by_external_id", ["externalId"])
     .index("by_chat_status", ["chatId", "status"]),
@@ -266,6 +274,9 @@ export default defineSchema({
   interventionRequests: defineTable({
     leadId: v.id("leads"),
     assignedTo: v.optional(v.id("users")),
+    requestedProduct: v.optional(v.string()),
+    customerMessage: v.optional(v.string()),
+    aiDraftedMessage: v.optional(v.string()),
     status: v.string(),
     claimedBy: v.optional(v.id("users")),
     claimedAt: v.optional(v.number()),
@@ -290,6 +301,9 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     createdBy: v.id("users"),
+    groupId: v.optional(v.string()),
+    inviteLink: v.optional(v.string()),
+    participantPhoneNumbers: v.optional(v.array(v.string())),
   }).index("by_created_by", ["createdBy"]),
 
   whatsappMediaCache: defineTable({
@@ -307,11 +321,12 @@ export default defineSchema({
   }),
 
   quickReplies: defineTable({
-    userId: v.id("users"),
+    userId: v.optional(v.id("users")),
     title: v.string(),
     content: v.string(),
     usageCount: v.optional(v.number()),
     name: v.optional(v.string()),
+    category: v.optional(v.string()),
   }),
 
   exportLogs: defineTable({

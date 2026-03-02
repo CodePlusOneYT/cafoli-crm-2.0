@@ -60,7 +60,7 @@ export const createLead = mutation({
       category: "Lead",
       action: "Created",
       details: `Lead created`,
-      leadId: args.id,
+      leadId: leadId,
     });
     
     // Send welcome email if email exists
@@ -138,7 +138,7 @@ export const updateLead = mutation({
         userId,
         category: "Lead",
         action: "Status Changed",
-        details: `Status changed to ${args.status}`,
+        details: `Status changed to ${args.patch.status}`,
         leadId: args.id,
       });
     }
@@ -284,7 +284,7 @@ export const assignLead = mutation({
       userId: currentUserId,
       category: "Lead",
       action: "Assigned",
-      details: `Lead assigned to ${assignedUser.name || assignedUser.email}`,
+      details: `Lead assigned to ${assignedUserName}`,
       leadId: args.leadId,
     });
 
@@ -329,7 +329,7 @@ export const unassignLead = mutation({
       userId: args.userId,
       category: "Lead",
       action: "Status Changed",
-      details: `Status changed to ${args.status}`,
+      details: `Status changed to ${lead.status}`,
       leadId: args.leadId,
     });
   },

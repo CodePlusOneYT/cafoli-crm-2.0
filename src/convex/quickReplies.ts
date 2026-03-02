@@ -10,7 +10,8 @@ export const createQuickReply = mutation({
   handler: async (ctx, args) => {
     const quickReplyId = await ctx.db.insert("quickReplies", {
       name: args.name,
-      message: args.message,
+      title: args.name,
+      content: args.message,
       category: args.category || "General",
       usageCount: 0,
     });
@@ -35,7 +36,8 @@ export const updateQuickReply = mutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       name: args.name,
-      message: args.message,
+      title: args.name,
+      content: args.message,
       category: args.category,
     });
   },
@@ -58,7 +60,7 @@ export const incrementUsage = mutation({
     const quickReply = await ctx.db.get(args.id);
     if (quickReply) {
       await ctx.db.patch(args.id, {
-        usageCount: quickReply.usageCount + 1,
+        usageCount: (quickReply.usageCount || 0) + 1,
       });
     }
   },

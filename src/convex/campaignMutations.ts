@@ -39,10 +39,11 @@ export const createCampaign = mutation({
       description: args.description,
       type: args.type,
       status: "draft",
-      createdBy: args.userId,
+      userId: args.userId,
       leadSelection: args.leadSelection,
       blocks: args.blocks,
       connections: args.connections,
+      createdAt: Date.now(),
       metrics: {
         enrolled: 0,
         completed: 0,

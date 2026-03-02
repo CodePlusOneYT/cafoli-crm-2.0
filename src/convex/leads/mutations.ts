@@ -14,6 +14,7 @@ export const logExport = mutation({
       downloadNumber: args.downloadNumber,
       fileName: args.fileName,
       leadCount: args.leadCount,
+      timestamp: Date.now(),
       exportedAt: Date.now(),
     });
   },

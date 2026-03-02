@@ -11,8 +11,10 @@ export const handleIncomingMessage = action({
   handler: async (ctx, args) => {
     // 1. Check if it's a reply to a bulk campaign
     // We check if the mutation exists before calling to avoid runtime errors if file is missing
-    if ((api as any).bulkMessaging?.processReply) {
-      await ctx.runMutation((api as any).bulkMessaging.processReply, {
+    // @ts-ignore
+    const bulkMessagingApi = (api as any).bulkMessaging;
+    if (bulkMessagingApi && bulkMessagingApi.processReply) {
+      await ctx.runMutation(bulkMessagingApi.processReply, {
         phoneNumber: args.phoneNumber,
         message: args.message
       });

@@ -12,7 +12,6 @@ export const createRangePdf = mutation({
     const rangeId = await ctx.db.insert("rangePdfs", {
       name: args.name,
       division: args.division,
-      category: args.category || "DIVISION",
       storageId: args.storageId,
     });
     return rangeId;
@@ -69,7 +68,6 @@ export const updateRangePdf = mutation({
     const updates: any = {
       name: args.name,
       division: args.division,
-      category: args.category || "DIVISION",
     };
 
     if (args.storageId) {

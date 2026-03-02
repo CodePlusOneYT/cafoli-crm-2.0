@@ -43,19 +43,21 @@ export const getPaginatedLeads = query({
           if (!isAdmin) {
             search = search.eq("assignedTo", userId);
           }
-          if (args.status && args.status !== "All") {
-            search = search.eq("status", args.status);
+          if (args.statuses && args.statuses.length === 1 && args.statuses[0] !== "All") {
+            search = search.eq("status", args.statuses[0]);
           }
           return search;
         });
       
+      let results = await query.collect();
+      
       if (user.role !== ROLES.ADMIN) {
-        query = query.filter(l => l.type !== "Irrelevant");
+        results = results.filter(l => l.type !== "Irrelevant");
       }
 
-      query = applyFilters(query, args);
-      query = sortLeads(query, args.sortBy);
-      const enrichedResults = await enrichLeads(ctx, query);
+      results = applyFilters(results, args);
+      results = sortLeads(results, args.sortBy);
+      const enrichedResults = await enrichLeads(ctx, results);
       return { page: enrichedResults, isDone: true, continueCursor: "" };
     }
 
@@ -63,7 +65,7 @@ export const getPaginatedLeads = query({
     if (args.filter === "mine") {
       const allLeads = await ctx.db
         .query("leads")
-        .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
+        .withIndex("by_assignedTo", (q) => q.eq("assignedTo", userId))
         .collect();
 
       let activeLeads = allLeads.filter(l => l.type !== "Irrelevant");

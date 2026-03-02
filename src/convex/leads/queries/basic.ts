@@ -20,7 +20,7 @@ export const getLeads = query({
     if (args.filter === "mine") {
       leads = await ctx.db
         .query("leads")
-        .withIndex("by_assigned_to", (q) => q.eq("assignedTo", userId))
+        .withIndex("by_assignedTo", (q) => q.eq("assignedTo", userId))
         .order("desc")
         .collect();
       leads = leads.filter(l => l.type !== "Irrelevant");

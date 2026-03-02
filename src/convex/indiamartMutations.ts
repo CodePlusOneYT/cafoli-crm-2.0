@@ -126,6 +126,7 @@ export const mergeIndiamartLead = internalMutation({
       // Create new follow-up for "now" (immediate attention)
       await ctx.db.insert("followups", {
         leadId: args.id,
+        userId: lead.assignedTo,
         assignedTo: lead.assignedTo,
         scheduledAt: now,
         status: "pending",

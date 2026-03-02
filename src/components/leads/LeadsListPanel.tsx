@@ -67,11 +67,11 @@ export function LeadsListPanel({
       if (!summaries[lead._id] && !loading[lead._id]) {
         fetchSummary(lead._id, {
           name: lead.name,
-          subject: lead.subject,
-          source: lead.source,
+          subject: lead.subject || "",
+          source: lead.source || "",
           status: lead.status,
-          type: lead.type,
-          message: lead.message,
+          type: lead.type || "",
+          message: lead.message || "",
           lastActivity: lead.lastActivity,
         });
       }
@@ -99,11 +99,11 @@ export function LeadsListPanel({
     if (lead) {
       fetchSummary(leadId, {
         name: lead.name,
-        subject: lead.subject,
-        source: lead.source,
+        subject: lead.subject || "",
+        source: lead.source || "",
         status: lead.status,
-        type: lead.type,
-        message: lead.message,
+        type: lead.type || "",
+        message: lead.message || "",
         lastActivity: lead.lastActivity,
       }, undefined, true); // Pass true to force regeneration
     }

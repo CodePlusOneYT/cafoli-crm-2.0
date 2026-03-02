@@ -6,7 +6,7 @@ export const getMyLeadsWithoutFollowUp = query({
   handler: async (ctx, args) => {
     const leads = await ctx.db
       .query("leads")
-      .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
+      .withIndex("by_assignedTo", (q) => q.eq("assignedTo", args.userId))
       .filter((q) => q.eq(q.field("nextFollowUpDate"), undefined))
       .collect();
     
@@ -22,7 +22,7 @@ export const getUpcomingFollowUps = query({
     
     const leads = await ctx.db
       .query("leads")
-      .withIndex("by_assigned_to", (q) => q.eq("assignedTo", args.userId))
+      .withIndex("by_assignedTo", (q) => q.eq("assignedTo", args.userId))
       .collect();
     
     return leads

@@ -89,7 +89,7 @@ export const incrementUsage = internalMutation({
     const key = await ctx.db.get(args.keyId);
     if (key) {
       await ctx.db.patch(args.keyId, {
-        usageCount: key.usageCount + 1,
+        usageCount: (key.usageCount || 0) + 1,
         lastUsedAt: Date.now(),
       });
     }
