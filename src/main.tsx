@@ -27,6 +27,7 @@ const Admin = lazy(() => import("./pages/Admin.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 const Logs = lazy(() => import("./pages/Logs.tsx"));
 const Catalog = lazy(() => import("./pages/Catalog.tsx"));
+const BulkMessenger = lazy(() => import("./pages/BulkMessenger.tsx"));
 
 // Simple loading fallback
 function RouteLoading() {
@@ -106,6 +107,10 @@ const router = createHashRouter([
       {
         path: "/catalog",
         element: <Catalog />,
+      },
+      {
+        path: "/bulk-messenger",
+        element: <BulkMessenger />,
       },
       {
         path: "*",

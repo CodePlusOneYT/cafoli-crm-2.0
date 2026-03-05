@@ -9,9 +9,10 @@ import { useAction, useQuery } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
-import { Upload, Send, FileText, AlertCircle, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Upload, Send, FileText, AlertCircle, Users, CheckCircle2, XCircle, History } from "lucide-react";
 import Papa from "papaparse";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 
 const api = getConvexApi() as any;
 
@@ -25,6 +26,7 @@ export default function BulkMessenger() {
 
   const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) || [];
   const sendBulk = useAction(api.whatsappBulk.sendBulkTemplateMessages);
+  const history = useQuery(api.bulkMessaging.getBulkContacts, user ? { adminId: user._id } : "skip") || [];
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -293,6 +295,61 @@ export default function BulkMessenger() {
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Recent Bulk Messages
+            </CardTitle>
+            <CardDescription>History of recently sent bulk messages and their status.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {history.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No bulk messages sent yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-3 font-medium">Phone Number</th>
+                      <th className="text-left p-3 font-medium">Name</th>
+                      <th className="text-left p-3 font-medium">Template</th>
+                      <th className="text-left p-3 font-medium">Status</th>
+                      <th className="text-left p-3 font-medium">Sent At</th>
+                      <th className="text-left p-3 font-medium">Last Interaction</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((contact: any) => (
+                      <tr key={contact._id} className="border-b hover:bg-muted/50">
+                        <td className="p-3">{contact.phoneNumber}</td>
+                        <td className="p-3">{contact.name || "-"}</td>
+                        <td className="p-3">{contact.templateId}</td>
+                        <td className="p-3">
+                          <Badge variant={
+                            contact.status === "replied" ? "default" : 
+                            contact.status === "cold" ? "secondary" : "outline"
+                          }>
+                            {contact.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {new Date(contact.sentAt).toLocaleString()}
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {contact.lastInteractionAt ? new Date(contact.lastInteractionAt).toLocaleString() : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
