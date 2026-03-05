@@ -83,3 +83,6 @@ export const completeContactRequest = mutation({
     });
   },
 });
+
+// Alias for backward compatibility
+export const getPendingContactRequests = getPendingRequests;
