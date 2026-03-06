@@ -25,11 +25,11 @@ export default function BulkMessenger() {
   const [processId, setProcessId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) || [];
+  const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) ?? [];
   const sendBulk = useAction(api.whatsappBulk.sendBulkTemplateMessages);
   const batchStatus = useQuery(api.whatsappBulk.getBatchStatus, processId ? { processId } : "skip");
   const syncTemplates = useAction(api.whatsappTemplates.syncTemplates);
-  const history = useQuery(api.bulkMessaging.getBulkContacts, user ? { adminId: user._id } : "skip") || [];
+  const history = useQuery(api.bulkMessaging.getBulkContacts, user ? { adminId: user._id } : "skip") ?? [];
 
   useEffect(() => {
     if (batchStatus) {
@@ -155,7 +155,7 @@ export default function BulkMessenger() {
                 <Input id="csv" type="file" accept=".csv" onChange={handleFileUpload} />
               </div>
 
-              {csvData.length > 0 && (
+              {csvData.length > 0 && csvData[0] && (
                 <div className="space-y-4 pt-4 border-t">
                   <div className="space-y-2">
                     <Label>Map Phone Number Column *</Label>
@@ -302,7 +302,7 @@ export default function BulkMessenger() {
           </Card>
         </div>
 
-        {csvData.length > 0 && (
+        {csvData.length > 0 && csvData[0] && (
           <Card>
             <CardHeader>
               <CardTitle>Data Preview</CardTitle>
@@ -320,8 +320,8 @@ export default function BulkMessenger() {
                   <tbody>
                     {csvData.slice(0, 5).map((row, i) => (
                       <tr key={i} className="border-b hover:bg-muted/50">
-                        {Object.values(row).map((val: any, j) => (
-                          <td key={j} className="p-2">{val}</td>
+                        {Object.values(row as Record<string, unknown>).map((val: any, j) => (
+                          <td key={j} className="p-2">{String(val ?? "")}</td>
                         ))}
                       </tr>
                     ))}
