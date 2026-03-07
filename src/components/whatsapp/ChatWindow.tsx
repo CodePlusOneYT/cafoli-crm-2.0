@@ -9,7 +9,7 @@ import { getConvexApi } from "@/lib/convex-api";
 const api = getConvexApi() as any;
 import { Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, usePaginatedQuery } from "convex/react";
-import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X, AlertTriangle, ImageIcon, HelpCircle, FileText, Sparkles, Loader2 } from "lucide-react";
+import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X, AlertTriangle, ImageIcon, HelpCircle, FileText, Sparkles, Loader2, ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,9 +17,10 @@ import { useAuth } from "@/hooks/use-auth";
 interface ChatWindowProps {
   selectedLeadId: Id<"leads">;
   selectedLead: any;
+  onBack?: () => void;
 }
 
-export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
+export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowProps) {
   const { user } = useAuth();
 
   // Use paginated query for messages (50 items per page, loaded latest first)
@@ -374,8 +375,13 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden relative bg-background">
-      <div className="h-16 border-b px-4 flex items-center justify-between flex-shrink-0 bg-background z-10 shadow-sm">
-        <div className="flex items-center gap-3">
+      <div className="h-16 border-b px-2 md:px-4 flex items-center justify-between flex-shrink-0 bg-background z-10 shadow-sm">
+        <div className="flex items-center gap-2 md:gap-3">
+          {onBack && (
+            <Button variant="ghost" size="icon" className="md:hidden h-9 w-9" onClick={onBack}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
           <Avatar className="h-10 w-10 border shadow-sm">
             <AvatarFallback className="bg-primary/10 text-primary font-medium">
               {getInitials(selectedLead.name)}
@@ -576,7 +582,7 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
             </Button>
           </div>
         )}
-        <div className="flex items-end gap-2 max-w-4xl mx-auto">
+        <div className="flex flex-col sm:flex-row items-end gap-2 max-w-4xl mx-auto">
           <input
             ref={fileInputRef}
             type="file"
@@ -584,7 +590,7 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
             onChange={handleFileSelect}
             accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
           />
-          <div className="flex items-center gap-1 bg-white rounded-full shadow-sm p-1">
+          <div className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-1 bg-white rounded-full shadow-sm p-1 mb-2 sm:mb-0">
             <Button 
               variant="ghost" 
               size="icon"
@@ -615,33 +621,35 @@ export function ChatWindow({ selectedLeadId, selectedLead }: ChatWindowProps) {
             </Button>
           </div>
 
-          <div className="flex-1 relative flex items-center bg-white rounded-2xl shadow-sm">
+          <div className="flex w-full items-end gap-2">
+            <div className="flex-1 relative flex items-center bg-white rounded-2xl shadow-sm">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="absolute left-1 h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted hidden sm:flex"
+                title="Add emoji"
+                disabled={!isWithinWindow}
+              >
+                <Smile className="h-5 w-5" />
+              </Button>
+              <Input
+                placeholder={isWithinWindow ? "Type a message or / for commands..." : "Session expired. Send a template."}
+                value={whatsappMessage}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                className="pl-3 sm:pl-12 pr-4 py-6 border-none bg-transparent focus-visible:ring-0 text-base"
+                disabled={isSending || isUploading || !isWithinWindow || isGeneratingAi}
+              />
+            </div>
             <Button 
-              variant="ghost" 
+              onClick={handleSendWhatsApp} 
+              disabled={isSending || isUploading || (!whatsappMessage.trim() && !selectedFile) || !isWithinWindow}
               size="icon"
-              className="absolute left-1 h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-              title="Add emoji"
-              disabled={!isWithinWindow}
+              className="h-12 w-12 rounded-full shadow-sm flex-shrink-0"
             >
-              <Smile className="h-5 w-5" />
+              <Send className="h-5 w-5 ml-1" />
             </Button>
-            <Input
-              placeholder={isWithinWindow ? "Type a message or / for commands..." : "Session expired. Send a template."}
-              value={whatsappMessage}
-              onChange={handleInputChange}
-              onKeyPress={handleKeyPress}
-              className="pl-12 pr-4 py-6 border-none bg-transparent focus-visible:ring-0 text-base"
-              disabled={isSending || isUploading || !isWithinWindow || isGeneratingAi}
-            />
           </div>
-          <Button 
-            onClick={handleSendWhatsApp} 
-            disabled={isSending || isUploading || (!whatsappMessage.trim() && !selectedFile) || !isWithinWindow}
-            size="icon"
-            className="h-12 w-12 rounded-full shadow-sm flex-shrink-0"
-          >
-            <Send className="h-5 w-5 ml-1" />
-          </Button>
         </div>
       </div>
     </div>

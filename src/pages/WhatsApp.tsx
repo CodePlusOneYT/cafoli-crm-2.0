@@ -121,7 +121,7 @@ export default function WhatsApp() {
     <AppLayout>
       <div className="flex h-[calc(100vh-4rem)] bg-background overflow-hidden">
         {/* Left Sidebar */}
-        <div className="w-[350px] flex-shrink-0 border-r flex flex-col bg-muted/10">
+        <div className={`w-full md:w-[350px] flex-shrink-0 border-r flex-col bg-muted/10 ${selectedLeadId ? 'hidden md:flex' : 'flex'}`}>
           {/* Sidebar Header */}
           <div className="h-16 border-b flex items-center justify-between px-4 bg-background">
             <h1 className="text-xl font-semibold">Messages</h1>
@@ -175,11 +175,12 @@ export default function WhatsApp() {
         </div>
 
         {/* Main Chat Area */}
-        <div className="flex-1 min-w-0 bg-background flex flex-col">
+        <div className={`flex-1 min-w-0 bg-background flex-col ${selectedLeadId ? 'flex' : 'hidden md:flex'}`}>
           {selectedLeadId && selectedLead ? (
             <ChatWindow 
               selectedLeadId={selectedLeadId} 
-              selectedLead={selectedLead} 
+              selectedLead={selectedLead}
+              onBack={() => setSelectedLeadId(null)}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center bg-muted/5">
