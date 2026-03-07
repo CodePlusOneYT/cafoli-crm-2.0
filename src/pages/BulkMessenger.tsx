@@ -27,7 +27,7 @@ export default function BulkMessenger() {
 
   const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) ?? [];
   const sendBulk = useAction(api.whatsappBulk.sendBulkTemplateMessages);
-  const batchStatus = useQuery(api.whatsappBulk.getBatchStatus, processId ? { processId } : "skip");
+  const batchStatus = useQuery(api.bulkMessaging.getBatchStatus, processId ? { processId } : "skip");
   const syncTemplates = useAction(api.whatsappTemplates.syncTemplates);
   const history = useQuery(api.bulkMessaging.getBulkContacts, user ? { adminId: user._id } : "skip") ?? [];
 
