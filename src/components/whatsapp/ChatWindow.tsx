@@ -10,7 +10,8 @@ const api = getConvexApi() as any;
 import { Id } from "@/convex/_generated/dataModel";
 import { useAction, useMutation, usePaginatedQuery } from "convex/react";
 import { Check, CheckCheck, MessageSquare, MoreVertical, Paperclip, Phone, Reply, Send, Smile, Video, X, AlertTriangle, ImageIcon, HelpCircle, FileText, Sparkles, Loader2, ArrowLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -23,11 +24,11 @@ interface ChatWindowProps {
 export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowProps) {
   const { user } = useAuth();
 
-  // Use paginated query for messages (50 items per page, loaded latest first)
+  // Use paginated query for messages (100 items per page, loaded latest first)
   const { results: messagesResult, status, loadMore } = usePaginatedQuery(
     api.whatsappQueries.getChatMessages,
     { leadId: selectedLeadId },
-    { initialNumItems: 50 }
+    { initialNumItems: 100 }
   );
 
   // Fix: correctly access results and reverse for display (Oldest -> Newest)
@@ -42,6 +43,7 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
   const generateUploadUrl = useMutation(api.whatsappStorage.generateUploadUrl);
   const markChatAsRead = useMutation(api.whatsappMutations.markChatAsRead);
   const generateAndSendAiReply = useAction(api.whatsappAi.generateAndSendAiReply);
+  const generateSummary = useAction(api.whatsappAi.generateChatSummary);
   const incrementQuickReplyUsage = useMutation(api.quickReplies.incrementUsage);
   const updateActiveSession = useMutation(api.activeChatSessions.updateActiveSession);
   const removeActiveSession = useMutation(api.activeChatSessions.removeActiveSession);
@@ -54,6 +56,9 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [now, setNow] = useState(Date.now());
   const [showCommandMenu, setShowCommandMenu] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [showSummaryDialog, setShowSummaryDialog] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -261,6 +266,21 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
     }
   };
 
+  const handleGenerateSummary = async () => {
+    setIsGeneratingSummary(true);
+    setShowSummaryDialog(true);
+    setSummaryText(null);
+    try {
+      const summary = await generateSummary({ leadId: selectedLeadId });
+      setSummaryText(summary);
+    } catch (error) {
+      toast.error("Failed to generate summary");
+      setShowSummaryDialog(false);
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
   const handleAiReply = async () => {
     if (!user || !selectedLead) return;
     
@@ -339,6 +359,33 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
     }
   };
 
+  const formatMessageDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const isSameDay = (d1: Date, d2: Date) => 
+      d1.getDate() === d2.getDate() && 
+      d1.getMonth() === d2.getMonth() && 
+      d1.getFullYear() === d2.getFullYear();
+
+    if (isSameDay(date, today)) {
+      return "Today";
+    } else if (isSameDay(date, yesterday)) {
+      return "Yesterday";
+    }
+
+    const diffTime = Math.abs(today.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'long' });
+    }
+
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  };
+
   const renderMessageContent = (message: any) => {
     if (message.messageType === "image" && message.mediaUrl) {
       return (
@@ -396,6 +443,19 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-muted-foreground hover:text-primary hidden sm:flex items-center gap-1"
+            onClick={handleGenerateSummary}
+            disabled={isGeneratingSummary}
+          >
+            {isGeneratingSummary ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            <span className="text-xs font-medium">Summary</span>
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground sm:hidden" onClick={handleGenerateSummary}>
+            <FileText className="h-4 w-4" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
             <Phone className="h-4 w-4" />
           </Button>
@@ -440,58 +500,71 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
               <p className="text-sm text-muted-foreground mt-1">Send a message to start the conversation</p>
             </div>
           ) : (
-            messages.map((message: any) => (
-              <div
-                key={message._id}
-                className={`flex ${message.direction === "outbound" ? "justify-end" : "justify-start"} group`}
-              >
-                <div className="flex items-end gap-2 max-w-[75%]">
-                  {message.direction === "inbound" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 hover:bg-white shadow-sm rounded-full"
-                      onClick={() => setReplyingTo(message)}
-                      title="Reply"
-                    >
-                      <Reply className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
+            messages.map((message: any, index: number) => {
+              const showDateSeparator = index === 0 || formatMessageDate(message._creationTime) !== formatMessageDate(messages[index - 1]._creationTime);
+              const dateLabel = formatMessageDate(message._creationTime);
+
+              return (
+                <React.Fragment key={message._id}>
+                  {showDateSeparator && (
+                    <div className="flex justify-center my-4">
+                      <div className="bg-blue-100/80 backdrop-blur-sm text-blue-800 text-xs font-medium px-3 py-1 rounded-md shadow-sm">
+                        {dateLabel}
+                      </div>
+                    </div>
                   )}
                   <div
-                    className={`rounded-2xl px-3.5 py-2 shadow-sm w-full ${
-                      message.direction === "outbound"
-                        ? "bg-[#d9fdd3] rounded-br-sm"
-                        : "bg-white rounded-bl-sm"
-                    }`}
+                    className={`flex ${message.direction === "outbound" ? "justify-end" : "justify-start"} group`}
                   >
-                    {message.quotedMessage && (
-                      <div className="mb-2 p-2 bg-black/5 rounded-xl border-l-4 border-primary/50 text-xs">
-                        <p className="font-semibold text-primary/80 mb-0.5">
-                          {message.quotedMessage.direction === "outbound" ? "You" : selectedLead.name}
-                        </p>
-                        <p className="truncate opacity-70">{message.quotedMessage.content || "Media"}</p>
+                    <div className="flex items-end gap-2 max-w-[75%]">
+                      {message.direction === "inbound" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 hover:bg-white shadow-sm rounded-full"
+                          onClick={() => setReplyingTo(message)}
+                          title="Reply"
+                        >
+                          <Reply className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      )}
+                      <div
+                        className={`rounded-2xl px-3.5 py-2 shadow-sm w-full ${
+                          message.direction === "outbound"
+                            ? "bg-[#d9fdd3] rounded-br-sm"
+                            : "bg-white rounded-bl-sm"
+                        }`}
+                      >
+                        {message.quotedMessage && (
+                          <div className="mb-2 p-2 bg-black/5 rounded-xl border-l-4 border-primary/50 text-xs">
+                            <p className="font-semibold text-primary/80 mb-0.5">
+                              {message.quotedMessage.direction === "outbound" ? "You" : selectedLead.name}
+                            </p>
+                            <p className="truncate opacity-70">{message.quotedMessage.content || "Media"}</p>
+                          </div>
+                        )}
+                        {renderMessageContent(message)}
+                        <div className="text-[10px] mt-1 text-gray-500 text-right flex items-center justify-end gap-1 font-medium">
+                          {formatTime(message._creationTime)}
+                          {message.direction === "outbound" && getStatusIcon(message.status)}
+                        </div>
                       </div>
-                    )}
-                    {renderMessageContent(message)}
-                    <div className="text-[10px] mt-1 text-gray-500 text-right flex items-center justify-end gap-1 font-medium">
-                      {formatTime(message._creationTime)}
-                      {message.direction === "outbound" && getStatusIcon(message.status)}
+                      {message.direction === "outbound" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 hover:bg-white shadow-sm rounded-full"
+                          onClick={() => setReplyingTo(message)}
+                          title="Reply"
+                        >
+                          <Reply className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  {message.direction === "outbound" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 hover:bg-white shadow-sm rounded-full"
-                      onClick={() => setReplyingTo(message)}
-                      title="Reply"
-                    >
-                      <Reply className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))
+                </React.Fragment>
+              );
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -652,6 +725,29 @@ export function ChatWindow({ selectedLeadId, selectedLead, onBack }: ChatWindowP
           </div>
         </div>
       </div>
+
+      <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Chat Summary</DialogTitle>
+            <DialogDescription>
+              AI-generated summary of the conversation with {selectedLead.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-[150px] flex items-center justify-center p-4 bg-muted/30 rounded-md">
+            {isGeneratingSummary ? (
+              <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="text-sm">Analyzing conversation...</p>
+              </div>
+            ) : (
+              <div className="text-sm whitespace-pre-wrap w-full">
+                {summaryText}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

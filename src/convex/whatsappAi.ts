@@ -4,6 +4,29 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { generateWithGemini, extractJsonFromMarkdown } from "./lib/gemini";
 
+export const generateChatSummary = action({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args) => {
+    const chats = await ctx.runQuery(internal.whatsappQueries.getChatsByLeadId, { leadId: args.leadId });
+    if (!chats || chats.length === 0) return "No chat history found.";
+    
+    const messages = chats[0].messages || [];
+    if (messages.length === 0) return "No messages to summarize.";
+
+    // Take last 100 messages to avoid token limits
+    const recentMessages = messages.slice(-100);
+    const formattedMessages = recentMessages.map((m: any) => `${m.direction === 'inbound' ? 'Lead' : 'Agent'}: ${m.content || 'Media/File'}`).join('\n');
+
+    const systemPrompt = `You are a helpful CRM assistant. Summarize the following WhatsApp conversation between an agent and a lead. Keep it concise and highlight key points, requested products, and any pending actions.`;
+    const userPrompt = `Conversation:\n${formattedMessages}`;
+
+    const { text } = await generateWithGemini(ctx, systemPrompt, userPrompt);
+    return text;
+  }
+});
+
 // Public wrapper for frontend to call
 export const generateAndSendAiReply = action({
   args: {
