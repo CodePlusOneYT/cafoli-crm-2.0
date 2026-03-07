@@ -3,6 +3,15 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { LOG_CATEGORIES } from "./activityLogs";
 
+function standardizePhoneNumber(phone: string): string {
+  if (!phone) return "";
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.length === 10) {
+    return "91" + cleaned;
+  }
+  return cleaned;
+}
+
 export const storeMessage = internalMutation({
   args: {
     leadId: v.id("leads"),
@@ -125,18 +134,24 @@ export const processWhatsAppLead = internalMutation({
     message: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const cleanPhone = args.phoneNumber.replace(/[\s+]/g, "");
+    const standardizedPhone = standardizePhoneNumber(args.phoneNumber);
     
-    const allLeads = await ctx.db.query("leads").collect();
-    
-    const matchingLeads = allLeads.filter((lead: any) => {
-      if (!lead.mobile) return false;
-      const leadPhone = lead.mobile.replace(/[\s+]/g, "");
-      return leadPhone.includes(cleanPhone) || cleanPhone.includes(leadPhone);
-    });
+    // Try exact match on standardized phone
+    let existingLead = await ctx.db
+      .query("leads")
+      .withIndex("by_mobile", (q) => q.eq("mobile", standardizedPhone))
+      .first();
+      
+    if (!existingLead) {
+      // Fallback to exact match on original phone
+      existingLead = await ctx.db
+        .query("leads")
+        .withIndex("by_mobile", (q) => q.eq("mobile", args.phoneNumber))
+        .first();
+    }
 
-    if (matchingLeads && matchingLeads.length > 0) {
-      return { leadId: matchingLeads[0]._id, isNewLead: false };
+    if (existingLead) {
+      return { leadId: existingLead._id, isNewLead: false };
     }
 
     // Check if it's a bulk contact reply
@@ -153,7 +168,7 @@ export const processWhatsAppLead = internalMutation({
 
       const leadId = await ctx.db.insert("leads", {
         name: contact.name || "Bulk Contact",
-        mobile: contact.phoneNumber,
+        mobile: standardizedPhone,
         source: "Bulk Campaign Reply",
         status: "Cold",
         type: "To be Decided",
@@ -169,7 +184,7 @@ export const processWhatsAppLead = internalMutation({
       name: args.name || args.phoneNumber,
       subject: "New WhatsApp Lead",
       source: "WhatsApp",
-      mobile: args.phoneNumber,
+      mobile: standardizedPhone,
       status: "Cold",
       type: "To be Decided",
       lastActivity: Date.now(),
@@ -312,11 +327,12 @@ export const createLeadFromWhatsApp = internalMutation({
     message: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const standardizedPhone = standardizePhoneNumber(args.phoneNumber);
     const leadId = await ctx.db.insert("leads", {
       name: args.name || args.phoneNumber,
       subject: "New WhatsApp Lead",
       source: "WhatsApp",
-      mobile: args.phoneNumber,
+      mobile: standardizedPhone,
       status: "Cold",
       type: "To be Decided",
       lastActivity: Date.now(),
