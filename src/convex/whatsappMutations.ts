@@ -118,6 +118,76 @@ export const storeMessage = internalMutation({
   },
 });
 
+export const processWhatsAppLead = internalMutation({
+  args: {
+    phoneNumber: v.string(),
+    name: v.optional(v.string()),
+    message: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const cleanPhone = args.phoneNumber.replace(/[\s+]/g, "");
+    
+    const allLeads = await ctx.db.query("leads").collect();
+    
+    const matchingLeads = allLeads.filter((lead: any) => {
+      if (!lead.mobile) return false;
+      const leadPhone = lead.mobile.replace(/[\s+]/g, "");
+      return leadPhone.includes(cleanPhone) || cleanPhone.includes(leadPhone);
+    });
+
+    if (matchingLeads && matchingLeads.length > 0) {
+      return { leadId: matchingLeads[0]._id, isNewLead: false };
+    }
+
+    // Check if it's a bulk contact reply
+    const contact = await ctx.db
+      .query("bulkContacts")
+      .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", args.phoneNumber))
+      .first();
+
+    if (contact && contact.status === "sent") {
+      await ctx.db.patch(contact._id, {
+        status: "replied",
+        lastInteractionAt: Date.now(),
+      });
+
+      const leadId = await ctx.db.insert("leads", {
+        name: contact.name || "Bulk Contact",
+        mobile: contact.phoneNumber,
+        source: "Bulk Campaign Reply",
+        status: "Cold",
+        type: "To be Decided",
+        lastActivity: Date.now(),
+        message: args.message,
+        priorityScore: 50,
+      });
+      return { leadId, isNewLead: true };
+    }
+
+    // Create new lead
+    const leadId = await ctx.db.insert("leads", {
+      name: args.name || args.phoneNumber,
+      subject: "New WhatsApp Lead",
+      source: "WhatsApp",
+      mobile: args.phoneNumber,
+      status: "Cold",
+      type: "To be Decided",
+      lastActivity: Date.now(),
+      message: args.message,
+    });
+
+    // Log lead creation
+    await ctx.scheduler.runAfter(0, internal.activityLogs.logActivity, {
+      category: LOG_CATEGORIES.LEAD_INCOMING,
+      action: "Created new lead from WhatsApp",
+      leadId: leadId,
+      details: `Phone: ${args.phoneNumber}`,
+    });
+
+    return { leadId, isNewLead: true };
+  }
+});
+
 export const ensureChatExists = internalMutation({
   args: {
     leadId: v.id("leads"),

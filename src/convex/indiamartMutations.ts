@@ -17,6 +17,203 @@ function standardizePhoneNumber(phone: string): string {
   return cleaned;
 }
 
+export const processIndiamartLead = internalMutation({
+  args: {
+    uniqueQueryId: v.string(),
+    name: v.string(),
+    subject: v.string(),
+    mobile: v.string(),
+    altMobile: v.optional(v.string()),
+    email: v.string(),
+    altEmail: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    altPhone: v.optional(v.string()),
+    agencyName: v.optional(v.string()),
+    address: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    pincode: v.optional(v.string()),
+    message: v.string(),
+    metadata: v.object({
+      queryTime: v.string(),
+      queryType: v.string(),
+      mcatName: v.string(),
+      productName: v.string(),
+      countryIso: v.string(),
+      callDuration: v.optional(v.string()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    // Standardize the mobile number before checking
+    const standardizedMobile = standardizePhoneNumber(args.mobile);
+    
+    // First check by mobile number (primary deduplication)
+    let existingLead = await ctx.db
+      .query("leads")
+      .withIndex("by_mobile", (q) => q.eq("mobile", standardizedMobile))
+      .first();
+    
+    if (!existingLead) {
+      // Fallback: check by unique query ID (for legacy data)
+      existingLead = await ctx.db
+        .query("leads")
+        .filter((q) => q.eq(q.field("indiamartUniqueId"), args.uniqueQueryId))
+        .first();
+    }
+
+    if (existingLead) {
+      if (existingLead.type === "Irrelevant") {
+        await ctx.db.patch(existingLead._id, {
+          type: "To be Decided",
+          status: "Cold",
+          assignedTo: undefined,
+          adminAssignmentRequired: true,
+          lastActivity: Date.now(),
+        });
+        return { status: "reactivated", id: existingLead._id };
+      }
+
+      // Merge logic
+      const now = Date.now();
+      const updates: any = {
+        lastActivity: now,
+      };
+
+      // If assigned, bump to top of my_leads by setting nextFollowUpDate to now
+      if (existingLead.assignedTo) {
+        updates.nextFollowUpDate = now;
+        
+        // Also update follow-up history
+        const pending = await ctx.db
+          .query("followups")
+          .withIndex("by_lead", (q) => q.eq("leadId", existingLead._id))
+          .filter((q) => q.eq(q.field("status"), "pending"))
+          .collect();
+
+        for (const followup of pending) {
+          const isOverdue = now > (followup.scheduledAt + 20 * 60 * 1000);
+          await ctx.db.patch(followup._id, {
+            status: "completed",
+            completedAt: now,
+            completionStatus: isOverdue ? "overdue" : "timely",
+          });
+        }
+        
+        // Create new follow-up for "now" (immediate attention)
+        await ctx.db.insert("followups", {
+          leadId: existingLead._id,
+          userId: existingLead.assignedTo,
+          assignedTo: existingLead.assignedTo,
+          scheduledAt: now,
+          status: "pending",
+        });
+      }
+
+      const standardizedAltMobile = args.altMobile ? standardizePhoneNumber(args.altMobile) : undefined;
+
+      // Merge fields
+      if (args.name) updates.name = args.name;
+      if (standardizedMobile) updates.mobile = standardizedMobile;
+      if (args.email) updates.email = args.email;
+      if (standardizedAltMobile) updates.altMobile = standardizedAltMobile;
+      if (args.agencyName) updates.agencyName = args.agencyName;
+      if (args.pincode) updates.pincode = args.pincode;
+      if (args.state) updates.state = args.state;
+      
+      // Update search text
+      const merged = {
+        name: updates.name || existingLead.name,
+        subject: existingLead.subject,
+        mobile: updates.mobile || existingLead.mobile,
+        altMobile: updates.altMobile || existingLead.altMobile,
+        email: updates.email || existingLead.email,
+        altEmail: existingLead.altEmail,
+        message: existingLead.message,
+      };
+      
+      updates.searchText = [
+        merged.name,
+        merged.subject,
+        merged.mobile,
+        merged.altMobile,
+        merged.email,
+        merged.altEmail,
+        merged.message
+      ].filter(Boolean).join(" ");
+
+      await ctx.db.patch(existingLead._id, updates);
+
+      // Add system comment
+      await ctx.db.insert("comments", {
+        leadId: existingLead._id,
+        content: `Lead reposted from IndiaMART.\nNew Message: ${args.message || "No message"}\nSubject: ${args.subject}`,
+        isSystem: true,
+      });
+
+      return { status: "merged", id: existingLead._id };
+    }
+
+    // Create logic
+    const standardizedAltMobile = args.altMobile ? standardizePhoneNumber(args.altMobile) : undefined;
+
+    const leadId = await ctx.db.insert("leads", {
+      name: args.name,
+      subject: args.subject,
+      source: "IndiaMART",
+      mobile: standardizedMobile,
+      altMobile: standardizedAltMobile,
+      email: args.email,
+      altEmail: args.altEmail,
+      agencyName: args.agencyName,
+      pincode: args.pincode,
+      state: args.state,
+      message: args.message,
+      status: "Cold",
+      type: "To be Decided",
+      lastActivity: Date.now(),
+      indiamartUniqueId: args.uniqueQueryId,
+      indiamartMetadata: args.metadata,
+    });
+    
+    // Send welcome email if email is provided
+    if (args.email) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.brevo.sendWelcomeEmail, {
+          leadName: args.name,
+          leadEmail: args.email,
+          source: "IndiaMART",
+        });
+      } catch (error) {
+        console.error("Failed to schedule welcome email:", error);
+      }
+    }
+    
+    // Send welcome WhatsApp message to primary mobile
+    try {
+      await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+        phoneNumber: standardizedMobile,
+        leadId: leadId,
+      });
+    } catch (error) {
+      console.error("Failed to schedule welcome WhatsApp template to primary mobile:", error);
+    }
+    
+    // Send welcome WhatsApp message to alternate mobile if exists
+    if (standardizedAltMobile) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.whatsappTemplates.sendWelcomeMessage, {
+          phoneNumber: standardizedAltMobile,
+          leadId: leadId,
+        });
+      } catch (error) {
+        console.error("Failed to schedule welcome WhatsApp template to alternate mobile:", error);
+      }
+    }
+    
+    return { status: "created", id: leadId };
+  }
+});
+
 export const checkIndiamartLeadExists = internalQuery({
   args: { 
     uniqueQueryId: v.string(),

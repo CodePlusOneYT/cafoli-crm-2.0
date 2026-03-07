@@ -185,61 +185,8 @@ http.route({
       const response = body.RESPONSE;
       const uniqueQueryId = response.UNIQUE_QUERY_ID;
 
-      // Check if lead already exists by mobile number (primary) or unique query ID (fallback)
-      const existing = await ctx.runQuery("indiamartMutations:checkIndiamartLeadExists" as any, {
-        uniqueQueryId,
-        mobile: response.SENDER_MOBILE || "",
-      });
-
-      if (existing) {
-        if (existing.type === "Irrelevant") {
-          await ctx.runMutation("indiamartMutations:reactivateLead" as any, {
-            id: existing._id,
-          });
-          console.log(`Reactivated irrelevant IndiaMART lead: ${uniqueQueryId}`);
-          return new Response(JSON.stringify({ success: true, message: "Lead reactivated" }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        // Merge duplicate lead
-        await ctx.runMutation("indiamartMutations:mergeIndiamartLead" as any, {
-          id: existing._id,
-          uniqueQueryId,
-          name: response.SENDER_NAME,
-          subject: response.SUBJECT,
-          mobile: response.SENDER_MOBILE || "",
-          altMobile: response.SENDER_MOBILE_ALT,
-          email: response.SENDER_EMAIL,
-          altEmail: response.SENDER_EMAIL_ALT,
-          phone: response.SENDER_PHONE,
-          altPhone: response.SENDER_PHONE_ALT,
-          agencyName: response.SENDER_COMPANY,
-          address: response.SENDER_ADDRESS,
-          city: response.SENDER_CITY,
-          state: response.SENDER_STATE,
-          pincode: response.SENDER_PINCODE,
-          message: response.QUERY_MESSAGE,
-          metadata: {
-            queryTime: response.QUERY_TIME,
-            queryType: response.QUERY_TYPE,
-            mcatName: response.QUERY_MCAT_NAME,
-            productName: response.QUERY_PRODUCT_NAME,
-            countryIso: response.SENDER_COUNTRY_ISO,
-            callDuration: response.CALL_DURATION || undefined,
-          },
-        });
-
-        console.log(`IndiaMART lead ${uniqueQueryId} merged successfully`);
-        return new Response(JSON.stringify({ success: true, message: "Lead merged" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      // Create the lead
-      await ctx.runMutation("indiamartMutations:createIndiamartLead" as any, {
+      // Process the lead atomically to prevent race conditions
+      const result = await ctx.runMutation("indiamartMutations:processIndiamartLead" as any, {
         uniqueQueryId,
         name: response.SENDER_NAME,
         subject: response.SUBJECT,
@@ -265,9 +212,9 @@ http.route({
         },
       });
 
-      console.log(`IndiaMART lead ${uniqueQueryId} created successfully`);
+      console.log(`IndiaMART lead ${uniqueQueryId} processed successfully: ${result.status}`);
 
-      return new Response(JSON.stringify({ success: true, message: "Lead created" }), {
+      return new Response(JSON.stringify({ success: true, message: `Lead ${result.status}` }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });

@@ -22,44 +22,17 @@ export const handleIncomingMessage = internalAction({
     try {
       console.log("🔵 handleIncomingMessage called", { from: args.from, messageId: args.messageId, text: args.text });
       
-      // Find lead by phone number
-      const allLeads = await ctx.runQuery(internal.whatsappMutations.getLeadsForMatching, {});
-      
-      // Clean phone number (remove + and spaces)
-      const cleanPhone = args.from.replace(/[\s+]/g, "");
-      
-      const matchingLeads = allLeads.filter((lead: any) => {
-        const leadPhone = lead.mobile.replace(/[\s+]/g, "");
-        return leadPhone.includes(cleanPhone) || cleanPhone.includes(leadPhone);
+      // Process lead atomically to prevent race conditions
+      const { leadId, isNewLead } = await ctx.runMutation(internal.whatsappMutations.processWhatsAppLead, {
+        phoneNumber: args.from,
+        name: args.senderName,
+        message: args.text,
       });
-
-      let leadId;
-      let isNewLead = false;
-
-      if (matchingLeads && matchingLeads.length > 0) {
-        leadId = matchingLeads[0]._id;
-        console.log("✅ Found existing lead:", leadId);
+      
+      if (isNewLead) {
+        console.log("✅ Created new lead:", leadId);
       } else {
-        // Check if it's a bulk contact reply
-        const bulkLeadId = await ctx.runMutation(internal.bulkMessaging.processReply, {
-          phoneNumber: args.from,
-          message: args.text,
-        });
-
-        if (bulkLeadId) {
-           leadId = bulkLeadId;
-           isNewLead = true;
-           console.log("✅ Created new lead from bulk contact:", leadId);
-        } else {
-            console.log(`⚠️ No lead found for phone number: ${args.from}. Creating new lead.`);
-            leadId = await ctx.runMutation(internal.whatsappMutations.createLeadFromWhatsApp, {
-              phoneNumber: args.from,
-              name: args.senderName,
-              message: args.text,
-            });
-            isNewLead = true;
-            console.log("✅ Created new lead:", leadId);
-        }
+        console.log("✅ Found existing lead:", leadId);
       }
 
       if (leadId) {
