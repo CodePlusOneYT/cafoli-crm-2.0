@@ -1,5 +1,4 @@
-import { internalQuery } from "./_generated/server";
-import { internalMutation } from "./_generated/server";
+import { internalQuery, internalMutation, action } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -140,5 +139,220 @@ export const testProcessWhatsAppLeadPerformance = internalMutation({
       maxTimeMs: Math.max(...times), 
       minTimeMs: Math.min(...times) 
     };
+  }
+});
+
+export const prepareBaseR2Leads = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Load any offloaded leads back
+    const r2Leads = await ctx.db.query("r2_leads_mock").collect();
+    for (const r2Lead of r2Leads) {
+      const data = r2Lead.leadData;
+      delete data._id;
+      delete data._creationTime;
+      await ctx.db.insert("leads", data);
+      await ctx.db.delete(r2Lead._id);
+    }
+
+    // Ensure we have exactly 150
+    const currentLeads = await ctx.db.query("leads").filter(q => q.eq(q.field("source"), "R2 Test")).collect();
+    
+    if (currentLeads.length < 150) {
+      const needed = 150 - currentLeads.length;
+      for (let i = 0; i < needed; i++) {
+        await ctx.db.insert("leads", {
+          name: `R2 Test Lead Extra ${i}`,
+          mobile: `919999999${(i + 500).toString().padStart(3, '0')}`,
+          status: "Cold",
+          type: "To be Decided",
+          lastActivity: Date.now(),
+          source: "R2 Test",
+        });
+      }
+    } else if (currentLeads.length > 150) {
+      const excess = currentLeads.length - 150;
+      for (let i = 0; i < excess; i++) {
+        await ctx.db.delete(currentLeads[i]._id);
+      }
+    }
+  }
+});
+
+export const verifyAndTestR2 = internalMutation({
+  args: { sendTime: v.number() },
+  handler: async (ctx, args): Promise<{
+    sendTimeMs: number;
+    verifyTimeMs: number;
+    offloadTimeMs: number;
+    loadTimeMs: number;
+    totalTestLeadsFound: number;
+    mismatchCount: number;
+    loadedCount: number;
+    success: boolean;
+  }> => {
+    const startVerify = Date.now();
+    
+    const originalR2Leads = await ctx.db.query("leads").filter(q => q.eq(q.field("source"), "R2 Test")).collect();
+    const webhookLeads = await ctx.db.query("leads").filter(q => q.eq(q.field("message"), "R2_TEST_MESSAGE")).collect();
+    
+    const allTestLeads = [...originalR2Leads, ...webhookLeads];
+
+    const verifyTime = Date.now() - startVerify;
+
+    // Offload to R2
+    const startOffload = Date.now();
+    const offloadedData = [];
+    for (const lead of allTestLeads) {
+      await ctx.db.insert("r2_leads_mock", {
+        originalId: lead._id,
+        leadData: lead,
+      });
+      await ctx.db.delete(lead._id);
+      offloadedData.push(lead);
+    }
+    const offloadTime = Date.now() - startOffload;
+
+    // Load from R2
+    const startLoad = Date.now();
+    const r2Leads = await ctx.db.query("r2_leads_mock").collect();
+    
+    let mismatchCount = 0;
+    let loadedCount = 0;
+
+    for (const r2Lead of r2Leads) {
+      const original = offloadedData.find(l => l._id === r2Lead.originalId);
+      if (original) {
+        const data = r2Lead.leadData;
+        delete data._id;
+        delete data._creationTime;
+        
+        const newId = await ctx.db.insert("leads", data);
+        const newlyInserted = await ctx.db.get(newId);
+        
+        // Check for mismatch
+        let isMatch = true;
+        for (const key of Object.keys(data)) {
+          if (JSON.stringify(data[key]) !== JSON.stringify(newlyInserted![key as keyof typeof newlyInserted])) {
+            isMatch = false;
+          }
+        }
+        if (!isMatch) mismatchCount++;
+        
+        await ctx.db.delete(r2Lead._id);
+        loadedCount++;
+      }
+    }
+    const loadTime = Date.now() - startLoad;
+
+    // Clean up webhook leads so they don't pollute the DB
+    for (const lead of webhookLeads) {
+      const reloadedLead = await ctx.db.query("leads").filter(q => q.eq(q.field("mobile"), lead.mobile)).first();
+      if (reloadedLead) {
+        await ctx.db.delete(reloadedLead._id);
+      }
+    }
+
+    return {
+      sendTimeMs: args.sendTime,
+      verifyTimeMs: verifyTime,
+      offloadTimeMs: offloadTime,
+      loadTimeMs: loadTime,
+      totalTestLeadsFound: allTestLeads.length,
+      mismatchCount,
+      loadedCount,
+      success: allTestLeads.length >= 300 && mismatchCount === 0
+    };
+  }
+});
+
+export const simulateWebhooksAndTestR2 = action({
+  args: {},
+  handler: async (ctx): Promise<{
+    sendTimeMs: number;
+    verifyTimeMs: number;
+    offloadTimeMs: number;
+    loadTimeMs: number;
+    totalTestLeadsFound: number;
+    mismatchCount: number;
+    loadedCount: number;
+    success: boolean;
+  }> => {
+    const siteUrl = process.env.CONVEX_SITE_URL;
+    if (!siteUrl) throw new Error("CONVEX_SITE_URL not set");
+
+    // 1. Ensure we have exactly 150 base R2 test leads in Convex
+    await ctx.runMutation(internal.test_utils.prepareBaseR2Leads);
+
+    const startSend = Date.now();
+    const promises = [];
+
+    // 75 IndiaMART leads
+    for (let i = 0; i < 75; i++) {
+      const payload = {
+        CODE: 200,
+        STATUS: "SUCCESS",
+        RESPONSE: {
+          UNIQUE_QUERY_ID: `R2_TEST_IM_${Date.now()}_${i}`,
+          SENDER_NAME: `R2 Webhook IM Lead ${i}`,
+          SUBJECT: "R2 Test Subject",
+          SENDER_MOBILE: `919999888${i.toString().padStart(3, '0')}`,
+          SENDER_EMAIL: `r2test${i}@example.com`,
+          QUERY_MESSAGE: "R2_TEST_MESSAGE",
+          QUERY_TIME: new Date().toISOString(),
+          QUERY_TYPE: "W",
+          QUERY_MCAT_NAME: "Test Category",
+          QUERY_PRODUCT_NAME: "Test Product",
+          SENDER_COUNTRY_ISO: "IN"
+        }
+      };
+      promises.push(fetch(`${siteUrl}/webhooks/indiamart`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }));
+    }
+
+    // 75 WhatsApp leads
+    for (let i = 0; i < 75; i++) {
+      const payload = {
+        entry: [{
+          changes: [{
+            value: {
+              messages: [{
+                from: `919999777${i.toString().padStart(3, '0')}`,
+                id: `R2_TEST_WA_${Date.now()}_${i}`,
+                timestamp: Math.floor(Date.now() / 1000).toString(),
+                type: "text",
+                text: { body: "R2_TEST_MESSAGE" }
+              }],
+              contacts: [{
+                wa_id: `919999777${i.toString().padStart(3, '0')}`,
+                profile: { name: `R2 Webhook WA Lead ${i}` }
+              }]
+            }
+          }]
+        }]
+      };
+      promises.push(fetch(`${siteUrl}/webhooks/whatsapp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }));
+    }
+
+    await Promise.all(promises);
+    const endSend = Date.now();
+    const sendTime = endSend - startSend;
+
+    // Wait a bit for webhooks to process
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Verify and Test R2
+    const result = (await ctx.runMutation(internal.test_utils.verifyAndTestR2, {
+      sendTime
+    })) as any;
+
+    return result;
   }
 });
