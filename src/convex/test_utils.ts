@@ -202,7 +202,6 @@ export const getTestLeadsForOffload = internalQuery({
 export const offloadTestLeads = internalMutation({
   args: { leads: v.array(v.any()) },
   handler: async (ctx, args) => {
-    const start = Date.now();
     for (const lead of args.leads) {
       await ctx.db.insert("r2_leads_mock", {
         originalId: lead._id,
@@ -210,14 +209,12 @@ export const offloadTestLeads = internalMutation({
       });
       await ctx.db.delete(lead._id);
     }
-    return Date.now() - start;
   }
 });
 
 export const loadAndVerifyTestLeads = internalMutation({
   args: { offloadedLeads: v.array(v.any()) },
   handler: async (ctx, args) => {
-    const start = Date.now();
     const r2Leads = await ctx.db.query("r2_leads_mock").take(1000);
     
     let mismatchCount = 0;
@@ -246,7 +243,7 @@ export const loadAndVerifyTestLeads = internalMutation({
         loadedCount++;
       }
     }
-    return { mismatchCount, loadedCount, timeMs: Date.now() - start };
+    return { mismatchCount, loadedCount };
   }
 });
 
@@ -383,10 +380,14 @@ export const simulateWebhooksAndTestR2 = action({
     const verifyTimeMs = Date.now() - startVerify;
 
     // Offload to R2
-    const offloadTimeMs = await ctx.runMutation(internal.test_utils.offloadTestLeads, { leads: allTestLeads });
+    const startOffload = Date.now();
+    await ctx.runMutation(internal.test_utils.offloadTestLeads, { leads: allTestLeads });
+    const offloadTimeMs = Date.now() - startOffload;
 
     // Load from R2
-    const { mismatchCount, loadedCount, timeMs: loadTimeMs } = await ctx.runMutation(internal.test_utils.loadAndVerifyTestLeads, { offloadedLeads: allTestLeads });
+    const startLoad = Date.now();
+    const { mismatchCount, loadedCount } = await ctx.runMutation(internal.test_utils.loadAndVerifyTestLeads, { offloadedLeads: allTestLeads });
+    const loadTimeMs = Date.now() - startLoad;
 
     // Clean up webhook leads
     const webhookLeads = allTestLeads.filter(l => l.source !== "R2 Test");

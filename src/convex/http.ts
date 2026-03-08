@@ -186,7 +186,7 @@ http.route({
       const uniqueQueryId = response.UNIQUE_QUERY_ID;
 
       // Process the lead atomically to prevent race conditions
-      const result = await ctx.runMutation("indiamartMutations:processIndiamartLead" as any, {
+      const result = await ctx.runMutation(internal.indiamartMutations.processIndiamartLead, {
         uniqueQueryId,
         name: response.SENDER_NAME,
         subject: response.SUBJECT,
