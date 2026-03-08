@@ -60,18 +60,19 @@ http.route({
     try {
       const body = await req.json();
       
-      console.log("📨 Received WhatsApp webhook:", JSON.stringify(body, null, 2));
-
       // Process status updates (sent, delivered, read)
       if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
         const statuses = body.entry[0].changes[0].value.statuses;
-        console.log(`📊 Processing ${statuses.length} status update(s)`);
         
         for (const statusUpdate of statuses) {
-          await ctx.runAction(internal.whatsapp.webhook.handleStatusUpdate, {
-            messageId: statusUpdate.id,
-            status: statusUpdate.status,
-          });
+          try {
+            await ctx.runAction(internal.whatsapp.webhook.handleStatusUpdate, {
+              messageId: statusUpdate.id,
+              status: statusUpdate.status,
+            });
+          } catch (e) {
+            console.error("Error handling status update:", e);
+          }
         }
       }
 
@@ -81,71 +82,68 @@ http.route({
         const messages = value.messages;
         const contacts = value.contacts || [];
         
-        console.log(`📥 Processing ${messages.length} incoming message(s)`);
-        
         for (const message of messages) {
-          // Extract sender name from contacts
-          const contact = contacts.find((c: any) => c.wa_id === message.from);
-          const senderName = contact?.profile?.name;
+          try {
+            // Extract sender name from contacts
+            const contact = contacts.find((c: any) => c.wa_id === message.from);
+            const senderName = contact?.profile?.name;
 
-          // Extract text content - handle button replies and regular text
-          let textContent = "";
-          if (message.type === "button" && message.button) {
-            // Button reply - extract the button text/payload
-            textContent = message.button.text || message.button.payload || "";
-          } else if (message.type === "interactive" && message.interactive) {
-            // Interactive button reply
-            if (message.interactive.type === "button_reply") {
-              textContent = message.interactive.button_reply?.title || "";
-            } else if (message.interactive.type === "list_reply") {
-              textContent = message.interactive.list_reply?.title || "";
+            // Extract text content - handle button replies and regular text
+            let textContent = "";
+            if (message.type === "button" && message.button) {
+              textContent = message.button.text || message.button.payload || "";
+            } else if (message.type === "interactive" && message.interactive) {
+              if (message.interactive.type === "button_reply") {
+                textContent = message.interactive.button_reply?.title || "";
+              } else if (message.interactive.type === "list_reply") {
+                textContent = message.interactive.list_reply?.title || "";
+              }
+            } else if (message.text?.body) {
+              textContent = message.text.body;
             }
-          } else if (message.text?.body) {
-            // Regular text message
-            textContent = message.text.body;
+
+            // Extract media information based on message type
+            let mediaId = null;
+            let mediaCaption = null;
+            let mediaMimeType = null;
+            let mediaFilename = null;
+
+            if (message.type === "image" && message.image) {
+              mediaId = message.image.id;
+              mediaCaption = message.image.caption;
+              mediaMimeType = message.image.mime_type;
+              textContent = textContent || mediaCaption || "";
+            } else if (message.type === "document" && message.document) {
+              mediaId = message.document.id;
+              mediaCaption = message.document.caption;
+              mediaMimeType = message.document.mime_type;
+              mediaFilename = message.document.filename;
+              textContent = textContent || mediaCaption || "";
+            } else if (message.type === "video" && message.video) {
+              mediaId = message.video.id;
+              mediaCaption = message.video.caption;
+              mediaMimeType = message.video.mime_type;
+              textContent = textContent || mediaCaption || "";
+            } else if (message.type === "audio" && message.audio) {
+              mediaId = message.audio.id;
+              mediaMimeType = message.audio.mime_type;
+            }
+
+            await ctx.runAction(internal.whatsapp.webhook.handleIncomingMessage, {
+              from: message.from,
+              messageId: message.id,
+              timestamp: message.timestamp,
+              text: textContent,
+              type: message.type,
+              mediaId: mediaId || undefined,
+              mediaMimeType: mediaMimeType || undefined,
+              mediaFilename: mediaFilename || undefined,
+              senderName,
+              quotedMessageExternalId: message.context?.id,
+            });
+          } catch (e) {
+            console.error("Error handling incoming message:", e);
           }
-
-          // Extract media information based on message type
-          let mediaId = null;
-          let mediaCaption = null;
-          let mediaMimeType = null;
-          let mediaFilename = null;
-
-          if (message.type === "image" && message.image) {
-            mediaId = message.image.id;
-            mediaCaption = message.image.caption;
-            mediaMimeType = message.image.mime_type;
-            textContent = textContent || mediaCaption || "";
-          } else if (message.type === "document" && message.document) {
-            mediaId = message.document.id;
-            mediaCaption = message.document.caption;
-            mediaMimeType = message.document.mime_type;
-            mediaFilename = message.document.filename;
-            textContent = textContent || mediaCaption || "";
-          } else if (message.type === "video" && message.video) {
-            mediaId = message.video.id;
-            mediaCaption = message.video.caption;
-            mediaMimeType = message.video.mime_type;
-            textContent = textContent || mediaCaption || "";
-          } else if (message.type === "audio" && message.audio) {
-            mediaId = message.audio.id;
-            mediaMimeType = message.audio.mime_type;
-          }
-
-          console.log(`📝 Processing message - Type: ${message.type}, From: ${message.from}, Text: "${textContent}"`);
-
-          await ctx.runAction(internal.whatsapp.webhook.handleIncomingMessage, {
-            from: message.from,
-            messageId: message.id,
-            timestamp: message.timestamp,
-            text: textContent,
-            type: message.type,
-            mediaId: mediaId || undefined,
-            mediaMimeType: mediaMimeType || undefined,
-            mediaFilename: mediaFilename || undefined,
-            senderName,
-            quotedMessageExternalId: message.context?.id,
-          });
         }
       }
 
@@ -171,11 +169,8 @@ http.route({
     try {
       const body = await req.json();
       
-      console.log("Received IndiaMART webhook:", JSON.stringify(body, null, 2));
-
       // Validate response structure
       if (body.CODE !== 200 || body.STATUS !== "SUCCESS" || !body.RESPONSE) {
-        console.error("Invalid IndiaMART webhook payload");
         return new Response(JSON.stringify({ error: "Invalid payload" }), {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -185,39 +180,45 @@ http.route({
       const response = body.RESPONSE;
       const uniqueQueryId = response.UNIQUE_QUERY_ID;
 
-      // Process the lead atomically to prevent race conditions
-      const result = await ctx.runMutation(internal.indiamartMutations.processIndiamartLead, {
-        uniqueQueryId,
-        name: response.SENDER_NAME,
-        subject: response.SUBJECT,
-        mobile: response.SENDER_MOBILE || "",
-        altMobile: response.SENDER_MOBILE_ALT,
-        email: response.SENDER_EMAIL,
-        altEmail: response.SENDER_EMAIL_ALT,
-        phone: response.SENDER_PHONE,
-        altPhone: response.SENDER_PHONE_ALT,
-        agencyName: response.SENDER_COMPANY,
-        address: response.SENDER_ADDRESS,
-        city: response.SENDER_CITY,
-        state: response.SENDER_STATE,
-        pincode: response.SENDER_PINCODE,
-        message: response.QUERY_MESSAGE,
-        metadata: {
-          queryTime: response.QUERY_TIME,
-          queryType: response.QUERY_TYPE,
-          mcatName: response.QUERY_MCAT_NAME,
-          productName: response.QUERY_PRODUCT_NAME,
-          countryIso: response.SENDER_COUNTRY_ISO,
-          callDuration: response.CALL_DURATION || undefined,
-        },
-      });
+      try {
+        // Process the lead atomically to prevent race conditions
+        const result = await ctx.runMutation(internal.indiamartMutations.processIndiamartLead, {
+          uniqueQueryId: uniqueQueryId || `UNKNOWN_${Date.now()}`,
+          name: response.SENDER_NAME || "Unknown",
+          subject: response.SUBJECT || "No Subject",
+          mobile: response.SENDER_MOBILE || "",
+          altMobile: response.SENDER_MOBILE_ALT,
+          email: response.SENDER_EMAIL || "",
+          altEmail: response.SENDER_EMAIL_ALT,
+          phone: response.SENDER_PHONE,
+          altPhone: response.SENDER_PHONE_ALT,
+          agencyName: response.SENDER_COMPANY,
+          address: response.SENDER_ADDRESS,
+          city: response.SENDER_CITY,
+          state: response.SENDER_STATE,
+          pincode: response.SENDER_PINCODE,
+          message: response.QUERY_MESSAGE || "",
+          metadata: {
+            queryTime: response.QUERY_TIME || new Date().toISOString(),
+            queryType: response.QUERY_TYPE || "W",
+            mcatName: response.QUERY_MCAT_NAME || "",
+            productName: response.QUERY_PRODUCT_NAME || "",
+            countryIso: response.SENDER_COUNTRY_ISO || "IN",
+            callDuration: response.CALL_DURATION || undefined,
+          },
+        });
 
-      console.log(`IndiaMART lead ${uniqueQueryId} processed successfully: ${result.status}`);
-
-      return new Response(JSON.stringify({ success: true, message: `Lead ${result.status}` }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+        return new Response(JSON.stringify({ success: true, message: `Lead ${result.status}` }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (mutationError: any) {
+        console.error("IndiaMART mutation error:", mutationError.message || mutationError);
+        return new Response(JSON.stringify({ error: "Mutation failed", details: mutationError.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
     } catch (error) {
       console.error("IndiaMART webhook processing error:", error);
       return new Response(JSON.stringify({ error: "Internal server error" }), {

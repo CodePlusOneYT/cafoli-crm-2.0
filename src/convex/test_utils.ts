@@ -352,16 +352,19 @@ export const simulateWebhooksAndTestR2 = action({
       }));
     }
 
-    // Execute in batches of 25 to avoid overwhelming the local fetch/network
-    const batchSize = 25;
+    // Execute in smaller batches with delays to avoid overwhelming the local fetch/network and OCC conflicts
+    const batchSize = 10;
     for (let i = 0; i < fetchTasks.length; i += batchSize) {
       const batch = fetchTasks.slice(i, i + batchSize);
       const results = await Promise.all(batch.map(task => task()));
       for (const res of results) {
         if (!res.ok) {
-          console.error(`Webhook failed with status: ${res.status}`);
+          const text = await res.text().catch(() => "No text");
+          console.error(`Webhook failed with status: ${res.status}, body: ${text}`);
         }
       }
+      // Add a small delay between batches to prevent rate limiting / OCC conflicts
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     const endSend = Date.now();

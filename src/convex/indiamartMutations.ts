@@ -48,12 +48,15 @@ export const processIndiamartLead = internalMutation({
     const standardizedMobile = standardizePhoneNumber(args.mobile);
     
     // First check by mobile number (primary deduplication)
-    let existingLead = await ctx.db
-      .query("leads")
-      .withIndex("by_mobile", (q) => q.eq("mobile", standardizedMobile))
-      .first();
+    let existingLead = null;
+    if (standardizedMobile) {
+      existingLead = await ctx.db
+        .query("leads")
+        .withIndex("by_mobile", (q) => q.eq("mobile", standardizedMobile))
+        .first();
+    }
     
-    if (!existingLead) {
+    if (!existingLead && args.uniqueQueryId) {
       // Fallback: check by unique query ID (for legacy data)
       existingLead = await ctx.db
         .query("leads")
