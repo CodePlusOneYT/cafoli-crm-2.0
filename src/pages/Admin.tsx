@@ -15,6 +15,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { R2ManagementPanel } from "@/components/admin/R2ManagementPanel";
 
 const api = getConvexApi() as any;
 import { useState } from "react";
@@ -146,6 +147,7 @@ export default function Admin() {
             {currentUser.role === "admin" && <TabsTrigger value="api-keys">API Keys</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="ai-batch">AI Batch Processing</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="deduplication">Deduplication</TabsTrigger>}
+            {currentUser.role === "admin" && <TabsTrigger value="r2-tiering">R2 Data Tiering</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="logs">System Logs</TabsTrigger>}
           </TabsList>
 
@@ -449,6 +451,22 @@ export default function Admin() {
                       </AlertDescription>
                     </Alert>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {currentUser.role === "admin" && (
+            <TabsContent value="r2-tiering" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Hot/Cold Data Tiering (R2 Prototype)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <R2ManagementPanel />
                 </CardContent>
               </Card>
             </TabsContent>

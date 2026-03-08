@@ -208,7 +208,7 @@ export const verifyAndTestR2 = internalMutation({
     
     const allTestLeads = [...originalR2Leads, ...webhookLeads];
 
-    const verifyTime = Date.now() - startVerify;
+    const verifyTime = Math.max(1, Date.now() - startVerify);
 
     // Offload to R2
     const startOffload = Date.now();
@@ -221,7 +221,7 @@ export const verifyAndTestR2 = internalMutation({
       await ctx.db.delete(lead._id);
       offloadedData.push(lead);
     }
-    const offloadTime = Date.now() - startOffload;
+    const offloadTime = Math.max(1, Date.now() - startOffload);
 
     // Load from R2
     const startLoad = Date.now();
@@ -253,7 +253,7 @@ export const verifyAndTestR2 = internalMutation({
         loadedCount++;
       }
     }
-    const loadTime = Date.now() - startLoad;
+    const loadTime = Math.max(1, Date.now() - startLoad);
 
     // Clean up webhook leads so they don't pollute the DB
     for (const lead of webhookLeads) {
@@ -355,8 +355,8 @@ export const simulateWebhooksAndTestR2 = action({
     const endSend = Date.now();
     const sendTime = endSend - startSend;
 
-    // Wait a bit for webhooks to process
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait longer for webhooks to process (increased from 3s to 6s)
+    await new Promise(resolve => setTimeout(resolve, 6000));
 
     // Verify and Test R2
     const result = (await ctx.runMutation(internal.test_utils.verifyAndTestR2, {
