@@ -202,6 +202,7 @@ export const getTestLeadsForOffload = internalQuery({
 export const offloadTestLeads = internalMutation({
   args: { leads: v.array(v.any()) },
   handler: async (ctx, args) => {
+    const start = Date.now();
     for (const lead of args.leads) {
       await ctx.db.insert("r2_leads_mock", {
         originalId: lead._id,
@@ -209,12 +210,14 @@ export const offloadTestLeads = internalMutation({
       });
       await ctx.db.delete(lead._id);
     }
+    return Date.now() - start;
   }
 });
 
 export const loadAndVerifyTestLeads = internalMutation({
   args: { offloadedLeads: v.array(v.any()) },
   handler: async (ctx, args) => {
+    const start = Date.now();
     const r2Leads = await ctx.db.query("r2_leads_mock").take(1000);
     
     let mismatchCount = 0;
@@ -243,7 +246,22 @@ export const loadAndVerifyTestLeads = internalMutation({
         loadedCount++;
       }
     }
-    return { mismatchCount, loadedCount };
+    return { mismatchCount, loadedCount, timeMs: Date.now() - start };
+  }
+});
+
+export const forceCleanupWebhookLeads = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    for (let i = 0; i < 75; i++) {
+      const imMobile = `919999888${i.toString().padStart(3, '0')}`;
+      const imLead = await ctx.db.query("leads").withIndex("by_mobile", q => q.eq("mobile", imMobile)).first();
+      if (imLead) await ctx.db.delete(imLead._id);
+
+      const waMobile = `919999777${i.toString().padStart(3, '0')}`;
+      const waLead = await ctx.db.query("leads").withIndex("by_mobile", q => q.eq("mobile", waMobile)).first();
+      if (waLead) await ctx.db.delete(waLead._id);
+    }
   }
 });
 
@@ -274,11 +292,14 @@ export const simulateWebhooksAndTestR2 = action({
     const siteUrl = process.env.CONVEX_SITE_URL;
     if (!siteUrl) throw new Error("CONVEX_SITE_URL not set");
 
+    // 0. Clean up any leftover webhook leads from previous failed runs
+    await ctx.runMutation(internal.test_utils.forceCleanupWebhookLeads);
+
     // 1. Ensure we have exactly 150 base R2 test leads in Convex
     await ctx.runMutation(internal.test_utils.prepareBaseR2Leads);
 
     const startSend = Date.now();
-    const promises = [];
+    const fetchTasks = [];
 
     // 75 IndiaMART leads
     for (let i = 0; i < 75; i++) {
@@ -299,7 +320,7 @@ export const simulateWebhooksAndTestR2 = action({
           SENDER_COUNTRY_ISO: "IN"
         }
       };
-      promises.push(fetch(`${siteUrl}/webhooks/indiamart`, {
+      fetchTasks.push(() => fetch(`${siteUrl}/webhooks/indiamart`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -327,14 +348,25 @@ export const simulateWebhooksAndTestR2 = action({
           }]
         }]
       };
-      promises.push(fetch(`${siteUrl}/webhooks/whatsapp`, {
+      fetchTasks.push(() => fetch(`${siteUrl}/webhooks/whatsapp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       }));
     }
 
-    await Promise.all(promises);
+    // Execute in batches of 25 to avoid overwhelming the local fetch/network
+    const batchSize = 25;
+    for (let i = 0; i < fetchTasks.length; i += batchSize) {
+      const batch = fetchTasks.slice(i, i + batchSize);
+      const results = await Promise.all(batch.map(task => task()));
+      for (const res of results) {
+        if (!res.ok) {
+          console.error(`Webhook failed with status: ${res.status}`);
+        }
+      }
+    }
+
     const endSend = Date.now();
     const sendTimeMs = endSend - startSend;
 
@@ -351,14 +383,10 @@ export const simulateWebhooksAndTestR2 = action({
     const verifyTimeMs = Date.now() - startVerify;
 
     // Offload to R2
-    const startOffload = Date.now();
-    await ctx.runMutation(internal.test_utils.offloadTestLeads, { leads: allTestLeads });
-    const offloadTimeMs = Date.now() - startOffload;
+    const offloadTimeMs = await ctx.runMutation(internal.test_utils.offloadTestLeads, { leads: allTestLeads });
 
     // Load from R2
-    const startLoad = Date.now();
-    const { mismatchCount, loadedCount } = await ctx.runMutation(internal.test_utils.loadAndVerifyTestLeads, { offloadedLeads: allTestLeads });
-    const loadTimeMs = Date.now() - startLoad;
+    const { mismatchCount, loadedCount, timeMs: loadTimeMs } = await ctx.runMutation(internal.test_utils.loadAndVerifyTestLeads, { offloadedLeads: allTestLeads });
 
     // Clean up webhook leads
     const webhookLeads = allTestLeads.filter(l => l.source !== "R2 Test");
