@@ -1,5 +1,63 @@
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, action, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
+
+export const getR2TestLeads = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<any[]> => {
+    return await ctx.db.query("leads").filter(q => q.eq(q.field("source"), "R2 Test")).collect();
+  }
+});
+
+export const generateMessagesBatch = internalMutation({
+  args: { leadId: v.id("leads"), count: v.number() },
+  handler: async (ctx, args): Promise<void> => {
+    let chat = await ctx.db.query("chats").withIndex("by_lead", q => q.eq("leadId", args.leadId)).first();
+    if (!chat) {
+      const chatId = await ctx.db.insert("chats", {
+        leadId: args.leadId,
+        unreadCount: 0,
+        lastMessageAt: Date.now(),
+        platform: "whatsapp",
+      });
+      chat = await ctx.db.get(chatId);
+    }
+
+    for (let i = 0; i < args.count; i++) {
+      const isOutbound = i % 2 === 0;
+      await ctx.db.insert("messages", {
+        chatId: chat!._id,
+        direction: isOutbound ? "outbound" : "inbound",
+        content: `Test message ${i} for durability testing. This simulates a long conversation to test speed and reliability.`,
+        messageType: "text",
+        status: isOutbound ? "delivered" : "received",
+      });
+    }
+    
+    await ctx.db.patch(chat!._id, { lastMessageAt: Date.now() });
+  }
+});
+
+export const triggerMassiveConversations = action({
+  args: { messagesPerLead: v.number() },
+  handler: async (ctx, args): Promise<string> => {
+    const leads = (await ctx.runQuery(internal.r2_cache_prototype.getR2TestLeads as any)) as any[];
+    let delay = 0;
+    for (const lead of leads) {
+      let remaining = args.messagesPerLead;
+      while (remaining > 0) {
+        const batchSize = Math.min(remaining, 500);
+        await ctx.scheduler.runAfter(delay, internal.r2_cache_prototype.generateMessagesBatch, {
+          leadId: lead._id,
+          count: batchSize
+        });
+        remaining -= batchSize;
+        delay += 200; // stagger by 200ms to avoid overwhelming the database
+      }
+    }
+    return `Scheduled generation of ${args.messagesPerLead} messages for ${leads.length} leads.`;
+  }
+});
 
 export const generateTestLeads = mutation({
   args: {},
