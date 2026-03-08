@@ -1,102 +1,48 @@
-import { mutation, query, internalMutation, action, internalQuery } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-
-export const getR2TestLeads = internalQuery({
-  args: {},
-  handler: async (ctx): Promise<any[]> => {
-    return await ctx.db.query("leads").withIndex("by_source", q => q.eq("source", "R2 Test")).take(1000);
-  }
-});
-
-export const generateMessagesBatch = internalMutation({
-  args: { leadId: v.id("leads"), count: v.number() },
-  handler: async (ctx, args): Promise<void> => {
-    let chat = await ctx.db.query("chats").withIndex("by_lead", q => q.eq("leadId", args.leadId)).first();
-    if (!chat) {
-      const chatId = await ctx.db.insert("chats", {
-        leadId: args.leadId,
-        unreadCount: 0,
-        lastMessageAt: Date.now(),
-        platform: "whatsapp",
-      });
-      chat = await ctx.db.get(chatId);
-    }
-
-    for (let i = 0; i < args.count; i++) {
-      const isOutbound = i % 2 === 0;
-      await ctx.db.insert("messages", {
-        chatId: chat!._id,
-        direction: isOutbound ? "outbound" : "inbound",
-        content: `Test message ${i} for durability testing. This simulates a long conversation to test speed and reliability.`,
-        messageType: "text",
-        status: isOutbound ? "delivered" : "received",
-      });
-    }
-    
-    await ctx.db.patch(chat!._id, { lastMessageAt: Date.now() });
-  }
-});
-
-export const triggerMassiveConversations = action({
-  args: { messagesPerLead: v.number() },
-  handler: async (ctx, args): Promise<string> => {
-    const leads = (await ctx.runQuery(internal.r2_cache_prototype.getR2TestLeads as any)) as any[];
-    let delay = 0;
-    for (const lead of leads) {
-      let remaining = args.messagesPerLead;
-      while (remaining > 0) {
-        const batchSize = Math.min(remaining, 500);
-        await ctx.scheduler.runAfter(delay, internal.r2_cache_prototype.generateMessagesBatch, {
-          leadId: lead._id,
-          count: batchSize
-        });
-        remaining -= batchSize;
-        delay += 200; // stagger by 200ms to avoid overwhelming the database
-      }
-    }
-    return `Scheduled generation of ${args.messagesPerLead} messages for ${leads.length} leads.`;
-  }
-});
-
-export const generateTestLeads = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const leads = [];
-    for (let i = 1; i <= 150; i++) {
-      const leadId = await ctx.db.insert("leads", {
-        name: `R2 Test Lead ${i}`,
-        mobile: `919999999${i.toString().padStart(3, '0')}`,
-        status: "Cold",
-        type: "To be Decided",
-        lastActivity: Date.now(),
-        source: "R2 Test",
-      });
-      leads.push(leadId);
-    }
-    return `Generated ${leads.length} test leads.`;
-  }
-});
 
 export const offloadToR2 = mutation({
-  args: { limit: v.number() },
+  args: { limit: v.number(), daysInactive: v.number() },
   handler: async (ctx, args) => {
-    // Find leads to offload (e.g., oldest activity)
+    const cutoff = Date.now() - args.daysInactive * 24 * 60 * 60 * 1000;
     const leadsToOffload = await ctx.db
       .query("leads")
-      .withIndex("by_source_and_last_activity", q => q.eq("source", "R2 Test"))
+      .withIndex("by_last_activity", q => q.lt("lastActivity", cutoff))
       .take(args.limit);
 
     let offloadedCount = 0;
     for (const lead of leadsToOffload) {
+      // Fetch relational data
+      const chats = await ctx.db.query("chats").withIndex("by_lead", q => q.eq("leadId", lead._id)).collect();
+      const messages = [];
+      for (const chat of chats) {
+        const chatMessages = await ctx.db.query("messages").withIndex("by_chat", q => q.eq("chatId", chat._id)).collect();
+        messages.push(...chatMessages);
+      }
+      const comments = await ctx.db.query("comments").withIndex("by_lead", q => q.eq("leadId", lead._id)).collect();
+      const followups = await ctx.db.query("followups").withIndex("by_lead", q => q.eq("leadId", lead._id)).collect();
+
+      const fullData = {
+        lead,
+        chats,
+        messages,
+        comments,
+        followups
+      };
+
       // Save to mock R2
       await ctx.db.insert("r2_leads_mock", {
         originalId: lead._id,
-        leadData: lead,
+        leadData: fullData,
       });
       
       // Delete from Convex (RAM)
+      for (const msg of messages) await ctx.db.delete(msg._id);
+      for (const chat of chats) await ctx.db.delete(chat._id);
+      for (const comment of comments) await ctx.db.delete(comment._id);
+      for (const followup of followups) await ctx.db.delete(followup._id);
       await ctx.db.delete(lead._id);
+      
       offloadedCount++;
     }
 
@@ -112,11 +58,62 @@ export const loadFromR2 = mutation({
     let loadedCount = 0;
     for (const r2Lead of r2Leads) {
       const data = r2Lead.leadData;
-      delete data._id;
-      delete data._creationTime;
       
-      // Insert back to Convex
-      await ctx.db.insert("leads", data);
+      if (data.lead) {
+        // It's the new format with relational data
+        const leadData = data.lead;
+        delete leadData._id;
+        delete leadData._creationTime;
+        const newLeadId = await ctx.db.insert("leads", leadData);
+
+        const idMap: Record<string, string> = { [r2Lead.originalId]: newLeadId };
+
+        // Restore chats
+        for (const chat of data.chats || []) {
+          const oldChatId = chat._id;
+          delete chat._id;
+          delete chat._creationTime;
+          chat.leadId = newLeadId;
+          const newChatId = await ctx.db.insert("chats", chat);
+          idMap[oldChatId] = newChatId;
+        }
+
+        // Restore messages
+        const messages = (data.messages || []).sort((a: any, b: any) => a._creationTime - b._creationTime);
+        for (const msg of messages) {
+          const oldMsgId = msg._id;
+          delete msg._id;
+          delete msg._creationTime;
+          msg.chatId = idMap[msg.chatId] || msg.chatId;
+          if (msg.quotedMessageId) {
+            msg.quotedMessageId = idMap[msg.quotedMessageId] || msg.quotedMessageId;
+          }
+          const newMsgId = await ctx.db.insert("messages", msg);
+          idMap[oldMsgId] = newMsgId;
+        }
+
+        // Restore comments
+        for (const comment of data.comments || []) {
+          delete comment._id;
+          delete comment._creationTime;
+          comment.leadId = newLeadId;
+          await ctx.db.insert("comments", comment);
+        }
+
+        // Restore followups
+        for (const followup of data.followups || []) {
+          delete followup._id;
+          delete followup._creationTime;
+          followup.leadId = newLeadId;
+          await ctx.db.insert("followups", followup);
+        }
+      } else {
+        // Old format (just lead data)
+        const leadData = data;
+        delete leadData._id;
+        delete leadData._creationTime;
+        await ctx.db.insert("leads", leadData);
+      }
       
       // Remove from R2 mock
       await ctx.db.delete(r2Lead._id);
@@ -133,12 +130,34 @@ export const offloadSingleToR2 = mutation({
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new Error("Lead not found");
     
+    const chats = await ctx.db.query("chats").withIndex("by_lead", q => q.eq("leadId", lead._id)).collect();
+    const messages = [];
+    for (const chat of chats) {
+      const chatMessages = await ctx.db.query("messages").withIndex("by_chat", q => q.eq("chatId", chat._id)).collect();
+      messages.push(...chatMessages);
+    }
+    const comments = await ctx.db.query("comments").withIndex("by_lead", q => q.eq("leadId", lead._id)).collect();
+    const followups = await ctx.db.query("followups").withIndex("by_lead", q => q.eq("leadId", lead._id)).collect();
+
+    const fullData = {
+      lead,
+      chats,
+      messages,
+      comments,
+      followups
+    };
+
     await ctx.db.insert("r2_leads_mock", {
       originalId: lead._id,
-      leadData: lead,
+      leadData: fullData,
     });
     
+    for (const msg of messages) await ctx.db.delete(msg._id);
+    for (const chat of chats) await ctx.db.delete(chat._id);
+    for (const comment of comments) await ctx.db.delete(comment._id);
+    for (const followup of followups) await ctx.db.delete(followup._id);
     await ctx.db.delete(lead._id);
+
     return `Offloaded lead ${lead.name} to R2.`;
   }
 });
@@ -146,12 +165,8 @@ export const offloadSingleToR2 = mutation({
 export const getR2Stats = query({
   args: {},
   handler: async (ctx) => {
-    const convexLeads = await ctx.db
-      .query("leads")
-      .withIndex("by_source", q => q.eq("source", "R2 Test"))
-      .take(1000);
-      
-    const r2Leads = await ctx.db.query("r2_leads_mock").take(1000);
+    const convexLeads = await ctx.db.query("leads").take(5000);
+    const r2Leads = await ctx.db.query("r2_leads_mock").take(5000);
     
     return {
       convexActiveCount: convexLeads.length,
