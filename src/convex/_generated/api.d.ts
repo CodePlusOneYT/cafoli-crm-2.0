@@ -16,6 +16,7 @@ import type * as aiBackgroundHelpers from "../aiBackgroundHelpers.js";
 import type * as aiMutations from "../aiMutations.js";
 import type * as auth from "../auth.js";
 import type * as authProviders from "../authProviders.js";
+import type * as backup from "../backup.js";
 import type * as brevo from "../brevo.js";
 import type * as brevoMutations from "../brevoMutations.js";
 import type * as brevoQueries from "../brevoQueries.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   aiMutations: typeof aiMutations;
   auth: typeof auth;
   authProviders: typeof authProviders;
+  backup: typeof backup;
   brevo: typeof brevo;
   brevoMutations: typeof brevoMutations;
   brevoQueries: typeof brevoQueries;

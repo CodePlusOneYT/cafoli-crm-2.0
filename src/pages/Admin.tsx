@@ -16,6 +16,7 @@ import { getConvexApi } from "@/lib/convex-api";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { R2ManagementPanel } from "@/components/admin/R2ManagementPanel";
+import { BackupManagement } from "@/components/admin/BackupManagement";
 
 const api = getConvexApi() as any;
 import { useState } from "react";
@@ -148,6 +149,7 @@ export default function Admin() {
             {currentUser.role === "admin" && <TabsTrigger value="ai-batch">AI Batch Processing</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="deduplication">Deduplication</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="r2-tiering">R2 Data Tiering</TabsTrigger>}
+            {currentUser.role === "admin" && <TabsTrigger value="backup">Backup & Restore</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="logs">System Logs</TabsTrigger>}
           </TabsList>
 
@@ -469,6 +471,12 @@ export default function Admin() {
                   <R2ManagementPanel />
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+
+          {currentUser.role === "admin" && (
+            <TabsContent value="backup" className="space-y-4">
+              <BackupManagement />
             </TabsContent>
           )}
           
