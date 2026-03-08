@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Doc, Id } from "@/convex/_generated/dataModel";
-import { UserPlus, MessageCircle, UserMinus } from "lucide-react";
+import { UserPlus, MessageCircle, UserMinus, Archive } from "lucide-react";
 import { toast } from "sonner";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface LeadCardActionsProps {
   lead: Doc<"leads">;
@@ -29,8 +31,33 @@ export function LeadCardActions({
   onUnassign,
   onOpenWhatsApp,
 }: LeadCardActionsProps) {
+  const offloadSingleToR2 = useMutation(api.r2_cache_prototype.offloadSingleToR2);
+
+  const handleOffload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await offloadSingleToR2({ leadId: lead._id });
+      toast.success("Lead archived to R2 storage");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to archive lead");
+    }
+  };
+
   return (
     <>
+      {isAdmin && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200"
+          onClick={handleOffload}
+          title="Archive to R2 Storage"
+        >
+          <Archive className="h-3 w-3 mr-1" />
+          Archive
+        </Button>
+      )}
+
       {onOpenWhatsApp && (
         <Button
           size="sm"

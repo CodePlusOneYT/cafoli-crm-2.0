@@ -191,7 +191,7 @@ export const verifyAndTestR2 = internalMutation({
     loadedCount: number;
     success: boolean;
   }> => {
-    const startVerify = Date.now();
+    const startVerify = performance.now();
     
     const originalR2Leads = await ctx.db.query("leads").withIndex("by_source", q => q.eq("source", "R2 Test")).take(1000);
     
@@ -208,10 +208,10 @@ export const verifyAndTestR2 = internalMutation({
     
     const allTestLeads = [...originalR2Leads, ...webhookLeads];
 
-    const verifyTime = Math.max(1, Date.now() - startVerify);
+    const verifyTime = Number((performance.now() - startVerify).toFixed(2));
 
     // Offload to R2
-    const startOffload = Date.now();
+    const startOffload = performance.now();
     const offloadedData = [];
     for (const lead of allTestLeads) {
       await ctx.db.insert("r2_leads_mock", {
@@ -221,10 +221,10 @@ export const verifyAndTestR2 = internalMutation({
       await ctx.db.delete(lead._id);
       offloadedData.push(lead);
     }
-    const offloadTime = Math.max(1, Date.now() - startOffload);
+    const offloadTime = Number((performance.now() - startOffload).toFixed(2));
 
     // Load from R2
-    const startLoad = Date.now();
+    const startLoad = performance.now();
     const r2Leads = await ctx.db.query("r2_leads_mock").take(1000);
     
     let mismatchCount = 0;
@@ -253,7 +253,7 @@ export const verifyAndTestR2 = internalMutation({
         loadedCount++;
       }
     }
-    const loadTime = Math.max(1, Date.now() - startLoad);
+    const loadTime = Number((performance.now() - startLoad).toFixed(2));
 
     // Clean up webhook leads so they don't pollute the DB
     for (const lead of webhookLeads) {
@@ -294,7 +294,7 @@ export const simulateWebhooksAndTestR2 = action({
     // 1. Ensure we have exactly 150 base R2 test leads in Convex
     await ctx.runMutation(internal.test_utils.prepareBaseR2Leads);
 
-    const startSend = Date.now();
+    const startSend = performance.now();
     const promises = [];
 
     // 75 IndiaMART leads
@@ -352,11 +352,11 @@ export const simulateWebhooksAndTestR2 = action({
     }
 
     await Promise.all(promises);
-    const endSend = Date.now();
-    const sendTime = endSend - startSend;
+    const endSend = performance.now();
+    const sendTime = Number((endSend - startSend).toFixed(2));
 
-    // Wait longer for webhooks to process (increased from 3s to 6s)
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    // Wait longer for webhooks to process (increased from 6s to 8s to ensure all 300 leads are found)
+    await new Promise(resolve => setTimeout(resolve, 8000));
 
     // Verify and Test R2
     const result = (await ctx.runMutation(internal.test_utils.verifyAndTestR2, {

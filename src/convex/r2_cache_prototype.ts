@@ -127,6 +127,22 @@ export const loadFromR2 = mutation({
   }
 });
 
+export const offloadSingleToR2 = mutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) throw new Error("Lead not found");
+    
+    await ctx.db.insert("r2_leads_mock", {
+      originalId: lead._id,
+      leadData: lead,
+    });
+    
+    await ctx.db.delete(lead._id);
+    return `Offloaded lead ${lead.name} to R2.`;
+  }
+});
+
 export const getR2Stats = query({
   args: {},
   handler: async (ctx) => {
