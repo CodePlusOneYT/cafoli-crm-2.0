@@ -101,6 +101,10 @@ export const offloadToR2 = mutation({
         leadData: fullData,
         mobile: lead.mobile,
         indiamartUniqueId: lead.indiamartUniqueId,
+        name: lead.name,
+        searchText: lead.searchText,
+        status: lead.status,
+        source: lead.source,
       });
       
       // Delete from Convex (RAM)
@@ -219,6 +223,10 @@ export const offloadSingleToR2 = mutation({
       leadData: fullData,
       mobile: lead.mobile,
       indiamartUniqueId: lead.indiamartUniqueId,
+      name: lead.name,
+      searchText: lead.searchText,
+      status: lead.status,
+      source: lead.source,
     });
     
     for (const msg of messages) await ctx.db.delete(msg._id);
@@ -241,6 +249,26 @@ export const getR2Stats = query({
       convexActiveCount: convexLeads.length,
       r2StorageCount: r2Leads.length,
     };
+  }
+});
+
+export const searchR2Leads = query({
+  args: { searchQuery: v.string() },
+  handler: async (ctx, args) => {
+    if (!args.searchQuery) return [];
+    const results = await ctx.db
+      .query("r2_leads_mock")
+      .withSearchIndex("search_all", q => q.search("searchText", args.searchQuery))
+      .take(20);
+    return results;
+  }
+});
+
+export const restoreSingleFromR2 = mutation({
+  args: { r2Id: v.id("r2_leads_mock") },
+  handler: async (ctx, args) => {
+    const newLeadId = await restoreLeadFromR2Core(ctx, args.r2Id);
+    return newLeadId;
   }
 });
 
@@ -281,6 +309,10 @@ export const autoOffloadToR2 = internalMutation({
         leadData: fullData,
         mobile: lead.mobile,
         indiamartUniqueId: lead.indiamartUniqueId,
+        name: lead.name,
+        searchText: lead.searchText,
+        status: lead.status,
+        source: lead.source,
       });
       
       // Delete from Convex (RAM)

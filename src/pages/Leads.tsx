@@ -29,6 +29,7 @@ export default function Leads() {
   const assignLead = useMutation(api.leads.standard.assignLead);
   const unassignLead = useMutation(api.leads.standard.unassignLead);
   const unassignIdle = useMutation(api.coldCallerLeads.unassignColdCallerLeadsWithoutFollowUp);
+  const restoreFromR2 = useMutation(api.r2_cache_prototype.restoreSingleFromR2);
 
   const handleLeadSelect = (id: Id<"leads">) => {
     state.setSelectedLeadId(id);
@@ -90,6 +91,7 @@ export default function Leads() {
 
   const ITEMS_PER_PAGE = 50;
   const [paginationOpts, setPaginationOpts] = useState({ numItems: ITEMS_PER_PAGE, cursor: null as string | null });
+  const [isRestoring, setIsRestoring] = useState(false);
   
   const paginatedResult = useQuery(
     api.leads.queries.getPaginatedLeads,
@@ -140,6 +142,27 @@ export default function Leads() {
   }, [inView, paginatedResult]);
 
   const filteredLeads = allLoadedLeads || [];
+
+  const r2SearchResults = useQuery(
+    api.r2_cache_prototype.searchR2Leads,
+    state.search ? { searchQuery: state.search } : "skip"
+  );
+
+  const handleRestoreR2Lead = async (r2Id: Id<"r2_leads_mock">) => {
+    try {
+      setIsRestoring(true);
+      const newLeadId = await restoreFromR2({ r2Id });
+      if (newLeadId) {
+        toast.success("Lead restored from Archive (R2)");
+        state.setSelectedLeadId(newLeadId as Id<"leads">);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to restore lead from Archive");
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const handleOpenWhatsApp = (leadId: Id<"leads">) => {
     state.setWhatsAppLeadId(leadId);
@@ -209,6 +232,9 @@ export default function Leads() {
             loadMoreRef={loadMoreRef}
             isLoadingMore={!!paginatedResult && !paginatedResult.isDone}
             isDone={!!paginatedResult?.isDone}
+            r2Leads={r2SearchResults || []}
+            onRestoreR2Lead={handleRestoreR2Lead}
+            isRestoring={isRestoring}
           />
 
           {state.selectedLeadId ? (

@@ -388,7 +388,14 @@ export default defineSchema({
     leadData: v.any(),
     mobile: v.optional(v.string()),
     indiamartUniqueId: v.optional(v.string()),
+    name: v.optional(v.string()),
+    searchText: v.optional(v.string()),
+    status: v.optional(v.string()),
+    source: v.optional(v.string()),
   }).index("by_mobile", ["mobile"])
-    .index("by_indiamart_id", ["indiamartUniqueId"]),
+    .index("by_indiamart_id", ["indiamartUniqueId"])
+    .searchIndex("search_all", {
+      searchField: "searchText",
+    }),
 
 }, { schemaValidation: false });
