@@ -58,10 +58,29 @@ export const insertBulkContact = internalMutation({
 export const processReply = internalMutation({
   args: { phoneNumber: v.string(), message: v.string() },
   handler: async (ctx, args) => {
-    const contact = await ctx.db
+    const cleaned = args.phoneNumber.replace(/\D/g, "");
+    const tenDigit = cleaned.startsWith("91") && cleaned.length === 12 ? cleaned.slice(2) : cleaned;
+    const twelveDigit = cleaned.length === 10 ? "91" + cleaned : cleaned;
+
+    // Try all formats to find the bulk contact
+    let contact = await ctx.db
       .query("bulkContacts")
       .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", args.phoneNumber))
       .first();
+
+    if (!contact) {
+      contact = await ctx.db
+        .query("bulkContacts")
+        .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", twelveDigit))
+        .first();
+    }
+
+    if (!contact) {
+      contact = await ctx.db
+        .query("bulkContacts")
+        .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", tenDigit))
+        .first();
+    }
 
     if (contact && contact.status === "sent") {
       await ctx.db.patch(contact._id, {
@@ -71,13 +90,13 @@ export const processReply = internalMutation({
 
       const existingLead = await ctx.db
         .query("leads")
-        .withIndex("by_mobile", (q) => q.eq("mobile", args.phoneNumber))
+        .withIndex("by_mobile", (q) => q.eq("mobile", twelveDigit))
         .first();
 
       if (!existingLead) {
         const leadId = await ctx.db.insert("leads", {
           name: contact.name || "Bulk Contact",
-          mobile: contact.phoneNumber,
+          mobile: twelveDigit,
           source: "Bulk Campaign Reply",
           status: "Cold",
           type: "To be Decided",

@@ -158,6 +158,15 @@ export const processWhatsAppLead = internalMutation({
         .first();
     }
 
+    // Also try 10-digit version if standardized is 12-digit
+    if (!existingLead && standardizedPhone.startsWith("91") && standardizedPhone.length === 12) {
+      const tenDigit = standardizedPhone.slice(2);
+      existingLead = await ctx.db
+        .query("leads")
+        .withIndex("by_mobile", (q) => q.eq("mobile", tenDigit))
+        .first();
+    }
+
     if (!existingLead) {
       // Check R2 for standardized phone
       let r2Lead = await ctx.db
@@ -181,35 +190,13 @@ export const processWhatsAppLead = internalMutation({
     }
 
     if (existingLead) {
+      // Also try to mark bulk contact as replied if not already done
+      await markBulkContactReplied(ctx, standardizedPhone, args.phoneNumber);
       return { leadId: existingLead._id, isNewLead: false };
     }
 
-    // Check if it's a bulk contact reply - try both standardized and original phone
-    let contact = await ctx.db
-      .query("bulkContacts")
-      .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", standardizedPhone))
-      .first();
-
-    if (!contact) {
-      // Try original phone number format
-      contact = await ctx.db
-        .query("bulkContacts")
-        .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", args.phoneNumber))
-        .first();
-    }
-
-    if (!contact) {
-      // Try without country code (10-digit)
-      const tenDigit = standardizedPhone.startsWith("91") && standardizedPhone.length === 12
-        ? standardizedPhone.slice(2)
-        : null;
-      if (tenDigit) {
-        contact = await ctx.db
-          .query("bulkContacts")
-          .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", tenDigit))
-          .first();
-      }
-    }
+    // Check if it's a bulk contact reply - try all phone formats
+    const contact = await findBulkContact(ctx, standardizedPhone, args.phoneNumber);
 
     if (contact) {
       // Mark bulk contact as replied
@@ -265,6 +252,49 @@ export const processWhatsAppLead = internalMutation({
     return { leadId, isNewLead: true };
   }
 });
+
+// Helper: find bulk contact by trying all phone number formats
+async function findBulkContact(ctx: any, standardizedPhone: string, originalPhone: string) {
+  // Try standardized (12-digit)
+  let contact = await ctx.db
+    .query("bulkContacts")
+    .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", standardizedPhone))
+    .first();
+
+  if (!contact) {
+    // Try original format
+    contact = await ctx.db
+      .query("bulkContacts")
+      .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", originalPhone))
+      .first();
+  }
+
+  if (!contact) {
+    // Try 10-digit (strip 91 prefix)
+    const tenDigit = standardizedPhone.startsWith("91") && standardizedPhone.length === 12
+      ? standardizedPhone.slice(2)
+      : null;
+    if (tenDigit) {
+      contact = await ctx.db
+        .query("bulkContacts")
+        .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", tenDigit))
+        .first();
+    }
+  }
+
+  return contact;
+}
+
+// Helper: mark bulk contact as replied when existing lead found
+async function markBulkContactReplied(ctx: any, standardizedPhone: string, originalPhone: string) {
+  const contact = await findBulkContact(ctx, standardizedPhone, originalPhone);
+  if (contact && contact.status === "sent") {
+    await ctx.db.patch(contact._id, {
+      status: "replied",
+      lastInteractionAt: Date.now(),
+    });
+  }
+}
 
 export const ensureChatExists = internalMutation({
   args: {

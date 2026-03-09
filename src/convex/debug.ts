@@ -127,8 +127,8 @@ export const inspectBulkContactPhones = internalQuery({
 export const recoverBulkContactReplies = internalMutation({
   args: {},
   handler: async (ctx) => {
-    // Get all bulk contacts with status "sent"
-    const sentContacts = await ctx.db
+    // Get all bulk contacts
+    const allContacts = await ctx.db
       .query("bulkContacts")
       .withIndex("by_sentAt")
       .order("desc")
@@ -138,7 +138,7 @@ export const recoverBulkContactReplies = internalMutation({
     let created = 0;
     let alreadyReplied = 0;
 
-    for (const contact of sentContacts) {
+    for (const contact of allContacts) {
       if (contact.status === "replied") {
         alreadyReplied++;
         continue;
@@ -147,7 +147,7 @@ export const recoverBulkContactReplies = internalMutation({
       const phone = contact.phoneNumber;
       const cleaned = phone.replace(/\D/g, "");
       
-      // Try all possible formats
+      // Build all possible formats
       const formats = [
         phone,
         cleaned,
@@ -175,9 +175,29 @@ export const recoverBulkContactReplies = internalMutation({
           lastInteractionAt: Date.now(),
         });
         matched++;
+      } else {
+        // No lead found — create one so this high-quality lead is not lost
+        const standardized = cleaned.length === 10 ? "91" + cleaned : cleaned;
+        if (standardized.length >= 10) {
+          await ctx.db.insert("leads", {
+            name: contact.name || `Bulk Contact ${standardized}`,
+            mobile: standardized,
+            source: "Bulk Campaign Reply",
+            status: "Cold",
+            type: "To be Decided",
+            lastActivity: Date.now(),
+            priorityScore: 50,
+            adminAssignmentRequired: true,
+          });
+          await ctx.db.patch(contact._id, {
+            status: "replied",
+            lastInteractionAt: Date.now(),
+          });
+          created++;
+        }
       }
     }
 
-    return { matched, created, alreadyReplied, total: sentContacts.length };
+    return { matched, created, alreadyReplied, total: allContacts.length };
   },
 });
