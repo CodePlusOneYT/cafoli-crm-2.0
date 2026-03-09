@@ -137,6 +137,12 @@ export const processWhatsAppLead = internalMutation({
   },
   handler: async (ctx, args) => {
     const standardizedPhone = standardizePhoneNumber(args.phoneNumber);
+
+    // Validate phone number
+    if (!standardizedPhone || standardizedPhone.length < 10) {
+      console.warn(`Skipping WhatsApp lead with invalid phone: "${args.phoneNumber}"`);
+      return { leadId: null as any, isNewLead: false };
+    }
     
     // Try exact match on standardized phone
     let existingLead = await ctx.db
@@ -178,20 +184,43 @@ export const processWhatsAppLead = internalMutation({
       return { leadId: existingLead._id, isNewLead: false };
     }
 
-    // Check if it's a bulk contact reply
-    const contact = await ctx.db
+    // Check if it's a bulk contact reply - try both standardized and original phone
+    let contact = await ctx.db
       .query("bulkContacts")
-      .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", args.phoneNumber))
+      .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", standardizedPhone))
       .first();
 
-    if (contact && contact.status === "sent") {
+    if (!contact) {
+      // Try original phone number format
+      contact = await ctx.db
+        .query("bulkContacts")
+        .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", args.phoneNumber))
+        .first();
+    }
+
+    if (!contact) {
+      // Try without country code (10-digit)
+      const tenDigit = standardizedPhone.startsWith("91") && standardizedPhone.length === 12
+        ? standardizedPhone.slice(2)
+        : null;
+      if (tenDigit) {
+        contact = await ctx.db
+          .query("bulkContacts")
+          .withIndex("by_phoneNumber", (q) => q.eq("phoneNumber", tenDigit))
+          .first();
+      }
+    }
+
+    if (contact) {
+      // Mark bulk contact as replied
       await ctx.db.patch(contact._id, {
         status: "replied",
         lastInteractionAt: Date.now(),
       });
 
+      // Create lead from bulk contact reply
       const leadId = await ctx.db.insert("leads", {
-        name: contact.name || "Bulk Contact",
+        name: contact.name || `Bulk Contact ${standardizedPhone}`,
         mobile: standardizedPhone,
         source: "Bulk Campaign Reply",
         status: "Cold",
@@ -199,11 +228,21 @@ export const processWhatsAppLead = internalMutation({
         lastActivity: Date.now(),
         message: args.message,
         priorityScore: 50,
+        adminAssignmentRequired: true,
       });
+
+      // Log lead creation
+      await ctx.scheduler.runAfter(0, internal.activityLogs.logActivity, {
+        category: LOG_CATEGORIES.LEAD_INCOMING,
+        action: "Created new lead from Bulk Campaign Reply",
+        leadId: leadId,
+        details: `Phone: ${args.phoneNumber}, Bulk Contact: ${contact.name || "Unknown"}`,
+      });
+
       return { leadId, isNewLead: true };
     }
 
-    // Create new lead
+    // Create new lead from WhatsApp
     const leadId = await ctx.db.insert("leads", {
       name: args.name || args.phoneNumber,
       subject: "New WhatsApp Lead",

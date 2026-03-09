@@ -86,6 +86,13 @@ export const mergePharmavendsLead = internalMutation({
     message: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Validate mobile before merging
+    const standardizedMobile = standardizePhoneNumber(args.mobile);
+    if (!standardizedMobile || standardizedMobile.length < 10) {
+      console.warn(`Skipping merge for lead with invalid mobile: uid=${args.uid}, mobile="${args.mobile}"`);
+      return;
+    }
+
     const lead = await ctx.db.get(args.id);
     if (!lead) return;
 
@@ -99,12 +106,10 @@ export const mergePharmavendsLead = internalMutation({
       updates.nextFollowUpDate = now;
     }
 
-    // Standardize phone numbers before merging
-    const standardizedMobile = standardizePhoneNumber(args.mobile);
     const standardizedAltMobile = args.altMobile ? standardizePhoneNumber(args.altMobile) : undefined;
 
     // Merge fields - overwrite if new data is present
-    if (args.name) updates.name = args.name;
+    if (args.name && args.name.trim() !== "" && args.name.trim() !== "*") updates.name = args.name;
     if (standardizedMobile) updates.mobile = standardizedMobile;
     if (args.email) updates.email = args.email;
     if (standardizedAltMobile) updates.altMobile = standardizedAltMobile;

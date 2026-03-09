@@ -46,9 +46,17 @@ export const processIndiamartLead = internalMutation({
     }),
   },
   handler: async (ctx, args) => {
-    // Standardize the mobile number before checking
+    // Validate name and mobile before processing
     const standardizedMobile = standardizePhoneNumber(args.mobile);
-    
+    if (!standardizedMobile || standardizedMobile.length < 10) {
+      console.warn(`Skipping IndiaMART lead with invalid mobile: id=${args.uniqueQueryId}, mobile="${args.mobile}", name="${args.name}"`);
+      return { status: "skipped", reason: "invalid_mobile" };
+    }
+    if (!args.name || args.name.trim() === "" || args.name.trim() === "*") {
+      console.warn(`Skipping IndiaMART lead with invalid name: id=${args.uniqueQueryId}, name="${args.name}"`);
+      return { status: "skipped", reason: "invalid_name" };
+    }
+
     // First check by mobile number (primary deduplication)
     let existingLead = null;
     if (standardizedMobile) {
@@ -454,6 +462,16 @@ export const createIndiamartLead = internalMutation({
     // Standardize phone numbers before creating
     const standardizedMobile = standardizePhoneNumber(args.mobile);
     const standardizedAltMobile = args.altMobile ? standardizePhoneNumber(args.altMobile) : undefined;
+
+    // Validate name and mobile
+    if (!standardizedMobile || standardizedMobile.length < 10) {
+      console.warn(`Skipping IndiaMART lead with invalid mobile: id=${args.uniqueQueryId}, mobile="${args.mobile}", name="${args.name}"`);
+      return null;
+    }
+    if (!args.name || args.name.trim() === "" || args.name.trim() === "*") {
+      console.warn(`Skipping IndiaMART lead with invalid name: id=${args.uniqueQueryId}, name="${args.name}"`);
+      return null;
+    }
 
     const leadId = await ctx.db.insert("leads", {
       name: args.name,
