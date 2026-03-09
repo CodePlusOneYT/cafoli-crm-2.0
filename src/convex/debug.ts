@@ -105,3 +105,79 @@ export const checkBulkContactsStatus = internalQuery({
     };
   },
 });
+
+export const inspectBulkContactPhones = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const contacts = await ctx.db
+      .query("bulkContacts")
+      .withIndex("by_sentAt")
+      .order("desc")
+      .take(10);
+    
+    return contacts.map(c => ({
+      phoneNumber: c.phoneNumber,
+      phoneLength: c.phoneNumber?.length,
+      name: c.name,
+      status: c.status,
+    }));
+  },
+});
+
+export const recoverBulkContactReplies = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Get all bulk contacts with status "sent"
+    const sentContacts = await ctx.db
+      .query("bulkContacts")
+      .withIndex("by_sentAt")
+      .order("desc")
+      .take(1000);
+
+    let matched = 0;
+    let created = 0;
+    let alreadyReplied = 0;
+
+    for (const contact of sentContacts) {
+      if (contact.status === "replied") {
+        alreadyReplied++;
+        continue;
+      }
+
+      const phone = contact.phoneNumber;
+      const cleaned = phone.replace(/\D/g, "");
+      
+      // Try all possible formats
+      const formats = [
+        phone,
+        cleaned,
+        cleaned.length === 10 ? "91" + cleaned : null,
+        cleaned.startsWith("91") && cleaned.length === 12 ? cleaned.slice(2) : null,
+        "+" + cleaned,
+      ].filter(Boolean) as string[];
+
+      let foundLead = null;
+      for (const fmt of formats) {
+        const lead = await ctx.db
+          .query("leads")
+          .withIndex("by_mobile", (q) => q.eq("mobile", fmt))
+          .first();
+        if (lead) {
+          foundLead = lead;
+          break;
+        }
+      }
+
+      if (foundLead) {
+        // Mark bulk contact as replied
+        await ctx.db.patch(contact._id, {
+          status: "replied",
+          lastInteractionAt: Date.now(),
+        });
+        matched++;
+      }
+    }
+
+    return { matched, created, alreadyReplied, total: sentContacts.length };
+  },
+});
