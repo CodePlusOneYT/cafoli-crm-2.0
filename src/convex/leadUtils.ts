@@ -10,7 +10,7 @@ export function standardizePhoneNumber(phone: string): string {
   return cleaned;
 }
 
-// Generate combined search text for leads
+// Generate combined search text for leads - include ALL fields for better search coverage
 export function generateSearchText(data: {
   name?: string;
   subject?: string;
@@ -19,6 +19,12 @@ export function generateSearchText(data: {
   email?: string;
   altEmail?: string;
   message?: string;
+  agencyName?: string;
+  state?: string;
+  district?: string;
+  station?: string;
+  source?: string;
+  pincode?: string;
 }) {
   return [
     data.name,
@@ -27,7 +33,13 @@ export function generateSearchText(data: {
     data.altMobile,
     data.email,
     data.altEmail,
-    data.message
+    data.message,
+    data.agencyName,
+    data.state,
+    data.district,
+    data.station,
+    data.source,
+    data.pincode,
   ].filter(Boolean).join(" ");
 }
 

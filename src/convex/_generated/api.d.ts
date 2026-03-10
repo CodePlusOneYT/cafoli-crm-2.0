@@ -70,6 +70,8 @@ import type * as r2_cache_prototype from "../r2_cache_prototype.js";
 import type * as rangePdfs from "../rangePdfs.js";
 import type * as reportPdfGenerator from "../reportPdfGenerator.js";
 import type * as reports from "../reports.js";
+import type * as semanticSearch from "../semanticSearch.js";
+import type * as semanticSearchQueries from "../semanticSearchQueries.js";
 import type * as tags from "../tags.js";
 import type * as test_utils from "../test_utils.js";
 import type * as test_wa from "../test_wa.js";
@@ -166,6 +168,8 @@ declare const fullApi: ApiFromModules<{
   rangePdfs: typeof rangePdfs;
   reportPdfGenerator: typeof reportPdfGenerator;
   reports: typeof reports;
+  semanticSearch: typeof semanticSearch;
+  semanticSearchQueries: typeof semanticSearchQueries;
   tags: typeof tags;
   test_utils: typeof test_utils;
   test_wa: typeof test_wa;
