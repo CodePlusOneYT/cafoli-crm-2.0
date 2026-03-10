@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const checkHashFormat = internalQuery({
@@ -268,6 +268,93 @@ export const getBulkContactsStats = internalQuery({
       repliedBulkContacts: replied.length,
       sentBulkContacts: sent.length,
       note: `If totalBulkContactsTracked < 2100, some sends were not tracked in DB. Currently tracking ${bulkContacts.length}/2100 expected.`,
+    };
+  },
+});
+
+/**
+ * Check recent incoming WhatsApp messages to verify webhook is working.
+ * Returns the last 20 inbound messages with lead info.
+ */
+export const checkRecentIncomingMessages = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Get recent inbound messages
+    const recentMessages = await ctx.db
+      .query("messages")
+      .order("desc")
+      .take(50);
+
+    const inbound = recentMessages.filter(m => m.direction === "inbound");
+
+    const enriched = await Promise.all(
+      inbound.slice(0, 20).map(async (msg) => {
+        const chat = await ctx.db.get(msg.chatId);
+        let leadName = null;
+        let leadMobile = null;
+        if (chat) {
+          const lead = await ctx.db.get(chat.leadId);
+          leadName = lead?.name;
+          leadMobile = lead?.mobile;
+        }
+        return {
+          messageId: msg._id,
+          externalId: msg.externalId,
+          content: msg.content?.substring(0, 80),
+          status: msg.status,
+          messageType: msg.messageType,
+          createdAt: msg._creationTime,
+          leadName,
+          leadMobile,
+        };
+      })
+    );
+
+    return {
+      totalMessagesChecked: recentMessages.length,
+      inboundCount: inbound.length,
+      recentInbound: enriched,
+      note: "Shows last 20 inbound messages. If empty, webhook may not be receiving messages.",
+    };
+  },
+});
+
+/**
+ * Check webhook configuration health.
+ */
+export const checkWebhookHealth = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    // Count total messages
+    const totalMessages = await ctx.db.query("messages").take(5000);
+    const inbound = totalMessages.filter(m => m.direction === "inbound");
+    const outbound = totalMessages.filter(m => m.direction === "outbound");
+
+    // Count total chats
+    const totalChats = await ctx.db.query("chats").take(1000);
+
+    // Count total leads
+    const totalLeads = await ctx.db.query("leads").take(5000);
+
+    // Recent activity logs for WhatsApp
+    const recentLogs = await ctx.db
+      .query("activityLogs")
+      .withIndex("by_category", (q) => q.eq("category", "whatsapp_incoming"))
+      .order("desc")
+      .take(5);
+
+    return {
+      totalMessages: totalMessages.length,
+      inboundMessages: inbound.length,
+      outboundMessages: outbound.length,
+      totalChats: totalChats.length,
+      totalLeads: totalLeads.length,
+      recentIncomingLogs: recentLogs.map(l => ({
+        action: l.action,
+        details: l.details,
+        timestamp: l.timestamp,
+      })),
+      note: "If inboundMessages is 0, the webhook is not receiving messages. Check Meta webhook configuration.",
     };
   },
 });

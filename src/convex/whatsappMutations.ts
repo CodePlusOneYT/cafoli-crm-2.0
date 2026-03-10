@@ -5,13 +5,50 @@ import { LOG_CATEGORIES } from "./activityLogs";
 import { restoreLeadFromR2Core } from "./r2_cache_prototype";
 import { Id } from "./_generated/dataModel";
 
+/**
+ * Normalize a phone number for storage/matching.
+ * WhatsApp always sends full international format (e.g. 919876543210).
+ * We store as-is (full international). For matching we also try the 10-digit
+ * local version (strip leading country code) for India (91) and other common codes.
+ */
 function standardizePhoneNumber(phone: string): string {
   if (!phone) return "";
+  // Strip all non-digits
   const cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 10) {
-    return "91" + cleaned;
-  }
+  // Return as-is — WhatsApp already sends full international format
   return cleaned;
+}
+
+/**
+ * Build all candidate phone formats to try when matching a lead.
+ * Handles India (91), and generic stripping of 1-3 digit country codes.
+ */
+function buildPhoneVariants(phone: string): string[] {
+  const cleaned = phone.replace(/\D/g, "");
+  const variants = new Set<string>();
+  variants.add(phone);          // original
+  variants.add(cleaned);        // digits only
+
+  // If 12-digit starting with 91 (India) → also try 10-digit
+  if (cleaned.length === 12 && cleaned.startsWith("91")) {
+    variants.add(cleaned.slice(2));
+  }
+  // If 11-digit starting with 1 (US/Canada) → also try 10-digit
+  if (cleaned.length === 11 && cleaned.startsWith("1")) {
+    variants.add(cleaned.slice(1));
+  }
+  // If 10-digit → also try with 91 prefix (India)
+  if (cleaned.length === 10) {
+    variants.add("91" + cleaned);
+  }
+  // Generic: try stripping 1, 2, or 3 digit country codes for longer numbers
+  if (cleaned.length > 11) {
+    variants.add(cleaned.slice(1));
+    variants.add(cleaned.slice(2));
+    variants.add(cleaned.slice(3));
+  }
+
+  return Array.from(variants).filter(v => v.length >= 7);
 }
 
 export const storeMessage = internalMutation({
@@ -139,52 +176,36 @@ export const processWhatsAppLead = internalMutation({
     const standardizedPhone = standardizePhoneNumber(args.phoneNumber);
 
     // Validate phone number
-    if (!standardizedPhone || standardizedPhone.length < 10) {
+    if (!standardizedPhone || standardizedPhone.length < 7) {
       console.warn(`Skipping WhatsApp lead with invalid phone: "${args.phoneNumber}"`);
       return { leadId: null as any, isNewLead: false };
     }
-    
-    // Try exact match on standardized phone
-    let existingLead = await ctx.db
-      .query("leads")
-      .withIndex("by_mobile", (q) => q.eq("mobile", standardizedPhone))
-      .first();
-      
-    if (!existingLead) {
-      // Fallback to exact match on original phone
-      existingLead = await ctx.db
-        .query("leads")
-        .withIndex("by_mobile", (q) => q.eq("mobile", args.phoneNumber))
-        .first();
-    }
 
-    // Also try 10-digit version if standardized is 12-digit
-    if (!existingLead && standardizedPhone.startsWith("91") && standardizedPhone.length === 12) {
-      const tenDigit = standardizedPhone.slice(2);
+    // Try all phone variants to find existing lead
+    const variants = buildPhoneVariants(standardizedPhone);
+    let existingLead = null;
+
+    for (const variant of variants) {
       existingLead = await ctx.db
         .query("leads")
-        .withIndex("by_mobile", (q) => q.eq("mobile", tenDigit))
+        .withIndex("by_mobile", (q) => q.eq("mobile", variant))
         .first();
+      if (existingLead) break;
     }
 
     if (!existingLead) {
-      // Check R2 for standardized phone
-      let r2Lead = await ctx.db
-        .query("r2_leads_mock")
-        .withIndex("by_mobile", (q) => q.eq("mobile", standardizedPhone))
-        .first();
-        
-      if (!r2Lead) {
-        r2Lead = await ctx.db
+      // Check R2 for all variants
+      for (const variant of variants) {
+        const r2Lead = await ctx.db
           .query("r2_leads_mock")
-          .withIndex("by_mobile", (q) => q.eq("mobile", args.phoneNumber))
+          .withIndex("by_mobile", (q) => q.eq("mobile", variant))
           .first();
-      }
-      
-      if (r2Lead) {
-        const restoredLeadId = await restoreLeadFromR2Core(ctx, r2Lead._id);
-        if (restoredLeadId) {
-          existingLead = await ctx.db.get(restoredLeadId as Id<"leads">);
+        if (r2Lead) {
+          const restoredLeadId = await restoreLeadFromR2Core(ctx, r2Lead._id);
+          if (restoredLeadId) {
+            existingLead = await ctx.db.get(restoredLeadId as Id<"leads">);
+          }
+          break;
         }
       }
     }
@@ -255,34 +276,18 @@ export const processWhatsAppLead = internalMutation({
 
 // Helper: find bulk contact by trying all phone number formats
 async function findBulkContact(ctx: any, standardizedPhone: string, originalPhone: string) {
-  // Try standardized (12-digit)
-  let contact = await ctx.db
-    .query("bulkContacts")
-    .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", standardizedPhone))
-    .first();
+  const variants = buildPhoneVariants(standardizedPhone);
+  // Also add original
+  if (!variants.includes(originalPhone)) variants.push(originalPhone);
 
-  if (!contact) {
-    // Try original format
-    contact = await ctx.db
+  for (const variant of variants) {
+    const contact = await ctx.db
       .query("bulkContacts")
-      .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", originalPhone))
+      .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", variant))
       .first();
+    if (contact) return contact;
   }
-
-  if (!contact) {
-    // Try 10-digit (strip 91 prefix)
-    const tenDigit = standardizedPhone.startsWith("91") && standardizedPhone.length === 12
-      ? standardizedPhone.slice(2)
-      : null;
-    if (tenDigit) {
-      contact = await ctx.db
-        .query("bulkContacts")
-        .withIndex("by_phoneNumber", (q: any) => q.eq("phoneNumber", tenDigit))
-        .first();
-    }
-  }
-
-  return contact;
+  return null;
 }
 
 // Helper: mark bulk contact as replied when existing lead found
