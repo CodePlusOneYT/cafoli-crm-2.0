@@ -326,3 +326,110 @@ export const markMessagesAsRead = internalAction({
     }
   },
 });
+
+/**
+ * Sync messages for a lead by fetching recent messages from WhatsApp API
+ * and storing any that are missing from the local database.
+ */
+export const syncMessages = internalAction({
+  args: {
+    leadId: v.id("leads"),
+    phoneNumber: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ synced: number; errors: string[] }> => {
+    const errors: string[] = [];
+    let synced = 0;
+
+    try {
+      const { accessToken, phoneNumberId } = getWhatsAppCredentials();
+      const limit = args.limit ?? 20;
+
+      console.log(`[SYNC_MESSAGES] Starting sync for lead ${args.leadId}, phone ${args.phoneNumber}, limit ${limit}`);
+
+      // Fetch recent messages from WhatsApp API
+      const response = await fetch(
+        `https://graph.facebook.com/v20.0/${phoneNumberId}/messages?` +
+        new URLSearchParams({
+          fields: "id,from,to,timestamp,type,text,status",
+          limit: String(limit),
+        }),
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errData = await response.json();
+        const msg = `WhatsApp API error fetching messages: ${JSON.stringify(errData)}`;
+        console.error(`[SYNC_MESSAGES] ${msg}`);
+        errors.push(msg);
+        return { synced, errors };
+      }
+
+      const data = await response.json();
+      const waMessages: any[] = data.data || [];
+
+      console.log(`[SYNC_MESSAGES] Fetched ${waMessages.length} messages from WhatsApp API`);
+
+      // Get existing external IDs to avoid duplicates
+      const existingIds = await ctx.runQuery(internal.whatsappMutations.getExistingExternalIds, {
+        leadId: args.leadId,
+      });
+      const existingSet = new Set(existingIds);
+
+      for (const msg of waMessages) {
+        if (!msg.id || existingSet.has(msg.id)) continue;
+
+        try {
+          const isInbound = msg.from?.phone !== phoneNumberId;
+          const content = msg.text?.body || `[${msg.type || "media"}]`;
+
+          await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            content,
+            direction: isInbound ? "inbound" : "outbound",
+            status: msg.status || (isInbound ? "received" : "sent"),
+            externalId: msg.id,
+            messageType: msg.type !== "text" ? msg.type : undefined,
+          });
+
+          synced++;
+          console.log(`[SYNC_MESSAGES] Stored missing message ${msg.id}`);
+        } catch (err) {
+          const errMsg = `Failed to store message ${msg.id}: ${err instanceof Error ? err.message : String(err)}`;
+          console.error(`[SYNC_MESSAGES] ${errMsg}`);
+          errors.push(errMsg);
+        }
+      }
+
+      console.log(`[SYNC_MESSAGES] Sync complete. Synced: ${synced}, Errors: ${errors.length}`);
+    } catch (error) {
+      const errMsg = `Sync failed: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[SYNC_MESSAGES] ${errMsg}`);
+      errors.push(errMsg);
+    }
+
+    return { synced, errors };
+  },
+});
+
+/**
+ * Public action for frontend to trigger message sync for a lead.
+ */
+export const syncMessagesForLead = action({
+  args: {
+    leadId: v.id("leads"),
+    phoneNumber: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ synced: number; errors: string[] }> => {
+    return await ctx.runAction(internal.whatsapp.messages.syncMessages, {
+      leadId: args.leadId,
+      phoneNumber: args.phoneNumber,
+      limit: 50,
+    });
+  },
+});

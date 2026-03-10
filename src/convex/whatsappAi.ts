@@ -4,6 +4,20 @@ import { v } from "convex/values";
 import { internal, api } from "./_generated/api";
 import { generateWithGemini, extractJsonFromMarkdown } from "./lib/gemini";
 
+// Structured error logger for whatsappAi
+function logAiError(context: string, error: unknown, extra?: Record<string, unknown>) {
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+  console.error(
+    `[WHATSAPP_AI][${context}] ERROR: ${message}`,
+    JSON.stringify({ ...extra, stack: stack?.split("\n").slice(0, 5) })
+  );
+}
+
+function logAiInfo(context: string, message: string, extra?: Record<string, unknown>) {
+  console.log(`[WHATSAPP_AI][${context}] ${message}`, extra ? JSON.stringify(extra) : "");
+}
+
 export const generateChatSummary = action({
   args: {
     leadId: v.id("leads"),
@@ -62,7 +76,11 @@ export const generateAndSendAiReplyInternal = internalAction({
     isAutoReply: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const logCtx = `lead=${args.leadId} phone=${args.phoneNumber} auto=${args.isAutoReply ?? false}`;
+
     try {
+      logAiInfo("REPLY", "Starting AI reply generation", { leadId: args.leadId, prompt: args.prompt.substring(0, 80) });
+
       // Fetch available resources for context
       const products = await ctx.runQuery(internal.products.listProductsInternal);
       const rangePdfs = await ctx.runQuery(internal.rangePdfs.listRangePdfsInternal);
@@ -102,12 +120,12 @@ export const generateAndSendAiReplyInternal = internalAction({
       try {
         aiAction = JSON.parse(jsonStr);
       } catch (e) {
-        console.error("Failed to parse AI response as JSON", text);
+        logAiError("PARSE_JSON", e, { rawText: text.substring(0, 200) });
         // Fallback to text reply
         aiAction = { action: "reply", text: text };
       }
 
-      console.log("AI Action:", aiAction);
+      logAiInfo("ACTION", `Executing AI action: ${aiAction.action}`, { resource: aiAction.resource_name });
 
       // Execute Action
       if (aiAction.action === "reply") {
@@ -121,7 +139,7 @@ export const generateAndSendAiReplyInternal = internalAction({
       } else if (aiAction.action === "send_product") {
         const product = products.find((p: any) => p.name === aiAction.resource_name);
         if (product) {
-          console.log(`Found product: ${product.name}`);
+          logAiInfo("SEND_PRODUCT", `Found product: ${product.name}`, { leadId: args.leadId });
           
           // Send intro message if provided
           if (aiAction.text) {
@@ -193,7 +211,7 @@ export const generateAndSendAiReplyInternal = internalAction({
           let sentViaCloudflare = false;
 
           if (useCloudflare && filesToSend.length > 0) {
-             console.log(`[PRODUCT_SEND] Using Cloudflare Worker Relay for ${filesToSend.length} files`);
+             logAiInfo("SEND_PRODUCT", `Using Cloudflare Worker Relay for ${filesToSend.length} files`);
              
              // Prepare files with signed URLs
              const filesWithUrls = [];
@@ -208,14 +226,13 @@ export const generateAndSendAiReplyInternal = internalAction({
                 }
 
                 if (url) {
-                  console.log(`[PRODUCT_SEND] Generated URL for ${file.fileName}: ${url.substring(0, 50)}...`);
                   filesWithUrls.push({
                     url,
                     fileName: file.fileName,
                     mimeType: correctMimeType || "application/octet-stream"
                   });
                 } else {
-                  console.error(`[PRODUCT_SEND] Failed to generate URL for ${file.fileName} (Storage ID: ${file.storageId})`);
+                  logAiError("SEND_PRODUCT", new Error(`Failed to generate URL for ${file.fileName}`), { storageId: file.storageId });
                 }
              }
 
@@ -225,24 +242,26 @@ export const generateAndSendAiReplyInternal = internalAction({
                  phoneNumber: args.phoneNumber,
                  files: filesWithUrls
                });
-               console.log(`[PRODUCT_SEND] Cloudflare Worker successfully triggered`);
+               logAiInfo("SEND_PRODUCT", "Cloudflare Worker successfully triggered");
                sentViaCloudflare = true;
              } catch (err) {
-               console.error(`[PRODUCT_SEND] Cloudflare Worker failed, falling back to direct send:`, err);
+               logAiError("SEND_PRODUCT_CLOUDFLARE", err, { fallback: true });
                // Fallback logic will execute below because sentViaCloudflare is false
              }
           } 
           
           if (!sentViaCloudflare) {
-            // ORIGINAL DIRECT SEND LOGIC (Fallback)
-            console.log(`[PRODUCT_SEND] Using Direct Convex Send (No Cloudflare configured or fallback)`);
+            logAiInfo("SEND_PRODUCT", `Using Direct Convex Send (${filesToSend.length} files)`);
             
             for (let i = 0; i < filesToSend.length; i++) {
               const file = filesToSend[i];
               try {
                 const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: file.storageId });
                 
-                if (!metadata) continue;
+                if (!metadata) {
+                  logAiError("SEND_PRODUCT_FILE", new Error(`No metadata for ${file.label}`), { storageId: file.storageId });
+                  continue;
+                }
 
                 let correctMimeType = metadata?.contentType;
                 if (!correctMimeType || correctMimeType === "application/octet-stream" || correctMimeType === "text/html") {
@@ -260,7 +279,7 @@ export const generateAndSendAiReplyInternal = internalAction({
                 
                 await new Promise(resolve => setTimeout(resolve, 1000));
               } catch (error) {
-                console.error(`[PRODUCT_SEND] Failed to send ${file.label}:`, error);
+                logAiError("SEND_PRODUCT_FILE", error, { label: file.label, fileName: file.fileName });
               }
             }
           }
@@ -280,6 +299,7 @@ export const generateAndSendAiReplyInternal = internalAction({
             message: detailsMessage,
           });
         } else {
+          logAiError("SEND_PRODUCT", new Error(`Product not found: ${aiAction.resource_name}`), { availableCount: products.length });
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
@@ -289,6 +309,7 @@ export const generateAndSendAiReplyInternal = internalAction({
       } else if (aiAction.action === "send_pdf") {
          const pdf = rangePdfs.find((p: any) => p.name === aiAction.resource_name);
          if (pdf) {
+           logAiInfo("SEND_PDF", `Sending PDF: ${pdf.name}`, { leadId: args.leadId });
            const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: pdf.storageId });
            
            await ctx.runAction("whatsapp/messages:sendMedia" as any, {
@@ -300,13 +321,15 @@ export const generateAndSendAiReplyInternal = internalAction({
              message: aiAction.text
            });
          } else {
-            await ctx.runAction(internal.whatsapp.internal.sendMessage, {
+           logAiError("SEND_PDF", new Error(`PDF not found: ${aiAction.resource_name}`), { availableCount: rangePdfs.length });
+           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
              leadId: args.leadId,
              phoneNumber: args.phoneNumber,
              message: `I couldn't find the PDF for ${aiAction.resource_name}. ${aiAction.text}`,
            });
          }
       } else if (aiAction.action === "send_full_catalogue") {
+          logAiInfo("SEND_CATALOGUE", `Sending full catalogue with ${rangePdfs.length} PDFs`, { leadId: args.leadId });
           const catalogueMessage = aiAction.text || "Here is our complete product catalogue:";
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
@@ -329,10 +352,11 @@ export const generateAndSendAiReplyInternal = internalAction({
               
               await new Promise(resolve => setTimeout(resolve, 500));
             } catch (error) {
-              console.error(`Failed to send PDF ${pdf.name}:`, error);
+              logAiError("SEND_CATALOGUE_PDF", error, { pdfName: pdf.name });
             }
           }
       } else if (aiAction.action === "intervention_request") {
+          logAiInfo("INTERVENTION", `Creating intervention request`, { leadId: args.leadId, reason: aiAction.reason });
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
@@ -349,6 +373,7 @@ export const generateAndSendAiReplyInternal = internalAction({
             aiDraftedMessage: aiAction.reason || "Customer needs human assistance with their inquiry.",
           });
       } else if (aiAction.action === "contact_request") {
+          logAiInfo("CONTACT_REQUEST", `Creating contact request`, { leadId: args.leadId });
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
@@ -364,17 +389,25 @@ export const generateAndSendAiReplyInternal = internalAction({
               customerMessage: args.prompt,
             });
           } else {
-            console.warn("Cannot create contact request: lead has no assigned user", args.leadId);
+            logAiError("CONTACT_REQUEST", new Error("Lead has no assigned user"), { leadId: args.leadId });
           }
+      } else {
+        logAiError("UNKNOWN_ACTION", new Error(`Unknown AI action: ${aiAction.action}`), { aiAction });
       }
 
+      logAiInfo("REPLY", "AI reply generation complete", { action: aiAction.action, leadId: args.leadId });
+
     } catch (error) {
-      console.error("AI Generation Error", error);
-      await ctx.runAction(internal.whatsapp.internal.sendMessage, {
-          leadId: args.leadId,
-          phoneNumber: args.phoneNumber,
-          message: "I'm having trouble processing your request right now. Please try again later.",
-      });
+      logAiError("GENERATE_REPLY", error, { leadId: args.leadId, phoneNumber: args.phoneNumber, prompt: args.prompt.substring(0, 100) });
+      try {
+        await ctx.runAction(internal.whatsapp.internal.sendMessage, {
+            leadId: args.leadId,
+            phoneNumber: args.phoneNumber,
+            message: "I'm having trouble processing your request right now. Please try again later.",
+        });
+      } catch (sendErr) {
+        logAiError("FALLBACK_SEND", sendErr, { leadId: args.leadId });
+      }
     }
   }
 });

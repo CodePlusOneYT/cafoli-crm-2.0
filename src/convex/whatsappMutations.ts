@@ -448,3 +448,30 @@ export const createLeadFromWhatsApp = internalMutation({
     return leadId;
   },
 });
+
+/**
+ * Returns the set of externalIds already stored for a lead's chat,
+ * used by syncMessages to avoid inserting duplicates.
+ */
+export const getExistingExternalIds = internalQuery({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args): Promise<string[]> => {
+    const chat = await ctx.db
+      .query("chats")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    if (!chat) return [];
+
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+      .take(500);
+
+    return messages
+      .map((m) => m.externalId)
+      .filter((id): id is string => !!id);
+  },
+});
