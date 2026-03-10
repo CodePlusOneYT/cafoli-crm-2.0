@@ -34,13 +34,11 @@ export const send = action({
   handler: async (ctx, args) => {
     const { accessToken, phoneNumberId } = getWhatsAppCredentials();
 
-    // Validate phone number
     if (!args.phoneNumber || args.phoneNumber.trim() === "") {
       throw new Error("Phone number is required and cannot be empty");
     }
 
     try {
-      // Clean phone number
       const cleanedPhone = args.phoneNumber.replace(/[\s-]/g, "");
       
       const payload: any = {
@@ -93,7 +91,8 @@ export const send = action({
   },
 });
 
-export const sendMedia = internalAction({
+// Public action so frontend can call it directly via useAction
+export const sendMedia = action({
   args: {
     phoneNumber: v.string(),
     message: v.optional(v.string()),
@@ -121,11 +120,9 @@ export const sendMedia = internalAction({
 
       if (mediaId) {
         console.log(`[SEND_MEDIA] Found cached media ID: ${mediaId}`);
-        // Try sending with cached ID
         try {
           const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
           
-          // Log success and return
           const fileUrl = await ctx.storage.getUrl(args.storageId);
           await ctx.runMutation("whatsappMutations:storeMessage" as any, {
             leadId: args.leadId,
@@ -142,14 +139,12 @@ export const sendMedia = internalAction({
           return { success: true, messageId: result.messages?.[0]?.id };
         } catch (e) {
           console.warn(`[SEND_MEDIA] Failed to send with cached ID, retrying with upload...`, e);
-          // Invalidate cache
           await ctx.runMutation(internal.whatsapp.mediaCache.remove, { storageId: args.storageId });
           mediaId = undefined;
         }
       }
 
       if (!mediaId) {
-        // Get file directly from storage
         console.log(`[SEND_MEDIA] Fetching from storage: ${args.storageId}`);
         const fileBlob = await ctx.storage.get(args.storageId);
         
@@ -159,7 +154,6 @@ export const sendMedia = internalAction({
         
         console.log(`[SEND_MEDIA] File size: ${fileBlob.size} bytes`);
 
-        // Upload to WhatsApp
         const formData = new FormData();
         formData.append("file", fileBlob, args.fileName);
         formData.append("messaging_product", "whatsapp");
@@ -185,7 +179,6 @@ export const sendMedia = internalAction({
         
         console.log(`[SEND_MEDIA] Uploaded, media ID: ${mediaId}`);
         
-        // Cache the new media ID
         await ctx.runMutation(internal.whatsapp.mediaCache.save, {
           storageId: args.storageId,
           mediaId: mediaId,
@@ -193,7 +186,6 @@ export const sendMedia = internalAction({
           fileName: args.fileName,
         });
 
-        // Send message
         const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
 
         const fileUrl = await ctx.storage.getUrl(args.storageId);
@@ -232,6 +224,28 @@ export const sendMedia = internalAction({
       
       throw error;
     }
+  },
+});
+
+// Internal version for use by other server-side actions
+export const sendMediaInternal = internalAction({
+  args: {
+    phoneNumber: v.string(),
+    message: v.optional(v.string()),
+    leadId: v.id("leads"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mimeType: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; messageId?: string }> => {
+    const result = await ctx.runAction(internal.whatsapp.messages.sendMedia, args);
+    if (!result) {
+      throw new Error("Failed to send media: No response from internal action");
+    }
+    return {
+      success: result.success,
+      messageId: result.messageId as string | undefined
+    };
   },
 });
 

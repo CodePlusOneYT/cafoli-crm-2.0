@@ -34,7 +34,7 @@ export const getChatsByLeadId = internalQuery({
 export const getAllChats = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("chats").order("desc").collect();
+    return await ctx.db.query("chats").order("desc").take(100);
   },
 });
 

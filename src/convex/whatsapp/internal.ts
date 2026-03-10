@@ -73,7 +73,6 @@ export const sendWelcomeMessage = internalAction({
     } catch (error) {
       console.error("[WELCOME_MSG] Error:", error);
       
-      // Log failure to activity logs
       await ctx.runMutation(internal.activityLogs.logActivity, {
         category: "WhatsApp: Message Going",
         action: "Welcome Message Failed",
@@ -99,10 +98,8 @@ export const sendMessage = internalAction({
     try {
       const { accessToken, phoneNumberId } = getWhatsAppCredentials();
       
-      // Clean phone number (remove spaces, dashes, but keep + if present)
       const cleanedPhone = args.phoneNumber.replace(/[\s-]/g, "");
       
-      // Prepare message payload
       const payload: any = {
         messaging_product: "whatsapp",
         to: cleanedPhone,
@@ -110,14 +107,12 @@ export const sendMessage = internalAction({
         text: { body: args.message },
       };
 
-      // Add context for reply if quoted
       if (args.quotedMessageExternalId) {
         payload.context = {
           message_id: args.quotedMessageExternalId
         };
       }
 
-      // Send message via WhatsApp Cloud API
       const response = await fetch(
         `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
         {
@@ -135,7 +130,6 @@ export const sendMessage = internalAction({
       if (!response.ok) {
         console.error("[SEND_MSG] WhatsApp API error:", JSON.stringify(data));
         
-        // Log failure
         await ctx.runMutation(internal.activityLogs.logActivity, {
           category: "WhatsApp: Message Going",
           action: "Message Send Failed",
@@ -147,7 +141,6 @@ export const sendMessage = internalAction({
         return { success: false, error: `WhatsApp API error: ${JSON.stringify(data)}` };
       }
 
-      // Store message in database
       await ctx.runMutation("whatsappMutations:storeMessage" as any, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
@@ -162,7 +155,6 @@ export const sendMessage = internalAction({
     } catch (error) {
       console.error("[SEND_MSG] Error:", error);
       
-      // Log failure
       await ctx.runMutation(internal.activityLogs.logActivity, {
         category: "WhatsApp: Message Going",
         action: "Message Send Error",
@@ -186,8 +178,8 @@ export const sendMedia = internalAction({
     mimeType: v.string(),
   },
   handler: async (ctx, args): Promise<{ success: boolean; messageId?: string }> => {
-    // Delegate to the robust implementation in messages.ts
-    const result = await ctx.runAction(internal.whatsapp.messages.sendMedia, args);
+    // Delegate to the public sendMedia action in messages.ts
+    const result = await ctx.runAction(internal.whatsapp.messages.sendMediaInternal, args);
     
     if (!result) {
       throw new Error("Failed to send media: No response from internal action");
