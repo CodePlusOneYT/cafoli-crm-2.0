@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, ArrowUpDown, Filter } from "lucide-react";
+import { Search, ArrowUpDown, Filter, Sparkles, Loader2 } from "lucide-react";
 import { CreateLeadDialog } from "./CreateLeadDialog";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -24,6 +24,8 @@ interface LeadsToolbarProps {
   onUnassignIdle: () => void;
   onToggleColdCallerView: () => void;
   onToggleIrrelevantView: () => void;
+  isSemanticSearching?: boolean;
+  isSemanticMode?: boolean;
 }
 
 export function LeadsToolbar({
@@ -44,6 +46,8 @@ export function LeadsToolbar({
   onUnassignIdle,
   onToggleColdCallerView,
   onToggleIrrelevantView,
+  isSemanticSearching = false,
+  isSemanticMode = false,
 }: LeadsToolbarProps) {
   return (
     <>
@@ -94,13 +98,27 @@ export function LeadsToolbar({
       {/* Search and Filter Bar */}
       <div className="flex flex-col md:flex-row gap-2 items-stretch md:items-center">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          {isSemanticSearching ? (
+            <Loader2 className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-primary animate-spin" />
+          ) : isSemanticMode ? (
+            <Sparkles className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-primary" />
+          ) : (
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          )}
           <Input
             placeholder="Search by name, email, phone, company, subject, or message..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 w-full"
+            className={`pl-10 w-full transition-colors ${isSemanticMode ? "border-primary/50 focus-visible:ring-primary/30" : ""}`}
           />
+          {isSemanticMode && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <Badge variant="secondary" className="text-xs gap-1 py-0 px-1.5">
+                <Sparkles className="h-2.5 w-2.5" />
+                AI
+              </Badge>
+            </div>
+          )}
         </div>
         
         <div className="flex gap-2">

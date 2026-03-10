@@ -2,8 +2,8 @@ import AppLayout from "@/components/AppLayout";
 import { getConvexApi } from "@/lib/convex-api";
 
 const api = getConvexApi() as any;
-import { useQuery, useMutation } from "convex/react";
-import { useState, useMemo } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Id, Doc } from "@/convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -30,6 +30,47 @@ export default function Leads() {
   const unassignLead = useMutation(api.leads.standard.unassignLead);
   const unassignIdle = useMutation(api.coldCallerLeads.unassignColdCallerLeadsWithoutFollowUp);
   const restoreFromR2 = useMutation(api.r2_cache_prototype.restoreSingleFromR2);
+  const semanticSearch = useAction(api.semanticSearch.semanticSearchLeads);
+
+  // Semantic search state
+  const [semanticResults, setSemanticResults] = useState<Doc<"leads">[] | null>(null);
+  const [isSemanticSearching, setIsSemanticSearching] = useState(false);
+  const semanticDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced semantic search trigger
+  useEffect(() => {
+    if (semanticDebounceRef.current) clearTimeout(semanticDebounceRef.current);
+
+    if (!state.search || state.search.trim().length < 2) {
+      setSemanticResults(null);
+      setIsSemanticSearching(false);
+      return;
+    }
+
+    setIsSemanticSearching(true);
+    semanticDebounceRef.current = setTimeout(async () => {
+      try {
+        const results = await semanticSearch({ query: state.search.trim(), limit: 50 });
+        setSemanticResults(results as Doc<"leads">[]);
+      } catch (err) {
+        console.error("Semantic search failed:", err);
+        setSemanticResults(null);
+      } finally {
+        setIsSemanticSearching(false);
+      }
+    }, 600);
+
+    return () => {
+      if (semanticDebounceRef.current) clearTimeout(semanticDebounceRef.current);
+    };
+  }, [state.search]);
+
+  // Reset semantic results when search is cleared
+  useEffect(() => {
+    if (!state.search) {
+      setSemanticResults(null);
+    }
+  }, [state.search]);
 
   const handleLeadSelect = (id: Id<"leads">) => {
     state.setSelectedLeadId(id);
@@ -92,13 +133,14 @@ export default function Leads() {
   const ITEMS_PER_PAGE = 50;
   const [paginationOpts, setPaginationOpts] = useState({ numItems: ITEMS_PER_PAGE, cursor: null as string | null });
   const [isRestoring, setIsRestoring] = useState(false);
-  
+
+  // Only use paginated query when NOT in semantic search mode
   const paginatedResult = useQuery(
     api.leads.queries.getPaginatedLeads,
-    user ? {
+    user && !state.search ? {
       userId: user._id,
       filter: state.viewIrrelevantLeads ? "irrelevant" : state.viewColdCallerLeads ? "cold_caller" : state.filter,
-      search: state.search || undefined,
+      search: undefined,
       statuses: state.selectedStatuses.length > 0 ? state.selectedStatuses : undefined,
       sources: state.selectedSources.length > 0 ? state.selectedSources : undefined,
       tags: state.selectedTags.length > 0 ? state.selectedTags.map(t => t as Id<"tags">) : undefined,
@@ -141,7 +183,13 @@ export default function Leads() {
     }
   }, [inView, paginatedResult]);
 
-  const filteredLeads = allLoadedLeads || [];
+  // Determine which leads to show: semantic results or paginated
+  const filteredLeads = useMemo(() => {
+    if (state.search && semanticResults !== null) {
+      return semanticResults;
+    }
+    return allLoadedLeads;
+  }, [state.search, semanticResults, allLoadedLeads]);
 
   const r2SearchResults = useQuery(
     api.r2_cache_prototype.searchR2Leads,
@@ -175,6 +223,8 @@ export default function Leads() {
                            state.selectedTags.length + state.selectedAssignedTo.length +
                            state.selectedAiScoreTiers.length;
 
+  const isSemanticMode = !!state.search && state.search.trim().length >= 2;
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-4rem)] flex flex-col gap-4">
@@ -202,6 +252,8 @@ export default function Leads() {
             if (!state.viewIrrelevantLeads) state.setViewColdCallerLeads(false);
             state.setViewIrrelevantLeads(!state.viewIrrelevantLeads);
           }}
+          isSemanticSearching={isSemanticSearching}
+          isSemanticMode={isSemanticMode}
         />
 
         <ActiveFiltersDisplay
@@ -230,8 +282,8 @@ export default function Leads() {
             onUnassign={handleUnassign}
             onOpenWhatsApp={handleOpenWhatsApp}
             loadMoreRef={loadMoreRef}
-            isLoadingMore={!!paginatedResult && !paginatedResult.isDone}
-            isDone={!!paginatedResult?.isDone}
+            isLoadingMore={isSemanticMode ? false : (!!paginatedResult && !paginatedResult.isDone)}
+            isDone={isSemanticMode ? true : (!!paginatedResult?.isDone)}
             r2Leads={r2SearchResults || []}
             onRestoreR2Lead={handleRestoreR2Lead}
             isRestoring={isRestoring}
