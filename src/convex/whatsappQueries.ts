@@ -136,7 +136,6 @@ export const getLeadsWithChatStatus = query({
       }
     }
 
-    // Enrich leads with chat status
     const leadsWithChatStatus = await Promise.all(
       leads.map(async (lead) => {
         const chat = await ctx.db
@@ -146,25 +145,17 @@ export const getLeadsWithChatStatus = query({
 
         return {
           ...lead,
+          hasChat: !!chat,
           unreadCount: chat?.unreadCount || 0,
-          lastMessageAt: chat?.lastMessageAt || lead.lastActivity || 0,
+          lastMessageAt: chat?.lastMessageAt || 0,
         };
       })
     );
 
-    // Sort by last message time (most recent first)
-    const sortedLeads = leadsWithChatStatus.sort((a, b) => {
-      // Prioritize leads with actual messages
-      const aHasMessages = a.lastMessageAt > 0;
-      const bHasMessages = b.lastMessageAt > 0;
+    const visibleLeads = leadsWithChatStatus.filter((lead) => lead.hasChat);
 
-      if (aHasMessages && !bHasMessages) return -1;
-      if (!aHasMessages && bHasMessages) return 1;
-
-      // Both have messages or both don't - sort by timestamp (latest first)
-      return b.lastMessageAt - a.lastMessageAt;
+    return visibleLeads.sort((a, b) => {
+      return (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
     });
-
-    return sortedLeads;
   },
 });
