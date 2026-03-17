@@ -11,9 +11,35 @@ export async function restoreLeadFromR2Core(ctx: any, r2Id: Id<"r2_leads_mock">)
   let newLeadId;
   
   if (data.lead) {
-    const leadData = data.lead;
+    const leadData = { ...data.lead };
     delete leadData._id;
     delete leadData._creationTime;
+
+    // --- Deduplication guard ---
+    // Check if a Convex lead already exists with the same mobile or indiamartUniqueId
+    if (r2Lead.mobile) {
+      const existing = await ctx.db
+        .query("leads")
+        .withIndex("by_mobile", (q: any) => q.eq("mobile", r2Lead.mobile))
+        .first();
+      if (existing) {
+        // Lead already in Convex — just delete the R2 entry and return existing id
+        await ctx.db.delete(r2Lead._id);
+        return existing._id;
+      }
+    }
+    if (r2Lead.indiamartUniqueId) {
+      const existing = await ctx.db
+        .query("leads")
+        .withIndex("by_indiamart_id", (q: any) => q.eq("indiamartUniqueId", r2Lead.indiamartUniqueId))
+        .first();
+      if (existing) {
+        await ctx.db.delete(r2Lead._id);
+        return existing._id;
+      }
+    }
+    // --- End deduplication guard ---
+
     newLeadId = await ctx.db.insert("leads", leadData);
 
     const idMap: Record<string, string> = { [r2Lead.originalId]: newLeadId };
@@ -21,10 +47,11 @@ export async function restoreLeadFromR2Core(ctx: any, r2Id: Id<"r2_leads_mock">)
     // Restore chats
     for (const chat of data.chats || []) {
       const oldChatId = chat._id;
-      delete chat._id;
-      delete chat._creationTime;
-      chat.leadId = newLeadId;
-      const newChatId = await ctx.db.insert("chats", chat);
+      const chatData = { ...chat };
+      delete chatData._id;
+      delete chatData._creationTime;
+      chatData.leadId = newLeadId;
+      const newChatId = await ctx.db.insert("chats", chatData);
       idMap[oldChatId] = newChatId;
     }
 
@@ -32,34 +59,51 @@ export async function restoreLeadFromR2Core(ctx: any, r2Id: Id<"r2_leads_mock">)
     const messages = (data.messages || []).sort((a: any, b: any) => a._creationTime - b._creationTime);
     for (const msg of messages) {
       const oldMsgId = msg._id;
-      delete msg._id;
-      delete msg._creationTime;
-      msg.chatId = idMap[msg.chatId] || msg.chatId;
-      if (msg.quotedMessageId) {
-        msg.quotedMessageId = idMap[msg.quotedMessageId] || msg.quotedMessageId;
+      const msgData = { ...msg };
+      delete msgData._id;
+      delete msgData._creationTime;
+      msgData.chatId = idMap[msgData.chatId] || msgData.chatId;
+      if (msgData.quotedMessageId) {
+        msgData.quotedMessageId = idMap[msgData.quotedMessageId] || msgData.quotedMessageId;
       }
-      await ctx.db.insert("messages", msg);
+      const newMsgId = await ctx.db.insert("messages", msgData);
+      idMap[oldMsgId] = newMsgId;
     }
 
     // Restore comments
     for (const comment of data.comments || []) {
-      delete comment._id;
-      delete comment._creationTime;
-      comment.leadId = newLeadId;
-      await ctx.db.insert("comments", comment);
+      const commentData = { ...comment };
+      delete commentData._id;
+      delete commentData._creationTime;
+      commentData.leadId = newLeadId;
+      await ctx.db.insert("comments", commentData);
     }
 
     // Restore followups
     for (const followup of data.followups || []) {
-      delete followup._id;
-      delete followup._creationTime;
-      followup.leadId = newLeadId;
-      await ctx.db.insert("followups", followup);
+      const followupData = { ...followup };
+      delete followupData._id;
+      delete followupData._creationTime;
+      followupData.leadId = newLeadId;
+      await ctx.db.insert("followups", followupData);
     }
   } else {
-    const leadData = data;
+    const leadData = { ...data };
     delete leadData._id;
     delete leadData._creationTime;
+
+    // Deduplication guard for flat data format
+    if (leadData.mobile) {
+      const existing = await ctx.db
+        .query("leads")
+        .withIndex("by_mobile", (q: any) => q.eq("mobile", leadData.mobile))
+        .first();
+      if (existing) {
+        await ctx.db.delete(r2Lead._id);
+        return existing._id;
+      }
+    }
+
     newLeadId = await ctx.db.insert("leads", leadData);
   }
   
@@ -254,6 +298,14 @@ export const restoreSingleFromR2 = mutation({
   }
 });
 
+export const restoreSingleFromR2ByPhone = internalMutation({
+  args: { r2Id: v.id("r2_leads_mock") },
+  handler: async (ctx, args) => {
+    const newLeadId = await restoreLeadFromR2Core(ctx, args.r2Id);
+    return newLeadId ? (newLeadId as string) : null;
+  },
+});
+
 export const autoOffloadToR2 = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -371,5 +423,31 @@ export const getCombinedStats = query({
       newLeadsToday: convexNew,
       pendingFollowUps: convexPending,
     };
+  },
+});
+
+export const restoreLeadForIntervention = internalMutation({
+  args: {
+    r2Id: v.id("r2_leads_mock"),
+    interventionId: v.id("interventionRequests"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const newLeadId = await restoreLeadFromR2Core(ctx, args.r2Id);
+    if (!newLeadId) return;
+
+    // Assign the restored lead to the claiming user
+    const lead = await ctx.db.get(newLeadId as Id<"leads">);
+    if (lead && (!(lead as any).assignedTo || (lead as any).isColdCallerLead)) {
+      await ctx.db.patch(newLeadId as Id<"leads">, {
+        assignedTo: args.userId,
+        isColdCallerLead: false,
+      });
+    }
+
+    // Update the intervention with the new (restored) leadId
+    await ctx.db.patch(args.interventionId, {
+      leadId: newLeadId,
+    });
   },
 });

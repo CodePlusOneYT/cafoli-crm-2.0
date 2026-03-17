@@ -25,3 +25,25 @@ export const getTemplates = query({
     return await ctx.db.query("templates").collect();
   },
 });
+
+export const findLeadIdByPhone = internalQuery({
+  args: { phone: v.string() },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db
+      .query("leads")
+      .withIndex("by_mobile", (q) => q.eq("mobile", args.phone))
+      .first();
+    return lead ? (lead._id as string) : null;
+  },
+});
+
+export const findR2IdByPhone = internalQuery({
+  args: { phone: v.string() },
+  handler: async (ctx, args) => {
+    const r2 = await ctx.db
+      .query("r2_leads_mock")
+      .filter((q) => q.eq(q.field("mobile"), args.phone))
+      .first();
+    return r2 ? (r2._id as string) : null;
+  },
+});

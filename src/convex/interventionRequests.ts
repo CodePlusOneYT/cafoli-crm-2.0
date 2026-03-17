@@ -98,8 +98,26 @@ export const claimIntervention = mutation({
       requiresFollowUp: true,
     });
 
+    // Check if lead exists in Convex; if not, try to restore from R2
+    let lead = await ctx.db.get(intervention.leadId);
+    if (!lead) {
+      // Lead may be in R2 — search by leadId stored as originalId
+      const r2Entry = await ctx.db
+        .query("r2_leads_mock")
+        .filter((q) => q.eq(q.field("originalId"), intervention.leadId as string))
+        .first();
+      if (r2Entry) {
+        // Schedule restore so we don't block the mutation too long
+        await ctx.scheduler.runAfter(0, internal.r2_cache_prototype.restoreLeadForIntervention, {
+          r2Id: r2Entry._id,
+          interventionId: args.interventionId,
+          userId: args.userId,
+        });
+        return { success: true, leadId: intervention.leadId, restoringFromR2: true };
+      }
+    }
+
     // If lead was unassigned or cold caller, assign to claiming user
-    const lead = await ctx.db.get(intervention.leadId);
     if (lead && (!lead.assignedTo || lead.isColdCallerLead)) {
       await ctx.db.patch(intervention.leadId, {
         assignedTo: args.userId,
@@ -107,7 +125,7 @@ export const claimIntervention = mutation({
       });
     }
 
-    return { success: true, leadId: intervention.leadId };
+    return { success: true, leadId: intervention.leadId, restoringFromR2: false };
   },
 });
 

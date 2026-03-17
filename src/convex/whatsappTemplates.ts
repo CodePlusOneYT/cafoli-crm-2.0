@@ -455,6 +455,60 @@ export const sendTemplateMessage = action({
   },
 });
 
+// Send a template message using only a phone number (no Convex leadId required).
+// If the phone maps to an R2 lead, it is restored first and the template is sent
+// using the newly created Convex leadId.
+export const sendTemplateMessageByPhone = action({
+  args: {
+    phoneNumber: v.string(),
+    templateName: v.string(),
+    languageCode: v.string(),
+    variables: v.optional(v.record(v.string(), v.string())),
+    mediaUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const internalAny = internal as any;
+
+    // 1. Normalize phone
+    const rawPhone = args.phoneNumber.replace(/\D/g, "");
+    const phone = rawPhone.length === 10 ? "91" + rawPhone : rawPhone;
+
+    // 2. Check if lead already exists in Convex
+    let leadId: string | null = await ctx.runQuery(
+      internalAny.whatsappTemplates.findLeadIdByPhone,
+      { phone }
+    );
+
+    // 3. If not in Convex, check R2 and restore
+    if (!leadId) {
+      const r2Id: string | null = await ctx.runQuery(
+        internalAny.whatsappTemplates.findR2IdByPhone,
+        { phone }
+      );
+      if (r2Id) {
+        leadId = await ctx.runMutation(
+          internalAny.r2_cache_prototype.restoreSingleFromR2ByPhone,
+          { r2Id }
+        );
+      }
+    }
+
+    if (!leadId) {
+      throw new Error(`No lead found for phone ${phone}. Cannot send template.`);
+    }
+
+    return await sendTemplateMessageHelper(
+      phone,
+      args.templateName,
+      args.languageCode,
+      leadId,
+      ctx,
+      args.variables,
+      args.mediaUrl
+    );
+  },
+});
+
 // Internal action to send welcome message
 export const sendWelcomeMessage = internalAction({
   args: {
