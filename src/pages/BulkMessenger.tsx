@@ -91,7 +91,7 @@ export default function BulkMessenger() {
       const contacts = csvData
         .map(row => ({
           phoneNumber: String(row[mapping.phone] || "").replace(/\D/g, ""),
-          name: mapping.name ? String(row[mapping.name] || "") : undefined,
+          name: (mapping.name && mapping.name !== "__none__") ? String(row[mapping.name] || "") : undefined,
         }))
         .filter(c => c.phoneNumber.length >= 7);
 
@@ -173,12 +173,12 @@ export default function BulkMessenger() {
 
                   <div className="space-y-2">
                     <Label>Map Name Column (Optional)</Label>
-                    <Select value={mapping.name} onValueChange={(v) => setMapping({ ...mapping, name: v })}>
+                    <Select value={mapping.name || "__none__"} onValueChange={(v) => setMapping({ ...mapping, name: v === "__none__" ? "" : v })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none_selected">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {Object.keys(csvData[0]).map(header => (
                           <SelectItem key={header} value={header}>{header}</SelectItem>
                         ))}

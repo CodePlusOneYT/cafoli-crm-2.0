@@ -29,7 +29,9 @@ export const processBulkTemplateChunk = internalAction({
 
     let sent = 0;
     let failed = 0;
-    const language = args.templateLanguage || "en_US";
+    // Normalize language: WhatsApp uses "en_US" but templates may be stored as "en"
+    const rawLang = args.templateLanguage || "en";
+    const language = rawLang === "en" ? "en_US" : rawLang;
 
     try {
       for (const contact of currentChunk) {

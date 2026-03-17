@@ -6,9 +6,9 @@ export const getBulkContacts = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("bulkContacts")
-      .withIndex("by_sentAt")
+      .withIndex("by_adminId", (q) => q.eq("adminId", args.adminId))
       .order("desc")
-      .take(100);
+      .take(200);
   },
 });
 

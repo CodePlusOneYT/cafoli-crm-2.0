@@ -1,4 +1,4 @@
-import { internalMutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
 export const upsertTemplate = internalMutation({
@@ -21,15 +21,13 @@ export const upsertTemplate = internalMutation({
     })),
   },
   handler: async (ctx, args) => {
-    // Check if template exists
-    const existingTemplate = await ctx.db
-      .query("templates")
-      .filter((q) => q.eq(q.field("name"), args.name))
-      .filter((q) => q.eq(q.field("language"), args.language))
-      .first();
+    // Use collect + JS filter since templates table has no composite index on name+language
+    const allTemplates = await ctx.db.query("templates").collect();
+    const existingTemplate = allTemplates.find(
+      (t) => t.name === args.name && t.language === args.language
+    );
 
     if (existingTemplate) {
-      // Update existing template
       await ctx.db.patch(existingTemplate._id, {
         category: args.category,
         status: args.status,
@@ -39,7 +37,6 @@ export const upsertTemplate = internalMutation({
       });
       return existingTemplate._id;
     } else {
-      // Create new template
       return await ctx.db.insert("templates", {
         name: args.name,
         language: args.language,

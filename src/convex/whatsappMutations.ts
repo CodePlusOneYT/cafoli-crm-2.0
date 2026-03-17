@@ -148,10 +148,13 @@ export const storeMessage = internalMutation({
       quotedMessageId: quotedMessageId,
     });
 
-    // Update lead's lastActivity to ensure it moves to the top of the list
-    await ctx.db.patch(args.leadId, {
-      lastActivity: Date.now(),
-    });
+    // Only update lead's lastActivity for inbound messages to avoid bulk/template messages
+    // causing leads to jump to the top of the list
+    if (args.direction === "inbound") {
+      await ctx.db.patch(args.leadId, {
+        lastActivity: Date.now(),
+      });
+    }
 
     // Send Push Notification for inbound messages
     if (args.direction === "inbound") {
