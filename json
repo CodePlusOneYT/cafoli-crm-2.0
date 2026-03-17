@@ -1,3 +1,5 @@
-   "electron:dev": "electron .",
-   "electron:build": "vite build && electron-builder"
-   
+{
+  "phoneNumber": "917009205057",
+  "templateName": "cafoliwelcomemessage",
+  "languageCode": "en"
+}
