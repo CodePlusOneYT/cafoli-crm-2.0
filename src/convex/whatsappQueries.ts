@@ -93,10 +93,11 @@ export const getLeadsWithChatStatus = query({
     filter: v.union(v.literal("all"), v.literal("mine")),
     userId: v.optional(v.id("users")),
     searchQuery: v.optional(v.string()),
-    paginationOpts: paginationOptsValidator,
+    paginationOpts: v.optional(paginationOptsValidator),
   },
   handler: async (ctx, args) => {
-    const limit = args.paginationOpts.numItems || 50;
+    const paginationOpts = args.paginationOpts ?? { numItems: 50, cursor: null };
+    const limit = paginationOpts.numItems || 50;
 
     // Fetch paginated leads from the DB using proper indexes
     let paginatedLeads;
@@ -141,7 +142,7 @@ export const getLeadsWithChatStatus = query({
         .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
 
       // Manual pagination for search results
-      const cursor = args.paginationOpts.cursor;
+      const cursor = paginationOpts.cursor;
       const cursorIndex = cursor
         ? visibleLeads.findIndex((l) => l._id === cursor) + 1
         : 0;
@@ -162,13 +163,13 @@ export const getLeadsWithChatStatus = query({
           q.eq("assignedTo", args.userId)
         )
         .order("desc")
-        .paginate(args.paginationOpts);
+        .paginate(paginationOpts);
     } else {
       paginatedLeads = await ctx.db
         .query("leads")
         .withIndex("by_last_activity")
         .order("desc")
-        .paginate(args.paginationOpts);
+        .paginate(paginationOpts);
     }
 
     // Enrich with chat status
