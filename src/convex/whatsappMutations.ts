@@ -99,11 +99,24 @@ export const storeMessage = internalMutation({
     const updateFields: any = {
       lastMessageAt: Date.now(),
     };
-    
+
     if (args.direction === "inbound") {
       updateFields.unreadCount = (chat.unreadCount || 0) + 1;
+    } else if ((chat.unreadCount || 0) > 0) {
+      // Fix ghost unread state for outbound/AI/template messages.
+      // Only keep unread count if there are actual unread inbound messages.
+      const unreadInboundMessages = await ctx.db
+        .query("messages")
+        .withIndex("by_chat_status", (q) =>
+          q.eq("chatId", chat._id).eq("status", "received")
+        )
+        .take(1);
+
+      if (unreadInboundMessages.length === 0) {
+        updateFields.unreadCount = 0;
+      }
     }
-    
+
     await ctx.db.patch(chat._id, updateFields);
 
     let quotedMessageId = args.quotedMessageId;
@@ -341,7 +354,7 @@ export const ensureChatExists = internalMutation({
       // Create new chat
       const chatId = await ctx.db.insert("chats", {
         leadId: args.leadId,
-        unreadCount: 1,
+        unreadCount: 0,
         lastMessageAt: Date.now(),
         platform: "whatsapp",
       });

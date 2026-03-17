@@ -142,7 +142,7 @@ export const cleanupOldContacts = internalMutation({
             source: "Expired Bulk Campaign",
             status: "Cold",
             type: "To be Decided",
-            lastActivity: Date.now(),
+            lastActivity: contact.sentAt,
             isColdCallerLead: true,
             adminAssignmentRequired: false,
           });
