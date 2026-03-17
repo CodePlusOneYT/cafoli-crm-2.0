@@ -528,8 +528,7 @@ export const sendWelcomeMessage = internalAction({
       phoneNumber: args.phoneNumber,
     });
 
-    // Step 2: Send the welcome message template
-    // We pass a default image URL because the template likely requires an IMAGE header
+    // Step 2: Send the welcome message template with the MRP list PDF as the document header
     return await sendTemplateMessageHelper(
       args.phoneNumber,
       "cafoliwelcomemessage",
@@ -537,7 +536,7 @@ export const sendWelcomeMessage = internalAction({
       args.leadId,
       ctx,
       undefined,
-      "https://placehold.co/600x400.png?text=Welcome+to+Cafoli" // Default welcome image
+      "https://crm.skinticals.com/assets/Master_Cafoli_MRP_List_All_11032026.pdf" // MRP List PDF
     );
   },
 });
