@@ -13,9 +13,6 @@ export const getUniqueSources = query({
       isAdmin = user?.role === ROLES.ADMIN;
     }
 
-    // To get unique sources efficiently without scanning millions of leads,
-    // we should ideally have a separate table for sources.
-    // For now, we'll scan up to 5000 recent leads to find sources.
     const leads = await ctx.db.query("leads").withIndex("by_last_activity").order("desc").take(5000);
     const sources = new Set<string>();
     
@@ -41,23 +38,40 @@ export const getAllLeadsForExport = query({
       throw new Error("Only admins can export all leads");
     }
 
-    // For export, we should use pagination, but since this is a single query,
-    // we'll limit to 10000 to prevent memory crashes.
-    const leads = await ctx.db.query("leads").withIndex("by_last_activity").order("desc").take(10000);
+    // Fetch active Convex leads (up to 10000)
+    const convexLeads = await ctx.db.query("leads").withIndex("by_last_activity").order("desc").take(10000);
     
-    const enrichedLeads = await Promise.all(
-      leads.map(async (lead) => {
+    const enrichedConvexLeads = await Promise.all(
+      convexLeads.map(async (lead) => {
         let assignedToName = "";
         if (lead.assignedTo) {
           const assignedUser = await ctx.db.get(lead.assignedTo);
           assignedToName = assignedUser?.name || "";
         }
-        
         return { ...lead, assignedToName };
       })
     );
 
-    return enrichedLeads;
+    // Fetch R2-archived leads (up to 10000)
+    const r2Leads = await ctx.db.query("r2_leads_mock").take(10000);
+    
+    const enrichedR2Leads = r2Leads.map((r2Lead) => {
+      // R2 lead data is stored as { lead, chats, messages, comments, followups }
+      // or as a flat lead object
+      const leadData = r2Lead.leadData?.lead ?? r2Lead.leadData;
+      if (!leadData) return null;
+
+      return {
+        ...leadData,
+        _id: r2Lead._id, // use r2 id for uniqueness
+        _creationTime: r2Lead._creationTime,
+        assignedToName: "",
+        _isR2: true,
+      };
+    }).filter(Boolean);
+
+    // Merge: Convex leads first, then R2 leads
+    return [...enrichedConvexLeads, ...enrichedR2Leads];
   },
 });
 
