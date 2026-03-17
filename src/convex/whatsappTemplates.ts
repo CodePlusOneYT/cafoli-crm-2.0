@@ -64,11 +64,14 @@ async function sendTemplateMessageHelper(
       } else if (headerComponent.format === "DOCUMENT") {
         const docUrl = mediaUrl || variables?.headerUrl;
         if (docUrl) {
+          // Extract filename from URL for the required filename field
+          const urlParts = docUrl.split("/");
+          const filename = urlParts[urlParts.length - 1] || "document.pdf";
           components.push({
             type: "header",
             parameters: [{
               type: "document",
-              document: { link: docUrl }
+              document: { link: docUrl, filename }
             }]
           });
         }
