@@ -58,3 +58,18 @@ export const deleteTemplate = internalMutation({
     await ctx.db.delete(args.templateId);
   },
 });
+
+export const setCachedMediaId = internalMutation({
+  args: { cacheKey: v.string(), mediaId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("whatsappConfig")
+      .withIndex("by_key", (q) => q.eq("key", args.cacheKey))
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, { value: args.mediaId });
+    } else {
+      await ctx.db.insert("whatsappConfig", { key: args.cacheKey, value: args.mediaId });
+    }
+  },
+});

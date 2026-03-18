@@ -47,3 +47,14 @@ export const findR2IdByPhone = internalQuery({
     return r2 ? (r2._id as string) : null;
   },
 });
+
+export const getCachedMediaId = internalQuery({
+  args: { cacheKey: v.string() },
+  handler: async (ctx, args) => {
+    const entry = await ctx.db
+      .query("whatsappConfig")
+      .withIndex("by_key", (q) => q.eq("key", args.cacheKey))
+      .first();
+    return entry ? entry.value : null;
+  },
+});

@@ -41,8 +41,28 @@ function getFilenameFromUrl(fileUrl: string, fallback: string) {
   }
 }
 
+// Verify a URL is publicly accessible (HEAD request)
+async function verifyPublicUrl(url: string): Promise<{ ok: boolean; status: number; contentType: string }> {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    const contentType = res.headers.get("content-type") || "";
+    console.log(`[URL Verify] ${url} → ${res.status} ${contentType}`);
+    return { ok: res.ok, status: res.status, contentType };
+  } catch (err) {
+    console.error(`[URL Verify] Failed to reach ${url}:`, err);
+    return { ok: false, status: 0, contentType: "" };
+  }
+}
+
 async function fetchDocumentForUpload(fileUrl: string, fallbackFilename: string) {
   const publicUrl = toPublicFileUrl(fileUrl);
+
+  // Verify URL is accessible before attempting upload
+  const verification = await verifyPublicUrl(publicUrl);
+  if (!verification.ok) {
+    throw new Error(`Document URL is not publicly accessible (status ${verification.status}): ${publicUrl}`);
+  }
+
   const response = await fetch(publicUrl);
 
   if (!response.ok) {
@@ -77,6 +97,8 @@ async function uploadDocumentToWhatsAppMedia(
   formData.append("type", contentType);
   formData.append("file", blob, filename);
 
+  console.log(`[Media Upload] Uploading ${filename} (${contentType}, ${blob.size} bytes) to WhatsApp`);
+
   const response = await fetch(
     `https://graph.facebook.com/v20.0/${phoneNumberId}/media`,
     {
@@ -93,6 +115,8 @@ async function uploadDocumentToWhatsAppMedia(
   if (!response.ok || !data?.id) {
     throw new Error(`WhatsApp media upload failed: ${JSON.stringify(data)}`);
   }
+
+  console.log(`[Media Upload] Success — media_id: ${data.id}`);
 
   return {
     id: String(data.id),
@@ -156,29 +180,65 @@ async function sendTemplateMessageHelper(
             }]
           });
         }
-        // If no imageUrl provided, skip header component — WhatsApp will use template's sample
       } else if (headerComponent.format === "DOCUMENT") {
         const rawDocUrl = mediaUrl || variables?.headerUrl;
         if (rawDocUrl) {
-          const uploadedDocument = await uploadDocumentToWhatsAppMedia(
-            rawDocUrl,
-            accessToken,
-            phoneNumberId,
-            "Master_Cafoli_MRP_List_All_11032026.pdf"
-          );
+          const publicDocUrl = toPublicFileUrl(rawDocUrl);
+
+          // Check cache first (whatsappConfig key = "media_cache:<url>")
+          const cacheKey = `media_cache:${publicDocUrl}`;
+          const internalAny = internal as any;
+          let cachedMediaId: string | null = null;
+          try {
+            cachedMediaId = await ctx.runQuery(
+              internalAny.whatsappTemplatesQueries.getCachedMediaId,
+              { cacheKey }
+            );
+          } catch {
+            // cache miss is fine
+          }
+
+          let mediaId: string;
+          let filename: string;
+
+          if (cachedMediaId) {
+            console.log(`[Media Cache] HIT for ${publicDocUrl} → media_id: ${cachedMediaId}`);
+            mediaId = cachedMediaId;
+            filename = getFilenameFromUrl(publicDocUrl, "Master_Cafoli_MRP_List_All_11032026.pdf");
+          } else {
+            console.log(`[Media Cache] MISS for ${publicDocUrl} — uploading`);
+            const uploadedDocument = await uploadDocumentToWhatsAppMedia(
+              publicDocUrl,
+              accessToken,
+              phoneNumberId,
+              "Master_Cafoli_MRP_List_All_11032026.pdf"
+            );
+            mediaId = uploadedDocument.id;
+            filename = uploadedDocument.filename;
+
+            // Persist media_id to cache
+            try {
+              await ctx.runMutation(
+                internalAny.whatsappTemplatesMutations.setCachedMediaId,
+                { cacheKey, mediaId }
+              );
+              console.log(`[Media Cache] Stored media_id ${mediaId} for ${publicDocUrl}`);
+            } catch (cacheErr) {
+              console.warn(`[Media Cache] Failed to store cache:`, cacheErr);
+            }
+          }
 
           components.push({
             type: "header",
             parameters: [{
               type: "document",
               document: {
-                id: uploadedDocument.id,
-                filename: uploadedDocument.filename,
+                id: mediaId,
+                filename,
               }
             }]
           });
         }
-        // If no docUrl provided, skip header component entirely to avoid format mismatch
       } else if (headerComponent.format === "VIDEO") {
         const videoUrl = mediaUrl || variables?.headerUrl;
         if (videoUrl) {
@@ -190,25 +250,13 @@ async function sendTemplateMessageHelper(
             }]
           });
         }
-        // If no videoUrl provided, skip header component entirely
       }
-      // TEXT headers don't need parameters unless they have variables
     }
-
-    // 2. Handle Body Component (Variables)
-    // If variables are provided, we assume they map to {{1}}, {{2}}, etc. based on keys "1", "2"...
-    // Or if the user passed named variables, we might need to map them if the template uses named params (not standard in WhatsApp API, usually positional)
-    // For now, we'll only add body params if variables has numeric keys matching the expected count, or if we want to support it later.
-    // The current implementation does local substitution for storage but didn't send params to API.
-    // We will leave body params logic for now unless requested, to avoid breaking changes, 
-    // but we MUST send the components array if we added a header.
 
     // Get lead data for variable substitution
     const lead = await ctx.runQuery("whatsappTemplatesQueries:getLeadForTemplate" as any, {
       leadId: leadId,
     });
-
-    console.log(`Sending template ${templateName} to ${phoneNumber} for lead ${leadId}`);
 
     const payload: any = {
       messaging_product: "whatsapp",
@@ -225,6 +273,14 @@ async function sendTemplateMessageHelper(
     if (components.length > 0) {
       payload.template.components = components;
     }
+
+    // Scrubbed payload log (no auth tokens)
+    console.log(`[Template Send] Payload to Meta:`, JSON.stringify({
+      ...payload,
+      _debug: { phoneNumberId, templateName, languageCode, componentCount: components.length }
+    }));
+
+    console.log(`Sending template ${templateName} to ${phoneNumber} for lead ${leadId}`);
 
     const response = await fetch(
       `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
