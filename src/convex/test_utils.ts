@@ -487,3 +487,152 @@ export const simulateWebhooksAndTestR2 = action({
     };
   }
 });
+
+export const testSearchMerge = action({
+  args: {},
+  returns: v.any(),
+  handler: async (ctx): Promise<any> => {
+    const testMobile = "919000000001";
+    const testName = "SearchMergeTestLead";
+
+    // 1. Clean up any leftover test data
+    const existingLead = await ctx.runQuery(internal.test_utils.findLeadByMobile, { mobile: testMobile });
+    if (existingLead) {
+      await ctx.runMutation(internal.test_utils.deleteLeadById, { leadId: existingLead._id });
+    }
+    const existingR2 = await ctx.runQuery(internal.test_utils.findR2LeadByMobile, { mobile: testMobile });
+    if (existingR2) {
+      await ctx.runMutation(internal.test_utils.deleteR2LeadById, { r2Id: existingR2._id });
+    }
+
+    // 2. Create an active Convex lead
+    const convexLeadId = await ctx.runMutation(internal.test_utils.createTestLead, {
+      name: testName + "_Active",
+      mobile: testMobile,
+      source: "IndiaMART",
+    });
+
+    // 3. Create an R2 archived lead with a different mobile
+    const r2Mobile = "919000000002";
+    const existingR2b = await ctx.runQuery(internal.test_utils.findR2LeadByMobile, { mobile: r2Mobile });
+    if (existingR2b) {
+      await ctx.runMutation(internal.test_utils.deleteR2LeadById, { r2Id: existingR2b._id });
+    }
+    const r2LeadId = await ctx.runMutation(internal.test_utils.createTestR2Lead, {
+      name: testName + "_Archived",
+      mobile: r2Mobile,
+      source: "IndiaMART",
+    });
+
+    // 4. Search for "SearchMergeTestLead" in both tables
+    const convexResults = await ctx.runQuery(internal.test_utils.searchLeadsByName, { name: testName });
+    const r2Results = await ctx.runQuery(internal.test_utils.searchR2LeadsByName, { name: testName });
+
+    // 5. Clean up
+    await ctx.runMutation(internal.test_utils.deleteLeadById, { leadId: convexLeadId });
+    await ctx.runMutation(internal.test_utils.deleteR2LeadById, { r2Id: r2LeadId });
+
+    const convexFound = convexResults.some((l: any) => l._id === convexLeadId);
+    const r2Found = r2Results.some((l: any) => l._id === r2LeadId);
+
+    return {
+      success: convexFound && r2Found,
+      convexFound,
+      r2Found,
+      convexResultCount: convexResults.length,
+      r2ResultCount: r2Results.length,
+      message: convexFound && r2Found
+        ? "Search merge test passed: both active and archived leads found."
+        : `Search merge test FAILED: convexFound=${convexFound}, r2Found=${r2Found}`,
+    };
+  },
+});
+
+export const findLeadByMobile = internalQuery({
+  args: { mobile: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("leads").withIndex("by_mobile", q => q.eq("mobile", args.mobile)).first();
+  },
+});
+
+export const findR2LeadByMobile = internalQuery({
+  args: { mobile: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("r2_leads_mock").withIndex("by_mobile", q => q.eq("mobile", args.mobile)).first();
+  },
+});
+
+export const deleteLeadById = internalMutation({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.leadId);
+  },
+});
+
+export const deleteR2LeadById = internalMutation({
+  args: { r2Id: v.id("r2_leads_mock") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.r2Id);
+  },
+});
+
+export const createTestLead = internalMutation({
+  args: { name: v.string(), mobile: v.string(), source: v.string() },
+  returns: v.id("leads"),
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("leads", {
+      name: args.name,
+      mobile: args.mobile,
+      source: args.source,
+      status: "Cold",
+      type: "To be Decided",
+      lastActivity: Date.now(),
+      searchText: `${args.name} ${args.mobile}`,
+    });
+  },
+});
+
+export const createTestR2Lead = internalMutation({
+  args: { name: v.string(), mobile: v.string(), source: v.string() },
+  returns: v.id("r2_leads_mock"),
+  handler: async (ctx, args) => {
+    const leadData = {
+      name: args.name,
+      mobile: args.mobile,
+      source: args.source,
+      status: "Cold",
+      type: "To be Decided",
+      lastActivity: Date.now() - 40 * 86400000, // 40 days ago
+      searchText: `${args.name} ${args.mobile}`,
+    };
+    return await ctx.db.insert("r2_leads_mock", {
+      originalId: "placeholder" as any,
+      leadData,
+      mobile: args.mobile,
+      name: args.name,
+      searchText: `${args.name} ${args.mobile}`,
+      status: "Cold",
+      source: args.source,
+    });
+  },
+});
+
+export const searchLeadsByName = internalQuery({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("leads")
+      .withSearchIndex("search_all", q => q.search("searchText", args.name))
+      .take(20);
+  },
+});
+
+export const searchR2LeadsByName = internalQuery({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("r2_leads_mock")
+      .withSearchIndex("search_all", q => q.search("searchText", args.name))
+      .take(20);
+  },
+});

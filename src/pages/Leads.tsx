@@ -203,6 +203,35 @@ export default function Leads() {
     state.search ? { searchQuery: state.search } : "skip"
   );
 
+  // Score a lead by how well the query matches its fields
+  const scoreLeadRelevance = (lead: any, query: string): number => {
+    if (!query) return 0;
+    const q = query.toLowerCase();
+    let score = 0;
+    const name = (lead.name || "").toLowerCase();
+    const mobile = (lead.mobile || "").toLowerCase();
+    const subject = (lead.subject || "").toLowerCase();
+    const source = (lead.source || "").toLowerCase();
+    const message = (lead.message || "").toLowerCase();
+
+    if (name === q) score += 100;
+    else if (name.startsWith(q)) score += 60;
+    else if (name.includes(q)) score += 30;
+
+    if (mobile.includes(q)) score += 50;
+    if (subject.includes(q)) score += 20;
+    if (source.includes(q)) score += 10;
+    if (message.includes(q)) score += 5;
+
+    // Recency boost: more recent activity = higher score (up to 15 pts)
+    const daysSinceActivity = lead.lastActivity
+      ? (Date.now() - lead.lastActivity) / 86400000
+      : 9999;
+    score += Math.max(0, 15 - daysSinceActivity * 0.1);
+
+    return score;
+  };
+
   // Determine which leads to show: semantic results or paginated
   const filteredLeads = useMemo(() => {
     if (state.search && semanticResults !== null) {
@@ -225,7 +254,15 @@ export default function Leads() {
       // Deduplicate: don't show R2 leads that are already in Convex results
       const convexMobiles = new Set(semanticResults.map((l: any) => l.mobile));
       const uniqueR2 = r2AsLeads.filter((r2: any) => !convexMobiles.has(r2.mobile));
-      return [...semanticResults, ...uniqueR2] as any[];
+      const merged = [...semanticResults, ...uniqueR2] as any[];
+
+      // Sort by relevance score descending; R2 leads get a small penalty
+      const q = state.search.trim();
+      return merged.sort((a, b) => {
+        const scoreA = scoreLeadRelevance(a, q) - (a._isR2 ? 5 : 0);
+        const scoreB = scoreLeadRelevance(b, q) - (b._isR2 ? 5 : 0);
+        return scoreB - scoreA;
+      });
     }
     return allLoadedLeads;
   }, [state.search, semanticResults, allLoadedLeads, r2SearchResults]);
