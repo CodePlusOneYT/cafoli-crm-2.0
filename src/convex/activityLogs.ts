@@ -92,3 +92,63 @@ export const getByCategory = query({
       .collect();
   },
 });
+
+export const getLogs = query({
+  args: {
+    adminId: v.id("users"),
+    category: v.optional(v.string()),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Verify admin
+    const user = await ctx.db.get(args.adminId);
+    if (!user || user.role !== "admin") return [];
+
+    let q = ctx.db.query("activityLogs").withIndex("by_timestamp").order("desc");
+
+    const results = await q.take(args.limit ?? 100);
+
+    return results
+      .filter((log) => {
+        if (args.category && log.category !== args.category) return false;
+        if (args.startDate && log.timestamp < args.startDate) return false;
+        if (args.endDate && log.timestamp > args.endDate) return false;
+        return true;
+      })
+      .map((log) => ({
+        ...log,
+        userName: log.userId ? "User" : "System",
+        leadName: undefined as string | undefined,
+      }));
+  },
+});
+
+export const getLogStats = query({
+  args: {
+    adminId: v.id("users"),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.adminId);
+    if (!user || user.role !== "admin") return { total: 0, byCategory: {} };
+
+    const logs = await ctx.db.query("activityLogs").withIndex("by_timestamp").order("desc").take(1000);
+
+    const filtered = logs.filter((log) => {
+      if (args.startDate && log.timestamp < args.startDate) return false;
+      if (args.endDate && log.timestamp > args.endDate) return false;
+      return true;
+    });
+
+    const byCategory: Record<string, number> = {};
+    for (const log of filtered) {
+      const cat = log.category ?? "Other";
+      byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+    }
+
+    return { total: filtered.length, byCategory };
+  },
+});
