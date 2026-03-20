@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Shield, Filter, Download, Calendar } from "lucide-react";
+import { Shield, Filter, Download, Calendar, ChevronDown } from "lucide-react";
 import { getConvexApi } from "@/lib/convex-api";
 
 const api = getConvexApi() as any;
@@ -42,8 +42,11 @@ export default function Logs() {
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [limit, setLimit] = useState<number>(100);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [allLogs, setAllLogs] = useState<any[]>([]);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  const logs = useQuery(
+  const result = useQuery(
     api.activityLogs.getLogs,
     currentUser
       ? {
@@ -52,9 +55,36 @@ export default function Logs() {
           startDate: startDate ? new Date(startDate).getTime() : undefined,
           endDate: endDate ? new Date(endDate).getTime() : undefined,
           limit,
+          cursor,
         }
       : "skip"
   );
+
+  // Accumulate pages
+  const logs = result?.logs ?? [];
+  const nextCursor = result?.nextCursor ?? null;
+
+  // When filters change, reset accumulated logs
+  const resetAndFilter = (fn: () => void) => {
+    fn();
+    setCursor(undefined);
+    setAllLogs([]);
+    setHasLoadedOnce(false);
+  };
+
+  // Merge new page into allLogs
+  if (result && !hasLoadedOnce) {
+    setAllLogs(logs);
+    setHasLoadedOnce(true);
+  }
+
+  const handleLoadMore = () => {
+    if (nextCursor) {
+      setAllLogs((prev) => [...prev, ...logs]);
+      setCursor(nextCursor as string);
+      setHasLoadedOnce(false);
+    }
+  };
 
   const stats = useQuery(
     api.activityLogs.getLogStats,
@@ -68,14 +98,14 @@ export default function Logs() {
   );
 
   const handleExportLogs = () => {
-    if (!logs || logs.length === 0) {
+    if (!allLogs || allLogs.length === 0) {
       toast.error("No logs to export");
       return;
     }
 
     const csvContent = [
       ["Timestamp", "Category", "Action", "User", "Lead", "Details"].join(","),
-      ...logs.map((log: any) =>
+      ...allLogs.map((log: any) =>
         [
           new Date(log.timestamp).toLocaleString(),
           log.category,
@@ -124,12 +154,14 @@ export default function Logs() {
   }
 
   const getCategoryColor = (category: string) => {
-    if (category.includes("Login") || category.includes("Logout")) return "bg-blue-100 text-blue-800";
-    if (category.includes("Leads")) return "bg-green-100 text-green-800";
-    if (category.includes("WhatsApp")) return "bg-purple-100 text-purple-800";
-    if (category.includes("Email")) return "bg-orange-100 text-orange-800";
+    if (category?.includes("Login") || category?.includes("Logout")) return "bg-blue-100 text-blue-800";
+    if (category?.includes("Leads") || category?.includes("lead")) return "bg-green-100 text-green-800";
+    if (category?.includes("WhatsApp") || category?.includes("whatsapp")) return "bg-purple-100 text-purple-800";
+    if (category?.includes("Email") || category?.includes("email")) return "bg-orange-100 text-orange-800";
     return "bg-gray-100 text-gray-800";
   };
+
+  const displayLogs = allLogs.length > 0 ? allLogs : logs;
 
   return (
     <AppLayout>
@@ -141,7 +173,7 @@ export default function Logs() {
               Monitor all CRM activities and system events
             </p>
           </div>
-          <Button onClick={handleExportLogs} disabled={!logs || logs.length === 0}>
+          <Button onClick={handleExportLogs} disabled={displayLogs.length === 0}>
             <Download className="h-4 w-4 mr-2" />
             Export Logs
           </Button>
@@ -185,13 +217,16 @@ export default function Logs() {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-2">
                 <Label>Category</Label>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <Select
+                  value={selectedCategory}
+                  onValueChange={(v) => resetAndFilter(() => setSelectedCategory(v))}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(LOG_CATEGORIES).map(([key, label]: [string, string]) => (
-                      <SelectItem key={key} value={key === "ALL" ? "ALL" : key}>
+                      <SelectItem key={key} value={key}>
                         {label}
                       </SelectItem>
                     ))}
@@ -204,7 +239,7 @@ export default function Logs() {
                 <Input
                   type="datetime-local"
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => resetAndFilter(() => setStartDate(e.target.value))}
                 />
               </div>
 
@@ -213,13 +248,16 @@ export default function Logs() {
                 <Input
                   type="datetime-local"
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(e) => resetAndFilter(() => setEndDate(e.target.value))}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Limit</Label>
-                <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+                <Label>Page Size</Label>
+                <Select
+                  value={String(limit)}
+                  onValueChange={(v) => resetAndFilter(() => setLimit(Number(v)))}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -238,19 +276,19 @@ export default function Logs() {
         {/* Logs List */}
         <Card>
           <CardHeader>
-            <CardTitle>Activity Timeline</CardTitle>
+            <CardTitle>Activity Timeline ({displayLogs.length} entries)</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[600px] pr-4">
-              {!logs ? (
+              {!result ? (
                 <div className="text-center py-8 text-muted-foreground">Loading logs...</div>
-              ) : logs.length === 0 ? (
+              ) : displayLogs.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No logs found for the selected filters
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {logs.map((log: any) => (
+                  {displayLogs.map((log: any) => (
                     <div
                       key={log._id}
                       className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
@@ -261,7 +299,7 @@ export default function Logs() {
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge className={getCategoryColor(log.category)}>
-                            {log.category}
+                            {log.category ?? "Other"}
                           </Badge>
                           <span className="text-sm font-medium">{log.action}</span>
                           <span className="text-xs text-muted-foreground">
@@ -285,6 +323,14 @@ export default function Logs() {
                 </div>
               )}
             </ScrollArea>
+            {nextCursor && (
+              <div className="mt-4 flex justify-center">
+                <Button variant="outline" onClick={handleLoadMore}>
+                  <ChevronDown className="h-4 w-4 mr-2" />
+                  Load More
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

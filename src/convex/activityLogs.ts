@@ -100,28 +100,65 @@ export const getLogs = query({
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Verify admin
     const user = await ctx.db.get(args.adminId);
-    if (!user || user.role !== "admin") return [];
+    if (!user || user.role !== "admin") return { logs: [], nextCursor: null };
 
+    const pageSize = args.limit ?? 100;
     let q = ctx.db.query("activityLogs").withIndex("by_timestamp").order("desc");
 
-    const results = await q.take(args.limit ?? 100);
+    // Fetch extra to support cursor-based pagination
+    const allResults = await q.take(pageSize * 10);
 
-    return results
-      .filter((log) => {
-        if (args.category && log.category !== args.category) return false;
-        if (args.startDate && log.timestamp < args.startDate) return false;
-        if (args.endDate && log.timestamp > args.endDate) return false;
-        return true;
+    const filtered = allResults.filter((log) => {
+      if (args.category && log.category !== args.category) return false;
+      if (args.startDate && log.timestamp < args.startDate) return false;
+      if (args.endDate && log.timestamp > args.endDate) return false;
+      return true;
+    });
+
+    // Apply cursor offset
+    let startIdx = 0;
+    if (args.cursor) {
+      const idx = filtered.findIndex((l) => l._id === args.cursor);
+      if (idx !== -1) startIdx = idx + 1;
+    }
+
+    const page = filtered.slice(startIdx, startIdx + pageSize);
+    const nextCursor = page.length === pageSize ? page[page.length - 1]._id : null;
+
+    // Resolve user names and lead names server-side
+    const userCache: Record<string, string> = {};
+    const leadCache: Record<string, string> = {};
+
+    const enriched = await Promise.all(
+      page.map(async (log) => {
+        let userName = "System";
+        if (log.userId) {
+          if (!userCache[log.userId]) {
+            const u = await ctx.db.get(log.userId);
+            userCache[log.userId] = u?.name ?? u?.email ?? "Unknown User";
+          }
+          userName = userCache[log.userId];
+        }
+
+        let leadName: string | undefined;
+        if (log.leadId) {
+          if (!leadCache[log.leadId]) {
+            const lead = await ctx.db.get(log.leadId);
+            leadCache[log.leadId] = lead?.name ?? "Unknown Lead";
+          }
+          leadName = leadCache[log.leadId];
+        }
+
+        return { ...log, userName, leadName };
       })
-      .map((log) => ({
-        ...log,
-        userName: log.userId ? "User" : "System",
-        leadName: undefined as string | undefined,
-      }));
+    );
+
+    return { logs: enriched, nextCursor };
   },
 });
 
