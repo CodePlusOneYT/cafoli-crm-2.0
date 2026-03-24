@@ -269,9 +269,9 @@ export default function Admin() {
               if (strPhone) clearedMobileCount++;
               return "";
             }
-            // Prefix with tab to force Excel to treat as text (prevents scientific notation)
-            // We use a single quote prefix which Excel recognizes as text
-            return `'${strPhone}`;
+            // Use tab prefix inside quoted cell — Excel treats tab-prefixed numbers as text
+            // This is the most reliable way to prevent scientific notation in CSV imports
+            return `\t${strPhone}`;
           }
           // Strip ALL control characters from string values
           return sanitize(String(val));
