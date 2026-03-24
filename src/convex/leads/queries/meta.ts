@@ -85,23 +85,24 @@ export const getAllLeadsForExport = query({
       if (!rawData || typeof rawData !== "object") return null;
 
       // Handle nested format: { lead: {...}, chats: [...], messages: [...], ... }
-      // Handle flat format: leadData IS the lead object
       let leadData: any;
       if (rawData.lead && typeof rawData.lead === "object" && !Array.isArray(rawData.lead)) {
         leadData = rawData.lead;
       } else {
-        // Flat format — but verify it looks like a lead (has mobile or name)
-        // Exclude nested arrays that would be the chats/messages/comments/followups keys
         leadData = rawData;
       }
 
       if (!leadData || typeof leadData !== "object") return null;
 
-      // Explicitly extract only known lead scalar fields — never spread the object
-      const mobile = typeof leadData.mobile === "string" ? leadData.mobile : "";
-      const name = typeof leadData.name === "string" ? leadData.name : "";
+      // Use top-level r2Lead.mobile as authoritative source (always correct, set at offload time)
+      // Fall back to leadData.mobile only if top-level is missing
+      const topLevelMobile = typeof r2Lead.mobile === "string" ? r2Lead.mobile : "";
+      const leadDataMobile = typeof leadData.mobile === "string" ? leadData.mobile : "";
+      const mobile = topLevelMobile || leadDataMobile;
+
+      const name = typeof leadData.name === "string" ? leadData.name : (typeof r2Lead.name === "string" ? r2Lead.name : "");
       const subject = typeof leadData.subject === "string" ? leadData.subject : "";
-      const source = typeof leadData.source === "string" ? leadData.source : "";
+      const source = typeof leadData.source === "string" ? leadData.source : (typeof r2Lead.source === "string" ? r2Lead.source : "");
       const altMobile = typeof leadData.altMobile === "string" ? leadData.altMobile : "";
       const email = typeof leadData.email === "string" ? leadData.email : "";
       const altEmail = typeof leadData.altEmail === "string" ? leadData.altEmail : "";
@@ -111,12 +112,12 @@ export const getAllLeadsForExport = query({
       const district = typeof leadData.district === "string" ? leadData.district : "";
       const station = typeof leadData.station === "string" ? leadData.station : "";
       const message = typeof leadData.message === "string" ? leadData.message : "";
-      const status = typeof leadData.status === "string" ? leadData.status : "";
+      const status = typeof leadData.status === "string" ? leadData.status : (typeof r2Lead.status === "string" ? r2Lead.status : "");
       const type = typeof leadData.type === "string" ? leadData.type : "";
       const nextFollowUpDate = typeof leadData.nextFollowUpDate === "number" ? leadData.nextFollowUpDate : null;
       const lastActivity = typeof leadData.lastActivity === "number" ? leadData.lastActivity : r2Lead._creationTime;
       const pharmavendsUid = typeof leadData.pharmavendsUid === "string" ? leadData.pharmavendsUid : "";
-      const indiamartUniqueId = typeof leadData.indiamartUniqueId === "string" ? leadData.indiamartUniqueId : "";
+      const indiamartUniqueId = typeof leadData.indiamartUniqueId === "string" ? leadData.indiamartUniqueId : (typeof r2Lead.indiamartUniqueId === "string" ? r2Lead.indiamartUniqueId : "");
       const creationTime = typeof leadData._creationTime === "number" ? leadData._creationTime : r2Lead._creationTime;
 
       // Skip rows that have no mobile and no name — likely corrupt/empty entries
