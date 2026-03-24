@@ -245,7 +245,7 @@ export default function Admin() {
         });
       });
 
-      const csv = Papa.unparse([headerRow, ...dataRows], { newline: "\r\n" });
+      const csv = Papa.unparse([headerRow, ...dataRows], { newline: "\r\n", quotes: true });
       // Add BOM for Excel UTF-8 compatibility
       const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
