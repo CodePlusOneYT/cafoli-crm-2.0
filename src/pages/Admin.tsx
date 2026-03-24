@@ -2,34 +2,61 @@ import AppLayout from "@/components/AppLayout";
 import BrevoKeyManager from "@/components/BrevoKeyManager";
 import UserManagement from "@/components/admin/UserManagement";
 import CreateUserDialog from "@/components/admin/CreateUserDialog";
-import AdminActions from "@/components/admin/AdminActions";
 import GeminiKeyManager from "@/components/GeminiKeyManager";
 import { AllocateColdCallerDialog } from "@/components/admin/AllocateColdCallerDialog";
 import { ProductUploadDialog } from "@/components/products/ProductUploadDialog";
 import { ProductListManager } from "@/components/products/ProductListManager";
 import { RangePdfUploadDialog } from "@/components/products/RangePdfUploadDialog";
 import { RangePdfListManager } from "@/components/products/RangePdfListManager";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Shield } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Shield, Download, FileUp, Phone, UserPlus, Users, RefreshCw, Mail } from "lucide-react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { R2ManagementPanel } from "@/components/admin/R2ManagementPanel";
 import { BackupManagement } from "@/components/admin/BackupManagement";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 const api = getConvexApi() as any;
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import type { Id } from "@/convex/_generated/dataModel";
-import JSZip from "jszip";
 import * as Papa from "papaparse";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableRow, TableBody, TableCell, TableHead } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { Trash2 } from "lucide-react";
+
+// All available columns for export
+const ALL_EXPORT_COLUMNS = [
+  { key: "name", label: "Name" },
+  { key: "mobile", label: "Mobile" },
+  { key: "altMobile", label: "Alt Mobile" },
+  { key: "email", label: "Email" },
+  { key: "altEmail", label: "Alt Email" },
+  { key: "source", label: "Source" },
+  { key: "status", label: "Status" },
+  { key: "type", label: "Type" },
+  { key: "subject", label: "Subject" },
+  { key: "message", label: "Message" },
+  { key: "agencyName", label: "Agency Name" },
+  { key: "state", label: "State" },
+  { key: "district", label: "District" },
+  { key: "station", label: "Station" },
+  { key: "pincode", label: "Pincode" },
+  { key: "assignedToName", label: "Assigned To" },
+  { key: "nextFollowUpDate", label: "Next Follow-up Date" },
+  { key: "lastActivity", label: "Last Activity" },
+  { key: "pharmavendsUid", label: "Pharmavends UID" },
+  { key: "indiamartUniqueId", label: "IndiaMART ID" },
+  { key: "_creationTime", label: "Created At" },
+];
 
 interface User {
   _id: Id<"users">;
@@ -57,6 +84,32 @@ export default function Admin() {
   const clearAllScores = useMutation(api.aiMutations.clearAllScores);
   const setBatchProcessStop = useMutation(api.aiMutations.setBatchProcessStop);
   const startBatchProcess = useMutation(api.aiMutations.startBatchProcess);
+
+  // Import/Export state
+  const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
+  const [selectedColumns, setSelectedColumns] = useState<Set<string>>(
+    new Set(["name", "mobile", "email", "source", "status", "type", "assignedToName", "state", "district"])
+  );
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isStandardizing, setIsStandardizing] = useState(false);
+  const [isMarkingColdCaller, setIsMarkingColdCaller] = useState(false);
+  const [isSendingWelcome, setIsSendingWelcome] = useState(false);
+  const [isAllocatingColdCaller, setIsAllocatingColdCaller] = useState(false);
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+  const [isSyncingPharmavends, setIsSyncingPharmavends] = useState(false);
+  const [leadsPerStaff, setLeadsPerStaff] = useState("50");
+
+  const allLeadsForExport = useQuery(
+    api.leads.queries.getAllLeadsForExport,
+    isDownloadDialogOpen && currentUser ? { userId: currentUser._id } : "skip"
+  );
+  const nextDownloadNumber = useQuery(api.leads.queries.getNextDownloadNumber);
+  const logExport = useMutation(api.leads.admin.logExport);
+  const bulkImportLeads = useMutation(api.leads.admin.bulkImportLeads);
+  const standardizePhoneNumbers = useMutation(api.leads.admin.standardizeAllPhoneNumbers);
+  const autoAssignLeads = useAction(api.leads.autoAssign.autoAssignLeads);
+  const syncPharmavends = useAction(api.pharmavends.syncPharmavends);
 
   const batchProgress = useQuery(
     api.aiMutations.getBatchProgress,
@@ -133,6 +186,187 @@ export default function Admin() {
     }
   };
 
+  const toggleColumn = (key: string) => {
+    setSelectedColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const selectAllColumns = () => {
+    setSelectedColumns(new Set(ALL_EXPORT_COLUMNS.map(c => c.key)));
+  };
+
+  const deselectAllColumns = () => {
+    setSelectedColumns(new Set());
+  };
+
+  const handleDownloadCSV = async () => {
+    if (!currentUser || !allLeadsForExport) return;
+    if (selectedColumns.size === 0) {
+      toast.error("Please select at least one column to export");
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      const downloadNumber = nextDownloadNumber || 1;
+      const fileName = `leads_export_${downloadNumber}_${new Date().toISOString().slice(0, 10)}.csv`;
+
+      // Build rows with only selected columns
+      const orderedColumns = ALL_EXPORT_COLUMNS.filter(c => selectedColumns.has(c.key));
+
+      const rows = allLeadsForExport.map((lead: any) => {
+        const row: Record<string, any> = {};
+        for (const col of orderedColumns) {
+          let val = lead[col.key];
+          // Format dates
+          if ((col.key === "nextFollowUpDate" || col.key === "lastActivity" || col.key === "_creationTime") && typeof val === "number") {
+            val = new Date(val).toLocaleString();
+          } else if (val === null || val === undefined) {
+            val = "";
+          }
+          row[col.label] = val;
+        }
+        return row;
+      });
+
+      const csv = Papa.unparse(rows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      // Log the export
+      await logExport({
+        userId: currentUser._id,
+        downloadNumber,
+        fileName,
+        leadCount: allLeadsForExport.length,
+      });
+
+      toast.success(`Downloaded ${allLeadsForExport.length} leads as ${fileName}`);
+      setIsDownloadDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to download CSV");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const templateColumns = ["name", "mobile", "altMobile", "email", "altEmail", "source", "agencyName", "pincode", "station", "state", "district", "subject", "message", "assignedToName"];
+    const csv = Papa.unparse([templateColumns.reduce((acc, col) => ({ ...acc, [col]: "" }), {})]);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "leads_import_template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Template downloaded");
+  };
+
+  const handleImportCSV = async (file: File) => {
+    if (!currentUser) return;
+    setIsImporting(true);
+    try {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          try {
+            const leads = (results.data as any[])
+              .filter(row => row.mobile || row.Mobile)
+              .map(row => ({
+                name: row.name || row.Name || "Unknown",
+                email: row.email || row.Email || undefined,
+                altEmail: row.altEmail || row.AltEmail || undefined,
+                mobile: String(row.mobile || row.Mobile || "").replace(/\D/g, ""),
+                altMobile: row.altMobile || row.AltMobile ? String(row.altMobile || row.AltMobile || "").replace(/\D/g, "") : undefined,
+                source: row.source || row.Source || undefined,
+                assignedToName: row.assignedToName || row.AssignedToName || undefined,
+                agencyName: row.agencyName || row.AgencyName || undefined,
+                pincode: row.pincode || row.Pincode || undefined,
+                station: row.station || row.Station || undefined,
+                state: row.state || row.State || undefined,
+                district: row.district || row.District || undefined,
+                subject: row.subject || row.Subject || undefined,
+                message: row.message || row.Message || undefined,
+              }));
+
+            if (leads.length === 0) {
+              toast.error("No valid leads found in CSV (mobile column required)");
+              setIsImporting(false);
+              return;
+            }
+
+            const result = await bulkImportLeads({ leads, adminId: currentUser._id });
+            toast.success(`Imported ${result.importedCount} leads, skipped ${result.skippedCount} duplicates`);
+          } catch (err: any) {
+            toast.error(err.message || "Failed to import leads");
+          } finally {
+            setIsImporting(false);
+          }
+        },
+        error: () => {
+          toast.error("Failed to parse CSV file");
+          setIsImporting(false);
+        }
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to import");
+      setIsImporting(false);
+    }
+  };
+
+  const handleStandardizePhoneNumbers = async () => {
+    if (!currentUser) return;
+    setIsStandardizing(true);
+    try {
+      const result = await standardizePhoneNumbers({ adminId: currentUser._id });
+      toast.success(`Standardized ${result.updatedCount} numbers, found ${result.duplicatesFound} duplicates`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to standardize");
+    } finally {
+      setIsStandardizing(false);
+    }
+  };
+
+  const handleAutoAssignLeads = async () => {
+    if (!currentUser) return;
+    setIsAutoAssigning(true);
+    try {
+      const result = await autoAssignLeads({ adminId: currentUser._id });
+      toast.success(`Auto-assigned ${(result as any)?.assigned || 0} leads`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to auto-assign");
+    } finally {
+      setIsAutoAssigning(false);
+    }
+  };
+
+  const handleSyncPharmavends = async () => {
+    if (!currentUser) return;
+    setIsSyncingPharmavends(true);
+    try {
+      const result = await syncPharmavends({ adminId: currentUser._id });
+      toast.success(`Synced Pharmavends: ${(result as any)?.imported || 0} new leads`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sync Pharmavends");
+    } finally {
+      setIsSyncingPharmavends(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="container mx-auto py-8 space-y-8">
@@ -141,8 +375,9 @@ export default function Admin() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             {currentUser.role === "admin" && <TabsTrigger value="users">User Management</TabsTrigger>}
+            {currentUser.role === "admin" && <TabsTrigger value="import-export">Import / Export</TabsTrigger>}
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="ranges">Range PDFs</TabsTrigger>
             {currentUser.role === "admin" && <TabsTrigger value="api-keys">API Keys</TabsTrigger>}
@@ -216,6 +451,133 @@ export default function Admin() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            </TabsContent>
+          )}
+
+          {currentUser.role === "admin" && (
+            <TabsContent value="import-export" className="space-y-6">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {/* Import Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileUp className="h-5 w-5" />
+                      Import Leads
+                    </CardTitle>
+                    <CardDescription>Upload CSV file to import leads</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid w-full items-center gap-1.5">
+                      <Label htmlFor="csv-upload">CSV File</Label>
+                      <Input
+                        id="csv-upload"
+                        type="file"
+                        accept=".csv"
+                        disabled={isImporting}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImportCSV(file);
+                        }}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadTemplate}
+                      className="w-full"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Template
+                    </Button>
+                    {isImporting && (
+                      <p className="text-sm text-muted-foreground text-center">Importing leads...</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Export Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Download className="h-5 w-5" />
+                      Export Leads
+                    </CardTitle>
+                    <CardDescription>Download leads as CSV with selected columns</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      onClick={() => setIsDownloadDialogOpen(true)}
+                      className="w-full"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Export Leads (Select Columns)
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Phone Numbers Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Phone className="h-5 w-5" />
+                      Phone Numbers
+                    </CardTitle>
+                    <CardDescription>Standardize formats & check duplicates</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      onClick={handleStandardizePhoneNumbers}
+                      disabled={isStandardizing}
+                      className="w-full"
+                    >
+                      {isStandardizing ? (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Phone className="mr-2 h-4 w-4" />
+                      )}
+                      Standardize Numbers
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Sync & Assign Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <RefreshCw className="h-5 w-5" />
+                      Sync & Assign
+                    </CardTitle>
+                    <CardDescription>External sources & auto-assignment</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Button
+                      onClick={handleSyncPharmavends}
+                      disabled={isSyncingPharmavends}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {isSyncingPharmavends ? (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                      )}
+                      Sync Pharmavends
+                    </Button>
+                    <Button
+                      onClick={handleAutoAssignLeads}
+                      disabled={isAutoAssigning}
+                      className="w-full"
+                    >
+                      {isAutoAssigning ? (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="mr-2 h-4 w-4" />
+                      )}
+                      Auto-Assign Leads
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
           )}
@@ -494,6 +856,60 @@ export default function Admin() {
           )}
         </Tabs>
       </div>
+
+      {/* Column Selection Dialog */}
+      <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select Columns to Export</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={selectAllColumns}>Select All</Button>
+              <Button variant="outline" size="sm" onClick={deselectAllColumns}>Deselect All</Button>
+              <span className="text-sm text-muted-foreground ml-auto self-center">
+                {selectedColumns.size} of {ALL_EXPORT_COLUMNS.length} selected
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_EXPORT_COLUMNS.map(col => (
+                <div key={col.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${col.key}`}
+                    checked={selectedColumns.has(col.key)}
+                    onCheckedChange={() => toggleColumn(col.key)}
+                  />
+                  <Label htmlFor={`col-${col.key}`} className="text-sm cursor-pointer">
+                    {col.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+            {allLeadsForExport === undefined && (
+              <p className="text-sm text-muted-foreground text-center">Loading leads data...</p>
+            )}
+            {allLeadsForExport !== undefined && (
+              <p className="text-sm text-muted-foreground text-center">
+                {allLeadsForExport.length} leads ready to export
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDownloadDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleDownloadCSV}
+              disabled={isDownloading || selectedColumns.size === 0 || !allLeadsForExport}
+            >
+              {isDownloading ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Download CSV
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
