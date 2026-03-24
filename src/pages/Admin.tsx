@@ -100,6 +100,9 @@ export default function Admin() {
   const [isSyncingPharmavends, setIsSyncingPharmavends] = useState(false);
   const [leadsPerStaff, setLeadsPerStaff] = useState("50");
 
+  const fixInvalidMobiles = useMutation(api.leads.admin.fixInvalidMobiles);
+  const [isFixingMobiles, setIsFixingMobiles] = useState(false);
+
   const allLeadsForExport = useQuery(
     api.leads.queries.getAllLeadsForExport,
     isDownloadDialogOpen && currentUser ? { userId: currentUser._id } : "skip"
@@ -206,6 +209,21 @@ export default function Admin() {
     setSelectedColumns(new Set());
   };
 
+  const handleFixInvalidMobiles = async () => {
+    if (!currentUser) return;
+    setIsFixingMobiles(true);
+    try {
+      const result = await fixInvalidMobiles({ adminId: currentUser._id });
+      toast.success(
+        `Fixed ${result.fixedCount} invalid mobiles. ${result.alreadyValidCount} were already valid. ${result.emptyCount} were empty.`
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Failed to fix invalid mobiles");
+    } finally {
+      setIsFixingMobiles(false);
+    }
+  };
+
   const handleDownloadCSV = async () => {
     if (!currentUser || !allLeadsForExport) return;
     if (selectedColumns.size === 0) {
@@ -215,7 +233,6 @@ export default function Admin() {
 
     setIsDownloading(true);
     try {
-
       const downloadNumber = nextDownloadNumber || 1;
       const fileName = `leads_export_${downloadNumber}_${new Date().toISOString().slice(0, 10)}.csv`;
 
@@ -224,35 +241,41 @@ export default function Admin() {
 
       const phoneColumns = new Set(["mobile", "altMobile"]);
 
-      // Phone number validation: must be digits only (with optional leading +), 7-15 chars
-      const isValidPhone = (v: string) => /^\+?\d{7,15}$/.test(v.replace(/[\s\-().]/g, ""));
+      // Phone number validation: digits only (with optional leading +), 7-15 chars
+      // Handles Indian numbers like 917013809673 (12 digits) and 10-digit numbers
+      const isValidPhone = (val: string) => {
+        const cleaned = val.replace(/[\s\-().+]/g, "");
+        return /^\d{7,15}$/.test(cleaned);
+      };
+
+      let clearedMobileCount = 0;
 
       // Use 2D array to guarantee exact column alignment
       const headerRow = orderedColumns.map(c => c.label);
       const dataRows = allLeadsForExport.map((lead: any) => {
         return orderedColumns.map(col => {
-          let val = lead[col.key];
+          const val = lead[col.key];
           // Format dates
           if ((col.key === "nextFollowUpDate" || col.key === "lastActivity" || col.key === "_creationTime") && typeof val === "number") {
             return new Date(val).toLocaleString();
-          } else if (val === null || val === undefined) {
+          } else if (val === null || val === undefined || val === "") {
             return "";
           } else if (phoneColumns.has(col.key)) {
-            // Validate phone: must look like a phone number (digits, 7-15 chars)
-            // If it doesn't pass validation, output empty string to prevent garbage in mobile column
             const strPhone = typeof val === "string" ? val.replace(/[\r\n\t]+/g, "").trim() : "";
-            if (!strPhone || !isValidPhone(strPhone)) return "";
-            // Use Excel formula ="number" to force text display and prevent scientific notation
+            if (!strPhone || !isValidPhone(strPhone)) {
+              if (strPhone) clearedMobileCount++;
+              return "";
+            }
+            // Excel formula to force text display and prevent scientific notation
             return `="${strPhone}"`;
           }
-          // Strip newlines, carriage returns, and tabs from all string values to prevent row breaks in CSV
-          const strVal = String(val);
-          return strVal.replace(/[\r\n\t]+/g, " ");
+          // Strip newlines, carriage returns, and tabs to prevent row breaks in CSV
+          return String(val).replace(/[\r\n\t]+/g, " ");
         });
       });
 
       const csv = Papa.unparse([headerRow, ...dataRows], { newline: "\r\n", quotes: true });
-      // Add BOM for Excel UTF-8 compatibility
+      // BOM for Excel UTF-8 compatibility
       const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -269,7 +292,8 @@ export default function Admin() {
         leadCount: allLeadsForExport.length,
       });
 
-      toast.success(`Downloaded ${allLeadsForExport.length} leads as ${fileName}`);
+      const clearedMsg = clearedMobileCount > 0 ? ` (${clearedMobileCount} invalid mobiles cleared)` : "";
+      toast.success(`Downloaded ${allLeadsForExport.length} leads as ${fileName}${clearedMsg}`);
       setIsDownloadDialogOpen(false);
     } catch (error: any) {
       toast.error(error.message || "Failed to download CSV");
@@ -539,9 +563,9 @@ export default function Admin() {
                       <Phone className="h-5 w-5" />
                       Phone Numbers
                     </CardTitle>
-                    <CardDescription>Standardize formats & check duplicates</CardDescription>
+                    <CardDescription>Standardize formats & fix invalid values in DB</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-3">
                     <Button
                       onClick={handleStandardizePhoneNumbers}
                       disabled={isStandardizing}
@@ -554,6 +578,22 @@ export default function Admin() {
                       )}
                       Standardize Numbers
                     </Button>
+                    <Button
+                      onClick={handleFixInvalidMobiles}
+                      disabled={isFixingMobiles}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {isFixingMobiles ? (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Phone className="mr-2 h-4 w-4" />
+                      )}
+                      Fix Invalid Mobiles in DB
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Clears non-phone values (names, statuses) from mobile fields and logs them as comments.
+                    </p>
                   </CardContent>
                 </Card>
 

@@ -4,6 +4,14 @@ import { internal } from "../_generated/api";
 import { ROLES } from "../schema";
 import { standardizePhoneNumber } from "../leadUtils";
 
+// Helper: check if a string looks like a valid phone number
+function isValidPhoneNumber(val: string): boolean {
+  if (!val) return false;
+  const cleaned = val.replace(/[\s\-().+]/g, "");
+  // Must be 7-15 digits
+  return /^\d{7,15}$/.test(cleaned);
+}
+
 export const logExport = mutation({
   args: {
     userId: v.id("users"),
@@ -231,5 +239,55 @@ export const deleteLead = mutation({
       throw new Error("Unauthorized: Only admins can delete leads");
     }
     await ctx.db.delete(args.leadId);
+  },
+});
+
+export const fixInvalidMobiles = mutation({
+  args: { adminId: v.id("users") },
+  handler: async (ctx, args) => {
+    const admin = await ctx.db.get(args.adminId);
+    if (!admin || admin.role !== ROLES.ADMIN) {
+      throw new Error("Only admins can fix invalid mobiles");
+    }
+
+    const allLeads = await ctx.db.query("leads").take(10000);
+
+    let fixedCount = 0;
+    let alreadyValidCount = 0;
+    let emptyCount = 0;
+    const invalidSamples: string[] = [];
+
+    for (const lead of allLeads) {
+      const mobile = lead.mobile ?? "";
+      if (!mobile) {
+        emptyCount++;
+        continue;
+      }
+      if (isValidPhoneNumber(mobile)) {
+        alreadyValidCount++;
+        continue;
+      }
+      // Invalid mobile — log it as a comment and clear the field
+      if (invalidSamples.length < 20) invalidSamples.push(`${lead.name}: "${mobile}"`);
+      await ctx.db.insert("comments", {
+        leadId: lead._id,
+        content: `[Auto-fix] Invalid mobile cleared: "${mobile}". Please update with correct phone number.`,
+        isSystem: true,
+      });
+      await ctx.db.patch(lead._id, {
+        mobile: "",
+        lastActivity: Date.now(),
+      });
+      fixedCount++;
+    }
+
+    return {
+      success: true,
+      fixedCount,
+      alreadyValidCount,
+      emptyCount,
+      totalLeads: allLeads.length,
+      invalidSamples,
+    };
   },
 });
