@@ -48,13 +48,13 @@ export function LeadsListPanel({
 }: LeadsListPanelProps) {
   const { summaries, loading, fetchSummary, updateSummary } = useLeadSummaries();
 
-  // Get visible lead IDs
-  const visibleLeadIds = leads.slice(0, 20).map(l => l._id);
+  // Get visible lead IDs — filter out R2 leads (they have _isR2 flag and are from r2_leads_mock table)
+  const visibleLeadIds = leads.slice(0, 20).filter((l: any) => !l._isR2).map(l => l._id);
 
   // Load cached summaries for all visible leads
   const cachedSummaries = useQuery(
     api.aiMutations.getCachedSummaries,
-    { leadIds: visibleLeadIds }
+    visibleLeadIds.length > 0 ? { leadIds: visibleLeadIds } : "skip"
   );
 
   // Update summaries from cache
