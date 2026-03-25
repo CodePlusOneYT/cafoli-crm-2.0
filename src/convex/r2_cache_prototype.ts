@@ -268,12 +268,15 @@ export const offloadSingleToR2 = mutation({
 export const getR2Stats = query({
   args: {},
   handler: async (ctx) => {
-    const convexLeads = await ctx.db.query("leads").take(5000);
-    const r2Leads = await ctx.db.query("r2_leads_mock").take(5000);
+    // Use take(10000) to get accurate counts for large datasets
+    const convexLeads = await ctx.db.query("leads").take(10000);
+    const r2Leads = await ctx.db.query("r2_leads_mock").take(10000);
     
     return {
       convexActiveCount: convexLeads.length,
       r2StorageCount: r2Leads.length,
+      convexCapped: convexLeads.length === 10000,
+      r2Capped: r2Leads.length === 10000,
     };
   }
 });
@@ -453,11 +456,11 @@ export const restoreLeadForIntervention = internalMutation({
   },
 });
 
-// Restore ALL leads from R2 back to Convex in one batch (up to 200 at a time)
+// Restore ALL leads from R2 back to Convex in one batch (50 at a time to avoid timeouts)
 export const restoreAllFromR2 = mutation({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const limit = args.limit ?? 200;
+    const limit = args.limit ?? 50;
     const r2Leads = await ctx.db.query("r2_leads_mock").take(limit);
 
     let restoredCount = 0;
@@ -477,10 +480,13 @@ export const restoreAllFromR2 = mutation({
       }
     }
 
+    // Check if there are more remaining
+    const remaining = await ctx.db.query("r2_leads_mock").take(1);
+
     return {
       restoredCount,
       skippedCount,
-      remaining: r2Leads.length === limit ? "more" : "done",
+      remaining: remaining.length > 0 ? "more" : "done",
     };
   },
 });

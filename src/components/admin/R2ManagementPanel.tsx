@@ -46,30 +46,40 @@ export function R2ManagementPanel() {
   };
 
   const handleRestoreAll = async () => {
-    if (!confirm(`This will restore ALL ${r2Stats?.r2StorageCount ?? "?"} archived R2 leads back to Convex. This may take multiple runs for large datasets. Continue?`)) return;
+    const count = r2Stats?.r2StorageCount ?? 0;
+    if (!confirm(`This will restore ALL ${count} archived R2 leads back to Convex in batches of 50. This will run automatically until complete. Continue?`)) return;
     
     setIsRestoringAll(true);
     setRestoreProgress(null);
     let totalRestored = 0;
+    let totalSkipped = 0;
     
     try {
-      // Run in batches until done
+      // Run in batches of 50 until done
       let remaining = "more";
-      while (remaining === "more") {
-        const result = await restoreAllFromR2({ limit: 200 });
+      let batchCount = 0;
+      const maxBatches = Math.ceil((count + 50) / 50) + 10; // safety cap
+      
+      while (remaining === "more" && batchCount < maxBatches) {
+        const result = await restoreAllFromR2({ limit: 50 });
         totalRestored += result.restoredCount;
+        totalSkipped += result.skippedCount;
         remaining = result.remaining;
+        batchCount++;
         setRestoreProgress({ restored: totalRestored, remaining });
         
         if (remaining === "more") {
-          // Small delay between batches
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Small delay between batches to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
       
-      toast.success(`Successfully restored ${totalRestored} leads from R2 to Convex!`);
+      toast.success(`Restored ${totalRestored} leads from R2 to Convex! (${totalSkipped} duplicates skipped)`);
     } catch (e: any) {
       toast.error(e.message || "Failed to restore all leads from R2");
+      if (totalRestored > 0) {
+        toast.info(`Partial success: ${totalRestored} leads restored before error. Click again to continue.`);
+      }
     } finally {
       setIsRestoringAll(false);
     }
@@ -84,7 +94,7 @@ export function R2ManagementPanel() {
             <div className="flex items-center gap-3">
               <Database className="h-8 w-8 text-blue-500" />
               <div>
-                <p className="text-2xl font-bold">{r2Stats?.convexActiveCount ?? "—"}{r2Stats?.convexActiveCount === 5000 ? "+" : ""}</p>
+                <p className="text-2xl font-bold">{r2Stats?.convexActiveCount ?? "—"}{r2Stats?.convexCapped ? "+" : ""}</p>
                 <p className="text-sm text-muted-foreground">Active in Convex (Hot)</p>
               </div>
             </div>
@@ -95,7 +105,7 @@ export function R2ManagementPanel() {
             <div className="flex items-center gap-3">
               <Database className="h-8 w-8 text-orange-500" />
               <div>
-                <p className="text-2xl font-bold">{r2Stats?.r2StorageCount ?? "—"}{r2Stats?.r2StorageCount === 5000 ? "+" : ""}</p>
+                <p className="text-2xl font-bold">{r2Stats?.r2StorageCount ?? "—"}{r2Stats?.r2Capped ? "+" : ""}</p>
                 <p className="text-sm text-muted-foreground">Archived in R2 (Cold)</p>
               </div>
             </div>
