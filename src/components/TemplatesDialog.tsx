@@ -31,9 +31,17 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   
   const templates = useQuery(api.whatsappTemplatesQueries.getTemplates) || [];
-  // Determine filter based on user role to ensure staff can see their assigned leads
+  // Fetch the specific lead directly by ID — avoids the 1000-lead cap issue
+  const specificLead = useQuery(
+    api.leads.queries.getLead,
+    selectedLeadId ? { id: selectedLeadId, userId: user?._id } : "skip"
+  );
+  // Only load the full leads list when no specific lead is provided (for the contact picker)
   const filter = user?.role === ROLES.ADMIN ? "all" : "mine";
-  const leads = useQuery(api.leads.queries.getLeads, { filter, userId: user?._id }) || [];
+  const leads = useQuery(
+    api.leads.queries.getLeads,
+    !selectedLeadId ? { filter, userId: user?._id } : "skip"
+  ) || [];
   
   const syncTemplates = useAction(api.whatsappTemplates.syncTemplates);
   const createTemplate = useAction(api.whatsappTemplates.createTemplate);
@@ -160,14 +168,10 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
   };
 
   const quickSendTemplate = async (template: any, leadId: Id<"leads">) => {
-    if (!leads || leads.length === 0) {
-      toast.error("Loading contacts... Please try again.");
-      return;
-    }
-
-    const lead = leads.find((l: any) => l._id === leadId);
+    // Use specificLead if available (direct fetch), otherwise fall back to leads list
+    const lead = specificLead || leads.find((l: any) => l._id === leadId);
     if (!lead) {
-      toast.error("Contact not found");
+      toast.error("Contact not found. Please try again.");
       return;
     }
 
@@ -195,7 +199,6 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       return;
     }
 
-    // Use the leadId from sendFormData or fall back to selectedLeadId prop
     const targetLeadId = sendFormData.leadId || selectedLeadId;
     
     if (!targetLeadId) {
@@ -203,15 +206,13 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       return;
     }
 
-    // Ensure leads are loaded
-    if (!leads || leads.length === 0) {
-      toast.error("Loading contacts...");
-      return;
-    }
+    // Use specificLead if it matches, otherwise search the leads list
+    const lead = (specificLead && specificLead._id === targetLeadId)
+      ? specificLead
+      : leads.find((l: any) => l._id === targetLeadId);
 
-    const lead = leads.find((l: any) => l._id === targetLeadId);
     if (!lead) {
-      console.error("Lead not found:", { targetLeadId, availableLeads: leads.map((l: any) => l._id) });
+      console.error("Lead not found:", { targetLeadId });
       toast.error("Contact not found. Please try again.");
       return;
     }
@@ -564,7 +565,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
             <DialogTitle>Send Template Message</DialogTitle>
             <DialogDescription>
               {selectedLeadId 
-                ? `Send "${selectedTemplate?.name}" to ${leads.find((l: any) => l._id === (sendFormData.leadId || selectedLeadId))?.name || "selected contact"}`
+                ? `Send "${selectedTemplate?.name}" to ${specificLead?.name || "selected contact"}`
                 : `Send "${selectedTemplate?.name}" to a contact`
               }
             </DialogDescription>
@@ -590,14 +591,10 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                 </Select>
               </div>
             )}
-            {selectedLeadId && (
+            {selectedLeadId && specificLead && (
               <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium">
-                  {leads.find((l: any) => l._id === selectedLeadId)?.name}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {leads.find((l: any) => l._id === selectedLeadId)?.mobile}
-                </p>
+                <p className="text-sm font-medium">{specificLead.name}</p>
+                <p className="text-xs text-muted-foreground">{specificLead.mobile}</p>
               </div>
             )}
             <Button onClick={handleSendTemplate} className="w-full">
