@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FileText, Plus, RefreshCw, CheckCircle, Clock, XCircle, Info, Trash2, Edit, Send as SendIcon } from "lucide-react";
+import { FileText, Plus, RefreshCw, CheckCircle, Clock, XCircle, Info, Trash2, Edit, Send as SendIcon, Upload } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
@@ -22,11 +22,18 @@ interface TemplatesDialogProps {
   selectedLeadId?: Id<"leads"> | null;
 }
 
+// Extract variable placeholders like {{1}}, {{2}}, {{name}} from template text
+function extractVariables(text: string): string[] {
+  const matches = text.match(/\{\{([^}]+)\}\}/g) || [];
+  return [...new Set(matches.map(m => m.replace(/\{\{|\}\}/g, "")))];
+}
+
 export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   
@@ -60,7 +67,19 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
 
   const [sendFormData, setSendFormData] = useState({
     leadId: "" as Id<"leads"> | "",
+    mediaUrl: "",
+    variables: {} as Record<string, string>,
   });
+
+  // Derive template requirements from selected template
+  const getTemplateRequirements = (template: any) => {
+    if (!template) return { headerFormat: null, bodyVariables: [] };
+    const headerComp = template.components?.find((c: any) => c.type === "HEADER");
+    const bodyComp = template.components?.find((c: any) => c.type === "BODY");
+    const headerFormat = headerComp?.format || null; // "TEXT", "IMAGE", "DOCUMENT", "VIDEO", or null
+    const bodyVariables = bodyComp?.text ? extractVariables(bodyComp.text) : [];
+    return { headerFormat, bodyVariables };
+  };
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -145,13 +164,12 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
   };
 
   const handleEdit = (template: any) => {
-    // Extract data from template for editing
     const headerComponent = template.components.find((c: any) => c.type === "HEADER");
     const bodyComponent = template.components.find((c: any) => c.type === "BODY");
     const footerComponent = template.components.find((c: any) => c.type === "FOOTER");
 
     setFormData({
-      name: template.name + "_v2", // Meta doesn't allow editing, so we create a new version
+      name: template.name + "_v2",
       language: template.language,
       category: template.category,
       headerType: headerComponent?.format || "NONE",
@@ -160,37 +178,25 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       footerText: footerComponent?.text || "",
     });
 
-    // Switch to create tab
     const createTab = document.querySelector('[value="create"]') as HTMLElement;
     createTab?.click();
     
     toast.info("Editing creates a new template version (Meta limitation)");
   };
 
-  const quickSendTemplate = async (template: any, leadId: Id<"leads">) => {
-    // Use specificLead if available (direct fetch), otherwise fall back to leads list
-    const lead = specificLead || leads.find((l: any) => l._id === leadId);
-    if (!lead) {
-      toast.error("Contact not found. Please try again.");
-      return;
-    }
-
-    if (!lead.mobile || lead.mobile.trim() === "") {
-      toast.error("Contact has no phone number");
-      return;
-    }
-
-    try {
-      await sendTemplateMessage({
-        phoneNumber: lead.mobile,
-        templateName: template.name,
-        languageCode: template.language,
-        leadId: lead._id,
-      });
-      toast.success(`Template "${template.name}" sent successfully`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to send template");
-    }
+  // Open the send dialog for a template (always show dialog to fill variables/media)
+  const openSendDialog = (template: any, leadId?: Id<"leads">) => {
+    setSelectedTemplate(template);
+    const { bodyVariables } = getTemplateRequirements(template);
+    // Pre-fill variables with empty strings
+    const initialVars: Record<string, string> = {};
+    bodyVariables.forEach(v => { initialVars[v] = ""; });
+    setSendFormData({
+      leadId: leadId || "" as any,
+      mediaUrl: "",
+      variables: initialVars,
+    });
+    setSendDialogOpen(true);
   };
 
   const handleSendTemplate = async () => {
@@ -212,7 +218,6 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       : leads.find((l: any) => l._id === targetLeadId);
 
     if (!lead) {
-      console.error("Lead not found:", { targetLeadId });
       toast.error("Contact not found. Please try again.");
       return;
     }
@@ -222,19 +227,40 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
       return;
     }
 
+    const { headerFormat, bodyVariables } = getTemplateRequirements(selectedTemplate);
+
+    // Validate media URL if required
+    if (["IMAGE", "DOCUMENT", "VIDEO"].includes(headerFormat || "") && !sendFormData.mediaUrl.trim()) {
+      toast.error(`Please provide a ${headerFormat?.toLowerCase()} URL for the header`);
+      return;
+    }
+
+    // Validate all body variables are filled
+    for (const varName of bodyVariables) {
+      if (!sendFormData.variables[varName]?.trim()) {
+        toast.error(`Please fill in the variable: {{${varName}}}`);
+        return;
+      }
+    }
+
+    setIsSending(true);
     try {
       await sendTemplateMessage({
         phoneNumber: lead.mobile,
         templateName: selectedTemplate.name,
         languageCode: selectedTemplate.language,
         leadId: lead._id,
+        mediaUrl: sendFormData.mediaUrl.trim() || undefined,
+        variables: Object.keys(sendFormData.variables).length > 0 ? sendFormData.variables : undefined,
       });
       toast.success("Template message sent successfully");
       setSendDialogOpen(false);
       setSelectedTemplate(null);
-      setSendFormData({ leadId: "" });
+      setSendFormData({ leadId: "" as any, mediaUrl: "", variables: {} });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to send template");
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -278,6 +304,9 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
     const newText = formData.bodyText.substring(0, start) + formattedText + formData.bodyText.substring(end);
     setFormData({ ...formData, bodyText: newText });
   };
+
+  const { headerFormat, bodyVariables } = getTemplateRequirements(selectedTemplate);
+  const needsMedia = ["IMAGE", "DOCUMENT", "VIDEO"].includes(headerFormat || "");
 
   return (
     <>
@@ -332,15 +361,7 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
-                            onClick={() => {
-                              if (selectedLeadId) {
-                                quickSendTemplate(template, selectedLeadId);
-                              } else {
-                                setSelectedTemplate(template);
-                                setSendFormData({ leadId: "" });
-                                setSendDialogOpen(true);
-                              }
-                            }}
+                            onClick={() => openSendDialog(template, selectedLeadId || undefined)}
                             title="Send template"
                             disabled={template.status !== "APPROVED"}
                           >
@@ -479,40 +500,16 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                 <div className="space-y-2">
                   <Label htmlFor="body">Body Text *</Label>
                   <div className="flex gap-2 mb-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => insertFormatting("bold")}
-                      title="Bold"
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => insertFormatting("bold")} title="Bold">
                       <strong>B</strong>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => insertFormatting("italic")}
-                      title="Italic"
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => insertFormatting("italic")} title="Italic">
                       <em>I</em>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => insertFormatting("strikethrough")}
-                      title="Strikethrough"
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => insertFormatting("strikethrough")} title="Strikethrough">
                       <s>S</s>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => insertFormatting("monospace")}
-                      title="Monospace"
-                    >
+                    <Button type="button" variant="outline" size="sm" onClick={() => insertFormatting("monospace")} title="Monospace">
                       <code>{"</>"}</code>
                     </Button>
                   </div>
@@ -560,23 +557,23 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
 
       {/* Send Template Dialog */}
       <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Send Template Message</DialogTitle>
+            <DialogTitle>Send Template: {selectedTemplate?.name}</DialogTitle>
             <DialogDescription>
-              {selectedLeadId 
-                ? `Send "${selectedTemplate?.name}" to ${specificLead?.name || "selected contact"}`
-                : `Send "${selectedTemplate?.name}" to a contact`
-              }
+              {selectedLeadId
+                ? `Sending to ${specificLead?.name || "selected contact"} (${specificLead?.mobile || ""})`
+                : "Fill in the details below to send this template"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {/* Contact picker — only when no lead pre-selected */}
             {!selectedLeadId && (
               <div className="space-y-2">
-                <Label htmlFor="lead">Select Contact</Label>
+                <Label>Select Contact</Label>
                 <Select
                   value={sendFormData.leadId}
-                  onValueChange={(value) => setSendFormData({ leadId: value as Id<"leads"> })}
+                  onValueChange={(value) => setSendFormData(prev => ({ ...prev, leadId: value as Id<"leads"> }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Choose a contact..." />
@@ -584,22 +581,95 @@ export function TemplatesDialog({ selectedLeadId }: TemplatesDialogProps) {
                   <SelectContent>
                     {leads.map((lead: any) => (
                       <SelectItem key={lead._id} value={lead._id}>
-                        {lead.name} - {lead.mobile}
+                        {lead.name} — {lead.mobile}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             )}
-            {selectedLeadId && specificLead && (
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium">{specificLead.name}</p>
-                <p className="text-xs text-muted-foreground">{specificLead.mobile}</p>
+
+            {/* Media URL input for IMAGE/DOCUMENT/VIDEO headers */}
+            {needsMedia && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Upload className="h-3.5 w-3.5" />
+                  {headerFormat} URL <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  placeholder={
+                    headerFormat === "DOCUMENT"
+                      ? "https://example.com/document.pdf"
+                      : headerFormat === "IMAGE"
+                      ? "https://example.com/image.jpg"
+                      : "https://example.com/video.mp4"
+                  }
+                  value={sendFormData.mediaUrl}
+                  onChange={(e) => setSendFormData(prev => ({ ...prev, mediaUrl: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Must be a publicly accessible URL. For the MRP list, use:{" "}
+                  <button
+                    type="button"
+                    className="text-primary underline text-xs"
+                    onClick={() => setSendFormData(prev => ({
+                      ...prev,
+                      mediaUrl: "https://crm.skinticals.com/assets/Master_Cafoli_MRP_List_All_11032026.pdf"
+                    }))}
+                  >
+                    Use MRP List PDF
+                  </button>
+                </p>
               </div>
             )}
-            <Button onClick={handleSendTemplate} className="w-full">
-              <SendIcon className="h-4 w-4 mr-2" />
-              Send Template
+
+            {/* Body variable inputs */}
+            {bodyVariables.length > 0 && (
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Template Variables</Label>
+                {bodyVariables.map((varName) => (
+                  <div key={varName} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">{`{{${varName}}}`}</Label>
+                    <Input
+                      placeholder={`Value for {{${varName}}}`}
+                      value={sendFormData.variables[varName] || ""}
+                      onChange={(e) => setSendFormData(prev => ({
+                        ...prev,
+                        variables: { ...prev.variables, [varName]: e.target.value }
+                      }))}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Template preview */}
+            {selectedTemplate && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Template Preview</Label>
+                <div className="text-xs bg-muted/50 rounded p-3 space-y-1">
+                  {selectedTemplate.components?.map((comp: any, idx: number) => (
+                    <div key={idx}>
+                      <span className="font-semibold">{comp.type}{comp.format ? ` (${comp.format})` : ""}: </span>
+                      <span className="text-muted-foreground">{comp.text || "(media)"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Button onClick={handleSendTemplate} disabled={isSending} className="w-full">
+              {isSending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <SendIcon className="h-4 w-4 mr-2" />
+                  Send Template
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
