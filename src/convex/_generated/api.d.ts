@@ -58,6 +58,7 @@ import type * as leads_queries_overdue from "../leads/queries/overdue.js";
 import type * as leads_queries_pagination from "../leads/queries/pagination.js";
 import type * as leads_standard from "../leads/standard.js";
 import type * as lib_gemini from "../lib/gemini.js";
+import type * as lib_mega from "../lib/mega.js";
 import type * as lib_passwordUtils from "../lib/passwordUtils.js";
 import type * as migrations from "../migrations.js";
 import type * as migrations_fixProductStorageMetadata from "../migrations/fixProductStorageMetadata.js";
@@ -158,6 +159,7 @@ declare const fullApi: ApiFromModules<{
   "leads/queries/pagination": typeof leads_queries_pagination;
   "leads/standard": typeof leads_standard;
   "lib/gemini": typeof lib_gemini;
+  "lib/mega": typeof lib_mega;
   "lib/passwordUtils": typeof lib_passwordUtils;
   migrations: typeof migrations;
   "migrations/fixProductStorageMetadata": typeof migrations_fixProductStorageMetadata;

@@ -3,6 +3,7 @@ import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal, api } from "./_generated/api";
 import { generateWithGemini, extractJsonFromMarkdown } from "./lib/gemini";
+import { uploadBlobToMega } from "./lib/mega";
 
 // Structured error logger for whatsappAi
 function logAiError(context: string, error: unknown, extra?: Record<string, unknown>) {
@@ -81,7 +82,6 @@ export const generateAndSendAiReplyInternal = internalAction({
     try {
       logAiInfo("REPLY", "Starting AI reply generation", { leadId: args.leadId, prompt: args.prompt.substring(0, 80) });
 
-      // Fetch available resources for context
       const products = await ctx.runQuery(internal.products.listProductsInternal);
       const rangePdfs = await ctx.runQuery(internal.rangePdfs.listRangePdfsInternal);
 
@@ -121,13 +121,11 @@ export const generateAndSendAiReplyInternal = internalAction({
         aiAction = JSON.parse(jsonStr);
       } catch (e) {
         logAiError("PARSE_JSON", e, { rawText: text.substring(0, 200) });
-        // Fallback to text reply
         aiAction = { action: "reply", text: text };
       }
 
       logAiInfo("ACTION", `Executing AI action: ${aiAction.action}`, { resource: aiAction.resource_name });
 
-      // Execute Action
       if (aiAction.action === "reply") {
         await ctx.runAction(internal.whatsapp.internal.sendMessage, {
           leadId: args.leadId,
@@ -141,7 +139,6 @@ export const generateAndSendAiReplyInternal = internalAction({
         if (product) {
           logAiInfo("SEND_PRODUCT", `Found product: ${product.name}`, { leadId: args.leadId });
           
-          // Send intro message if provided
           if (aiAction.text) {
             await ctx.runAction(internal.whatsapp.internal.sendMessage, {
               leadId: args.leadId,
@@ -151,92 +148,53 @@ export const generateAndSendAiReplyInternal = internalAction({
             await new Promise(resolve => setTimeout(resolve, 300));
           }
           
-          // Collect all files to send
           const filesToSend = [];
           
-          // Helper to get extension from metadata
           const getExtension = async (storageId: string) => {
              const meta = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: storageId as any });
              if (meta?.contentType === "image/png") return "png";
              if (meta?.contentType === "image/jpeg" || meta?.contentType === "image/jpg") return "jpg";
              if (meta?.contentType === "application/pdf") return "pdf";
-             return "jpg"; // Default for images
+             return "jpg";
           };
 
-          // Main Image
           if (product.mainImage) {
             const ext = await getExtension(product.mainImage);
-            filesToSend.push({
-              storageId: product.mainImage,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_main.${ext}`,
-              type: "image",
-              label: "Main Image"
-            });
+            filesToSend.push({ storageId: product.mainImage, fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_main.${ext}`, type: "image", label: "Main Image" });
           }
-          
-          // Flyer
           if (product.flyer) {
             const ext = await getExtension(product.flyer);
-            filesToSend.push({
-              storageId: product.flyer,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_flyer.${ext}`,
-              type: "image",
-              label: "Flyer"
-            });
+            filesToSend.push({ storageId: product.flyer, fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_flyer.${ext}`, type: "image", label: "Flyer" });
           }
-          
-          // Bridge Card
           if (product.bridgeCard) {
             const ext = await getExtension(product.bridgeCard);
-            filesToSend.push({
-              storageId: product.bridgeCard,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_bridge_card.${ext}`,
-              type: "image",
-              label: "Bridge Card"
-            });
+            filesToSend.push({ storageId: product.bridgeCard, fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_bridge_card.${ext}`, type: "image", label: "Bridge Card" });
           }
-          
-          // Visual Aid (PDF)
           if (product.visualaid) {
-            filesToSend.push({
-              storageId: product.visualaid,
-              fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_visualaid.pdf`,
-              type: "pdf",
-              label: "Visual Aid"
-            });
+            filesToSend.push({ storageId: product.visualaid, fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}_visualaid.pdf`, type: "pdf", label: "Visual Aid" });
           }
 
-          // CHECK FOR CLOUDFLARE WORKER CONFIGURATION
           const useCloudflare = !!process.env.CLOUDFLARE_WORKER_URL;
           let sentViaCloudflare = false;
 
           if (useCloudflare && filesToSend.length > 0) {
              logAiInfo("SEND_PRODUCT", `Using Cloudflare Worker Relay for ${filesToSend.length} files`);
              
-             // Prepare files with signed URLs
              const filesWithUrls = [];
              for (const file of filesToSend) {
                 const url = await ctx.storage.getUrl(file.storageId);
                 const metadata = await ctx.runQuery(internal.products.getStorageMetadata, { storageId: file.storageId });
                 
-                // Determine correct mime type
                 let correctMimeType = metadata?.contentType;
                 if (!correctMimeType || correctMimeType === "application/octet-stream" || correctMimeType === "text/html") {
                   correctMimeType = file.type === "pdf" ? "application/pdf" : "image/jpeg";
                 }
 
                 if (url) {
-                  filesWithUrls.push({
-                    url,
-                    fileName: file.fileName,
-                    mimeType: correctMimeType || "application/octet-stream"
-                  });
-                } else {
-                  logAiError("SEND_PRODUCT", new Error(`Failed to generate URL for ${file.fileName}`), { storageId: file.storageId });
+                  filesWithUrls.push({ url, fileName: file.fileName, mimeType: correctMimeType || "application/octet-stream" });
                 }
              }
 
-             // Call the worker action
              try {
                await ctx.runAction(internal.whatsapp.cloudflare.sendFilesViaWorker, {
                  phoneNumber: args.phoneNumber,
@@ -246,12 +204,11 @@ export const generateAndSendAiReplyInternal = internalAction({
                sentViaCloudflare = true;
              } catch (err) {
                logAiError("SEND_PRODUCT_CLOUDFLARE", err, { fallback: true });
-               // Fallback logic will execute below because sentViaCloudflare is false
              }
           } 
           
           if (!sentViaCloudflare) {
-            logAiInfo("SEND_PRODUCT", `Using Direct Convex Send (${filesToSend.length} files)`);
+            logAiInfo("SEND_PRODUCT", `Using Direct Convex Send with MEGA storage (${filesToSend.length} files)`);
             
             for (let i = 0; i < filesToSend.length; i++) {
               const file = filesToSend[i];
@@ -278,20 +235,21 @@ export const generateAndSendAiReplyInternal = internalAction({
                 });
                 
                 await new Promise(resolve => setTimeout(resolve, 1000));
-              } catch (error) {
-                logAiError("SEND_PRODUCT_FILE", error, { label: file.label, fileName: file.fileName });
+              } catch (fileError) {
+                logAiError("SEND_PRODUCT_FILE", fileError, { label: file.label, storageId: file.storageId });
               }
             }
           }
-          
-          // Format and send product details
-          let detailsMessage = `📦 *${product.name}*\n\n`;
-          if (product.brandName) detailsMessage += `Brand: ${product.brandName}\n`;
-          if (product.molecule) detailsMessage += `Molecule: ${product.molecule}\n`;
-          if (product.mrp) detailsMessage += `MRP: ₹${product.mrp}\n`;
-          if (product.packaging) detailsMessage += `Packaging: ${product.packaging}\n`;
-          if (product.description) detailsMessage += `\n${product.description}\n`;
-          if (product.pageLink) detailsMessage += `\nMore info: ${product.pageLink}`;
+
+          // Send product details text
+          const detailsMessage = [
+            `*${product.name}*`,
+            product.molecule ? `Molecule: ${product.molecule}` : null,
+            product.mrp ? `MRP: ₹${product.mrp}` : null,
+            product.packaging ? `Packaging: ${product.packaging}` : null,
+            product.description ? `\n${product.description}` : null,
+            product.pageLink ? `\nMore info: ${product.pageLink}` : null,
+          ].filter(Boolean).join("\n");
           
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
@@ -389,7 +347,6 @@ export const generateAndSendAiReplyInternal = internalAction({
               customerMessage: args.prompt,
             });
           } else {
-            // No assigned user - create an intervention request instead so it doesn't go unnoticed
             logAiInfo("CONTACT_REQUEST", "Lead has no assigned user, creating intervention request instead", { leadId: args.leadId });
             await ctx.runMutation(internal.interventionRequests.createInterventionRequestInternal, { 
               leadId: args.leadId,

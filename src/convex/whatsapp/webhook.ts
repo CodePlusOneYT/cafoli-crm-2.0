@@ -3,6 +3,7 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
+import { uploadBlobToMega } from "../lib/mega";
 
 // Handle incoming WhatsApp messages
 export const handleIncomingMessage = internalAction({
@@ -22,7 +23,6 @@ export const handleIncomingMessage = internalAction({
     try {
       console.log("🔵 handleIncomingMessage called", { from: args.from, messageId: args.messageId, text: args.text });
       
-      // Process lead atomically to prevent race conditions
       const { leadId, isNewLead } = await ctx.runMutation(internal.whatsappMutations.processWhatsAppLead, {
         phoneNumber: args.from,
         name: args.senderName,
@@ -36,45 +36,44 @@ export const handleIncomingMessage = internalAction({
       }
 
       if (leadId) {
-        // Download media if present
+        // Download media if present and upload to MEGA
         let mediaUrl = null;
         if (args.mediaId) {
           try {
             const accessToken = process.env.CLOUD_API_ACCESS_TOKEN;
             
-            // Get media URL from WhatsApp
             const mediaResponse = await fetch(
               `https://graph.facebook.com/v20.0/${args.mediaId}`,
-              {
-                headers: {
-                  "Authorization": `Bearer ${accessToken}`,
-                },
-              }
+              { headers: { "Authorization": `Bearer ${accessToken}` } }
             );
             
             const mediaData = await mediaResponse.json();
             
             if (mediaData.url) {
-              // Download the media file
               const fileResponse = await fetch(mediaData.url, {
-                headers: {
-                  "Authorization": `Bearer ${accessToken}`,
-                },
+                headers: { "Authorization": `Bearer ${accessToken}` },
               });
               
               const fileBlob = await fileResponse.blob();
+              const fileName = args.mediaFilename || `media_${args.messageId}`;
               
-              // Upload to Convex storage
-              const storageId = await ctx.storage.store(fileBlob);
-              mediaUrl = await ctx.storage.getUrl(storageId);
-              console.log("✅ Media downloaded and stored:", mediaUrl);
+              try {
+                // Upload to MEGA for permanent storage
+                mediaUrl = await uploadBlobToMega(fileBlob, fileName);
+                console.log("✅ Media uploaded to MEGA:", mediaUrl);
+              } catch (megaError) {
+                console.error("❌ MEGA upload failed, falling back to Convex storage:", megaError);
+                // Fallback: store in Convex storage
+                const storageId = await ctx.storage.store(fileBlob);
+                mediaUrl = await ctx.storage.getUrl(storageId);
+                console.log("✅ Media stored in Convex (fallback):", mediaUrl);
+              }
             }
           } catch (error) {
             console.error("❌ Error downloading incoming media:", error);
           }
         }
 
-        // Determine message type
         let messageType = "text";
         if (args.type === "image") {
           messageType = "image";
@@ -82,7 +81,6 @@ export const handleIncomingMessage = internalAction({
           messageType = "file";
         }
 
-        // Store incoming message
         await ctx.runMutation(internal.whatsappMutations.storeMessage, {
           leadId,
           phoneNumber: args.from,
@@ -99,7 +97,6 @@ export const handleIncomingMessage = internalAction({
         
         console.log("✅ Message stored in database");
 
-        // Send welcome message for new leads
         if (isNewLead) {
           console.log(`📤 Sending welcome message to new lead ${leadId}`);
           try {
@@ -112,9 +109,7 @@ export const handleIncomingMessage = internalAction({
             console.error("❌ Error sending welcome message:", error);
           }
         } else {
-            // TRIGGER AUTO REPLY FOR EXISTING LEADS - BUT ONLY IF CHAT IS NOT ACTIVE
             if (args.type === "text") {
-                // Check if someone is actively viewing this chat
                 const isChatActive = await ctx.runQuery(internal.activeChatSessions.isLeadChatActive, { leadId });
                 
                 if (!isChatActive) {
@@ -126,7 +121,6 @@ export const handleIncomingMessage = internalAction({
                         content: m.content
                     }));
 
-                    // Get configurable contact request message
                     const contactRequestMessage = await ctx.runQuery(internal.whatsappConfig.getContactRequestMessage);
 
                     await ctx.runAction(internal.whatsappAi.generateAndSendAiReplyInternal, {
