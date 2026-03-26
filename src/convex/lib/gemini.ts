@@ -5,10 +5,9 @@ import { internal } from "../_generated/api";
 import { Doc, Id } from "../_generated/dataModel";
 
 export const modelsToTry = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
+  "gemini-3.1-flash-lite-preview",
+  "gemini-3-flash-preview",
+  "gemini-2.5-flash-lite",
 ];
 
 export const gemmaModel = "gemma-3-27b-it";
