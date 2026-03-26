@@ -277,6 +277,7 @@ export const processWhatsAppLead = internalMutation({
         message: args.message,
         priorityScore: 50,
         adminAssignmentRequired: false,
+        isBulkLead: true,
       });
 
       // Log lead creation

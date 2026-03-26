@@ -114,11 +114,11 @@ export const processReply = internalMutation({
 
 export const cleanupOldContacts = internalMutation({
   handler: async (ctx) => {
-    const hundredDaysAgo = Date.now() - (100 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
     const oldContacts = await ctx.db
       .query("bulkContacts")
-      .withIndex("by_sentAt", (q) => q.lt("sentAt", hundredDaysAgo))
+      .withIndex("by_sentAt", (q) => q.lt("sentAt", thirtyDaysAgo))
       .take(50);
 
     for (const contact of oldContacts) {
@@ -144,12 +144,14 @@ export const cleanupOldContacts = internalMutation({
             type: "To be Decided",
             lastActivity: contact.sentAt,
             isColdCallerLead: true,
+            isBulkLead: true,
             adminAssignmentRequired: false,
           });
         } else if (!existingLead.isColdCallerLead) {
-          // Mark existing lead as cold caller lead
+          // Mark existing lead as cold caller lead with bulk badge
           await ctx.db.patch(existingLead._id, {
             isColdCallerLead: true,
+            isBulkLead: true,
           });
         }
       }

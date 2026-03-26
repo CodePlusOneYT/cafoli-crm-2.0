@@ -50,6 +50,7 @@ export default defineSchema({
     aiScoredAt: v.optional(v.number()),
     adminAssignmentRequired: v.optional(v.boolean()),
     isColdCallerLead: v.optional(v.boolean()),
+    isBulkLead: v.optional(v.boolean()),
     coldCallerAssignedTo: v.optional(v.id("users")),
     coldCallerAssignedAt: v.optional(v.number()),
     indiamartMetadata: v.optional(v.any()),
@@ -106,7 +107,8 @@ export default defineSchema({
     lastInteractionAt: v.optional(v.number()),
   }).index("by_sentAt", ["sentAt"])
     .index("by_phoneNumber", ["phoneNumber"])
-    .index("by_adminId", ["adminId"]),
+    .index("by_adminId", ["adminId"])
+    .index("by_status", ["status"]),
 
   coldCallerLeads: defineTable({
     name: v.string(),

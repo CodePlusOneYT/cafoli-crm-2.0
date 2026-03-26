@@ -189,8 +189,9 @@ export const getLeadsWithChatStatus = query({
     );
 
     // Only return leads that have chats, sorted by last message
+    // Exclude bulk leads (adminAssignmentRequired) - they appear in BulkMessenger instead
     const visibleLeads = enriched
-      .filter((l) => l.hasChat)
+      .filter((l) => l.hasChat && !l.adminAssignmentRequired)
       .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
 
     return {
@@ -198,5 +199,104 @@ export const getLeadsWithChatStatus = query({
       isDone: paginatedLeads.isDone,
       continueCursor: paginatedLeads.continueCursor,
     };
+  },
+});
+
+export const getBulkMessagingContacts = query({
+  args: {
+    searchQuery: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Get all bulk contacts with status "sent" (not yet replied)
+    const bulkContacts = await ctx.db
+      .query("bulkContacts")
+      .withIndex("by_status", (q) => q.eq("status", "sent"))
+      .order("desc")
+      .take(500);
+
+    // Filter by search if provided
+    const filtered = args.searchQuery
+      ? bulkContacts.filter(
+          (c) =>
+            (c.name || "").toLowerCase().includes(args.searchQuery!.toLowerCase()) ||
+            c.phoneNumber.includes(args.searchQuery!)
+        )
+      : bulkContacts;
+
+    // Enrich with lead/chat info for message status
+    const enriched = await Promise.all(
+      filtered.map(async (contact) => {
+        // Try to find a lead for this phone number
+        const cleaned = contact.phoneNumber.replace(/\D/g, "");
+        const tenDigit = cleaned.startsWith("91") && cleaned.length === 12 ? cleaned.slice(2) : cleaned;
+        const twelveDigit = cleaned.length === 10 ? "91" + cleaned : cleaned;
+
+        let lead = await ctx.db
+          .query("leads")
+          .withIndex("by_mobile", (q) => q.eq("mobile", twelveDigit))
+          .first();
+
+        if (!lead) {
+          lead = await ctx.db
+            .query("leads")
+            .withIndex("by_mobile", (q) => q.eq("mobile", tenDigit))
+            .first();
+        }
+
+        if (!lead) {
+          lead = await ctx.db
+            .query("leads")
+            .withIndex("by_mobile", (q) => q.eq("mobile", contact.phoneNumber))
+            .first();
+        }
+
+        let lastMessageStatus: string | null = null;
+        let lastMessageAt: number = contact.sentAt;
+        let unreadCount = 0;
+        let leadId: string | null = null;
+        let chatId: string | null = null;
+
+        if (lead) {
+          leadId = lead._id;
+          const chat = await ctx.db
+            .query("chats")
+            .withIndex("by_lead", (q) => q.eq("leadId", lead!._id))
+            .first();
+
+          if (chat) {
+            chatId = chat._id;
+            unreadCount = chat.unreadCount || 0;
+            lastMessageAt = chat.lastMessageAt || contact.sentAt;
+
+            // Get the last outbound message status
+            const lastMsg = await ctx.db
+              .query("messages")
+              .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+              .order("desc")
+              .first();
+
+            if (lastMsg) {
+              lastMessageStatus = lastMsg.status || null;
+            }
+          }
+        }
+
+        return {
+          ...contact,
+          leadId,
+          chatId,
+          lastMessageStatus,
+          lastMessageAt,
+          unreadCount,
+          // Use lead name if available, otherwise contact name
+          displayName: (lead?.name) || contact.name || contact.phoneNumber,
+        };
+      })
+    );
+
+    // Sort by last message time (most recent first)
+    enriched.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+
+    return enriched;
   },
 });
