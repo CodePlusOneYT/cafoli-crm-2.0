@@ -1,5 +1,6 @@
 "use node";
 import { action } from "./_generated/server";
+import { uploadToMega } from "./lib/mega";
 
 export const testFetch = action({
   args: {},
@@ -23,4 +24,25 @@ export const testFetch = action({
     const data = await response.json();
     return data;
   }
+});
+
+export const testMegaIntegration = action({
+  args: {},
+  handler: async (ctx) => {
+    const email = process.env.MEGA_EMAIL;
+    const password = process.env.MEGA_PASSWORD;
+
+    if (!email || !password) {
+      return { success: false, error: "MEGA_EMAIL or MEGA_PASSWORD not set in Convex environment variables." };
+    }
+
+    try {
+      const testContent = `Cafoli CRM MEGA Integration Test - ${new Date().toISOString()}`;
+      const buffer = Buffer.from(testContent, "utf-8");
+      const link = await uploadToMega(buffer, "cafoli_mega_test.txt");
+      return { success: true, link, message: "MEGA integration working! File uploaded successfully." };
+    } catch (err: any) {
+      return { success: false, error: err.message || String(err) };
+    }
+  },
 });
