@@ -121,7 +121,7 @@ export function LeadCardActions({
                 <SelectValue placeholder="Assign to..." />
               </SelectTrigger>
               <SelectContent>
-                {allUsers.map((u) => (
+                {allUsers.filter((u) => u.role === "staff").map((u) => (
                   <SelectItem key={u._id} value={u._id}>
                     {u.name || u.email}
                   </SelectItem>
