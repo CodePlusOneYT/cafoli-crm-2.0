@@ -15,6 +15,76 @@ interface ChatMessageBubbleProps {
   formatTime: (timestamp: number) => string;
 }
 
+/**
+ * Renders WhatsApp-formatted text with proper formatting:
+ * *bold*, _italic_, ~strikethrough~, `code`, and line breaks
+ */
+function renderWhatsAppText(text: string): React.ReactNode {
+  if (!text) return null;
+
+  // Split by newlines first, then process each line
+  const lines = text.split("\n");
+
+  return (
+    <>
+      {lines.map((line, lineIndex) => (
+        <span key={lineIndex}>
+          {lineIndex > 0 && <br />}
+          {parseWhatsAppInline(line)}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function parseWhatsAppInline(text: string): React.ReactNode {
+  if (!text) return null;
+
+  // Regex to match WhatsApp formatting tokens
+  // Order matters: code first (backtick), then bold, italic, strikethrough
+  const tokenRegex = /(`[^`]+`|\*[^*]+\*|_[^_]+_|~[^~]+~)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let keyIndex = 0;
+
+  while ((match = tokenRegex.exec(text)) !== null) {
+    // Add plain text before this match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    const inner = token.slice(1, -1);
+    const key = keyIndex++;
+
+    if (token.startsWith("`")) {
+      parts.push(
+        <code key={key} className="bg-black/10 rounded px-1 font-mono text-xs">
+          {inner}
+        </code>
+      );
+    } else if (token.startsWith("*")) {
+      parts.push(<strong key={key}>{inner}</strong>);
+    } else if (token.startsWith("_")) {
+      parts.push(<em key={key}>{inner}</em>);
+    } else if (token.startsWith("~")) {
+      parts.push(<s key={key}>{inner}</s>);
+    } else {
+      parts.push(token);
+    }
+
+    lastIndex = match.index + token.length;
+  }
+
+  // Add remaining plain text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? <>{parts}</> : text;
+}
+
 function getStatusIcon(status?: string) {
   switch (status) {
     case "sent":
@@ -59,7 +129,7 @@ function renderMessageContent(message: any) {
           alt={message.mediaName || "Image"}
           className="rounded-lg max-w-full h-auto max-h-64 object-cover"
         />
-        {message.content && <p className="text-sm text-gray-900">{message.content}</p>}
+        {message.content && <p className="text-sm text-gray-900">{renderWhatsAppText(message.content)}</p>}
       </div>
     );
   }
@@ -76,7 +146,7 @@ function renderMessageContent(message: any) {
           <Paperclip className="h-4 w-4" />
           <span className="text-sm font-medium">{message.mediaName || "File"}</span>
         </a>
-        {message.content && <p className="text-sm text-gray-900">{message.content}</p>}
+        {message.content && <p className="text-sm text-gray-900">{renderWhatsAppText(message.content)}</p>}
       </div>
     );
   }
@@ -92,7 +162,7 @@ function renderMessageContent(message: any) {
             alt={message.mediaName || "Image"}
             className="rounded-lg max-w-full h-auto max-h-64 object-cover"
           />
-          {message.content && <p className="text-sm text-gray-900">{message.content}</p>}
+          {message.content && <p className="text-sm text-gray-900">{renderWhatsAppText(message.content)}</p>}
         </div>
       );
     }
@@ -107,12 +177,16 @@ function renderMessageContent(message: any) {
           <Paperclip className="h-4 w-4" />
           <span className="text-sm font-medium">{message.mediaName || "Attachment"}</span>
         </a>
-        {message.content && <p className="text-sm text-gray-900">{message.content}</p>}
+        {message.content && <p className="text-sm text-gray-900">{renderWhatsAppText(message.content)}</p>}
       </div>
     );
   }
 
-  return <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">{message.content}</p>;
+  return (
+    <p className="text-sm text-gray-900 break-words">
+      {renderWhatsAppText(message.content)}
+    </p>
+  );
 }
 
 export function ChatMessageBubble({
