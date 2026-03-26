@@ -385,10 +385,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Contact Request Popup - Highest Priority */}
       <ContactRequestPopup />
       
-      {/* Follow-up Notifications */}
-      {user && <FollowUpNotifications />}
+      {/* Follow-up Notifications — staff only */}
+      {user && !isAdmin && <FollowUpNotifications />}
       
-      {leadsWithoutFollowUp && leadsWithoutFollowUp.length > 0 ? (
+      {!isAdmin && leadsWithoutFollowUp && leadsWithoutFollowUp.length > 0 ? (
         <MandatoryFollowUpPopup leads={leadsWithoutFollowUp} />
       ) : (
         <>
@@ -398,8 +398,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </>
       )}
 
-      {/* Cold Caller Popup */}
-      {user && coldCallerLeadsNeedingFollowUp.length > 0 && (
+      {/* Cold Caller Popup — staff only */}
+      {user && !isAdmin && coldCallerLeadsNeedingFollowUp.length > 0 && (
         <ColdCallerPopup
           leads={coldCallerLeadsNeedingFollowUp}
           isOpen={isColdCallerPopupOpen}
