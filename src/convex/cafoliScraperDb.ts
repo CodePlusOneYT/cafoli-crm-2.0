@@ -83,24 +83,15 @@ export const cleanupCorruptedCompositions = mutation({
   },
 });
 
-// Delete all cached web products
+// Delete a batch of cached web products - returns hasMore for looping
 export const deleteAllWebProducts = mutation({
   args: {},
   handler: async (ctx) => {
-    const products = await ctx.db.query("cafoliWebProducts").take(5000);
-    let deleted = 0;
+    const products = await ctx.db.query("cafoliWebProducts").take(500);
     for (const product of products) {
       await ctx.db.delete(product._id);
-      deleted++;
     }
-    // If there are more than 5000, keep deleting in batches
-    if (products.length === 5000) {
-      const more = await ctx.db.query("cafoliWebProducts").take(5000);
-      for (const product of more) {
-        await ctx.db.delete(product._id);
-        deleted++;
-      }
-    }
-    return { deleted };
+    const remaining = await ctx.db.query("cafoliWebProducts").take(1);
+    return { deleted: products.length, hasMore: remaining.length > 0 };
   },
 });

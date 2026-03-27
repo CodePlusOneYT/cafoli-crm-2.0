@@ -483,6 +483,43 @@ export default function Admin() {
     }
   };
 
+  const handleDeleteAllWebProducts = async () => {
+    setIsDeletingCache(true);
+    try {
+      let totalDeleted = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const result = await deleteAllWebProducts({});
+        totalDeleted += result.deleted;
+        hasMore = result.hasMore;
+      }
+      setWebProductCount(0);
+      toast.success(`Deleted ${totalDeleted} cached web products`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete cache");
+    } finally {
+      setIsDeletingCache(false);
+    }
+  };
+
+  const handleDeleteAllCatalogProducts = async () => {
+    setIsDeletingCatalog(true);
+    try {
+      let totalDeleted = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const result = await deleteAllCatalogProducts({});
+        totalDeleted += result.deleted;
+        hasMore = result.hasMore;
+      }
+      toast.success(`Deleted ${totalDeleted} catalog products`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete catalog");
+    } finally {
+      setIsDeletingCatalog(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="container mx-auto py-8 space-y-8">
@@ -744,6 +781,15 @@ export default function Admin() {
                     <Database className="h-4 w-4" />
                     Check Cached Count
                   </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteAllWebProducts}
+                    disabled={isDeletingCache}
+                    className="flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {isDeletingCache ? "Deleting..." : "Delete All Cache"}
+                  </Button>
                   {webProductCount !== null && (
                     <span className="text-sm text-muted-foreground">
                       {webProductCount} products cached
@@ -766,7 +812,16 @@ export default function Admin() {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="destructive"
+                onClick={handleDeleteAllCatalogProducts}
+                disabled={isDeletingCatalog}
+                className="flex items-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                {isDeletingCatalog ? "Deleting..." : "Delete All Products"}
+              </Button>
               <ProductUploadDialog />
             </div>
             <ProductListManager />
