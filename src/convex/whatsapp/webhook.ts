@@ -81,21 +81,29 @@ export const handleIncomingMessage = internalAction({
           messageType = "file";
         }
 
-        await ctx.runMutation(internal.whatsappMutations.storeMessage, {
-          leadId,
-          phoneNumber: args.from,
-          content: args.text,
-          direction: "inbound",
-          status: "received",
-          externalId: args.messageId,
-          messageType: messageType !== "text" ? messageType : undefined,
-          mediaUrl: mediaUrl || undefined,
-          mediaName: args.mediaFilename || undefined,
-          mediaMimeType: args.mediaMimeType || undefined,
-          quotedMessageExternalId: args.quotedMessageExternalId,
-        });
-        
-        console.log("✅ Message stored in database");
+        // Check if this message was already processed (deduplication)
+        const alreadyProcessed = await ctx.runQuery(internal.whatsappMutations.getExistingExternalIds, { leadId });
+        const isDuplicate = alreadyProcessed.includes(args.messageId);
+
+        if (!isDuplicate) {
+          await ctx.runMutation(internal.whatsappMutations.storeMessage, {
+            leadId,
+            phoneNumber: args.from,
+            content: args.text,
+            direction: "inbound",
+            status: "received",
+            externalId: args.messageId,
+            messageType: messageType !== "text" ? messageType : undefined,
+            mediaUrl: mediaUrl || undefined,
+            mediaName: args.mediaFilename || undefined,
+            mediaMimeType: args.mediaMimeType || undefined,
+            quotedMessageExternalId: args.quotedMessageExternalId,
+          });
+          console.log("✅ Message stored in database");
+        } else {
+          console.log(`[DEDUP] Message ${args.messageId} already processed, skipping storage and AI`);
+          return;
+        }
 
         if (isNewLead) {
           console.log(`📤 Sending welcome message to new lead ${leadId}`);

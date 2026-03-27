@@ -17,100 +17,6 @@ function logAiInfo(context: string, message: string, extra?: Record<string, unkn
   console.log(`[WHATSAPP_AI][${context}] ${message}`, extra ? JSON.stringify(extra) : "");
 }
 
-// Fetch and parse the cafoli.in sitemap to get all product URLs
-async function fetchSitemapUrls(): Promise<string[]> {
-  try {
-    const response = await fetch("https://cafoli.in/sitemap.xml", {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; CafoliBot/1.0)" },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!response.ok) return [];
-    const xml = await response.text();
-    const matches = xml.match(/<loc>(.*?)<\/loc>/g) || [];
-    return matches.map(m => m.replace(/<\/?loc>/g, "").trim());
-  } catch (e) {
-    console.warn("[SITEMAP] Failed to fetch sitemap:", e);
-    return [];
-  }
-}
-
-// Fetch a product page and extract its plain text content
-async function fetchPageText(url: string): Promise<string> {
-  try {
-    const response = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; CafoliBot/1.0)" },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!response.ok) return "";
-    const html = await response.text();
-    const text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .substring(0, 3000);
-    return text;
-  } catch (e) {
-    console.warn(`[PAGE_FETCH] Failed to fetch ${url}:`, e);
-    return "";
-  }
-}
-
-// Use AI to find the best matching product URL from sitemap and extract enriched details
-async function fetchProductDetailsFromSite(
-  ctx: any,
-  productName: string,
-  productDbInfo: any
-): Promise<{ pageText: string; pageUrl: string } | null> {
-  try {
-    const urls = await fetchSitemapUrls();
-    if (urls.length === 0) {
-      logAiInfo("SITEMAP", "No URLs found in sitemap, skipping web enrichment");
-      return null;
-    }
-
-    // Filter to product-like URLs
-    const productUrls = urls.filter(url =>
-      url.includes("cafoli.in") &&
-      !url.endsWith("cafoli.in/") &&
-      !url.includes("contact") &&
-      !url.includes("about") &&
-      !url.includes("sitemap") &&
-      !url.includes("allproducts")
-    );
-
-    logAiInfo("SITEMAP", `Found ${productUrls.length} product URLs in sitemap`);
-    if (productUrls.length === 0) return null;
-
-    // Use AI to pick the best matching URL for this product
-    const urlList = productUrls.slice(0, 150).join("\n");
-    const matchPrompt = `Given the pharmaceutical product name "${productName}" (molecule/composition: ${productDbInfo.molecule || "unknown"}, brand: ${productDbInfo.brandName || productName}), which of these URLs is most likely the product page for it? Return ONLY the exact URL, nothing else. If none match, return "none".\n\nURLs:\n${urlList}`;
-
-    const { text: matchedUrl } = await generateWithGemini(
-      ctx,
-      "You are a URL matcher for a pharmaceutical website. Return only the single best matching URL or 'none'.",
-      matchPrompt
-    );
-    const cleanUrl = matchedUrl.trim().replace(/['"<>\s]/g, "");
-
-    if (!cleanUrl || cleanUrl === "none" || !cleanUrl.startsWith("http")) {
-      logAiInfo("SITEMAP", `No matching URL found for product: ${productName}`);
-      return null;
-    }
-
-    logAiInfo("SITEMAP", `Matched URL for ${productName}: ${cleanUrl}`);
-
-    const pageText = await fetchPageText(cleanUrl);
-    if (!pageText) return null;
-
-    return { pageText, pageUrl: cleanUrl };
-  } catch (e) {
-    logAiError("SITEMAP_MATCH", e, { productName });
-    return null;
-  }
-}
-
 export const generateChatSummary = action({
   args: {
     leadId: v.id("leads"),
@@ -285,36 +191,15 @@ export const generateAndSendAiReplyInternal = internalAction({
             }
           }
 
-          // Try to enrich product details from cafoli.in website via sitemap
-          let detailsMessage: string;
-          try {
-            const siteData = await fetchProductDetailsFromSite(ctx, product.name, product);
-            if (siteData) {
-              const extractPrompt = `From this pharmaceutical product page content, extract key product information (product name, molecule/composition, indications/uses, dosage, packaging, MRP, key features/benefits). Format it as a clean, concise WhatsApp message using *bold* for headers. Max 200 words.\n\nPage content:\n${siteData.pageText}`;
-              const { text: extracted } = await generateWithGemini(
-                ctx,
-                "You are a pharmaceutical product information extractor. Extract and format product details for WhatsApp.",
-                extractPrompt
-              );
-              detailsMessage = extracted.trim();
-              if (product.pageLink) {
-                detailsMessage += `\n\nMore info: ${product.pageLink}`;
-              }
-              logAiInfo("SEND_PRODUCT", `Used web-enriched details for ${product.name}`);
-            } else {
-              throw new Error("No site data");
-            }
-          } catch (_webErr) {
-            // Fall back to DB details
-            detailsMessage = [
-              `*${product.name}*`,
-              product.molecule ? `Molecule: ${product.molecule}` : null,
-              product.mrp ? `MRP: ₹${product.mrp}` : null,
-              product.packaging ? `Packaging: ${product.packaging}` : null,
-              product.description ? `\n${product.description}` : null,
-              product.pageLink ? `\nMore info: ${product.pageLink}` : null,
-            ].filter(Boolean).join("\n");
-          }
+          // Build product details message from DB
+          const detailsMessage = [
+            `*${product.name}*`,
+            product.molecule ? `Molecule: ${product.molecule}` : null,
+            product.mrp ? `MRP: ₹${product.mrp}` : null,
+            product.packaging ? `Packaging: ${product.packaging}` : null,
+            product.description ? `\n${product.description}` : null,
+            product.pageLink ? `\nMore info: ${product.pageLink}` : null,
+          ].filter(Boolean).join("\n");
 
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,

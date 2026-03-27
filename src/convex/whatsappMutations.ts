@@ -117,6 +117,18 @@ export const storeMessage = internalMutation({
       }
     }
 
+    // DEDUPLICATION: Check if this externalId already exists to prevent duplicate processing
+    if (args.externalId) {
+      const existing = await ctx.db
+        .query("messages")
+        .withIndex("by_external_id", (q) => q.eq("externalId", args.externalId!))
+        .first();
+      if (existing) {
+        console.log(`[DEDUP] Message ${args.externalId} already stored, skipping`);
+        return;
+      }
+    }
+
     await ctx.db.patch(chat._id, updateFields);
 
     let quotedMessageId = args.quotedMessageId;
