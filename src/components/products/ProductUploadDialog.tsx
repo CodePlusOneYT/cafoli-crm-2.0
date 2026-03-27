@@ -37,6 +37,8 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
   const [description, setDescription] = useState("");
   const [pageLink, setPageLink] = useState("");
   const [videoLink, setVideoLink] = useState("");
+  const [externalImageUrl, setExternalImageUrl] = useState("");
+  const [externalPdfUrl, setExternalPdfUrl] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -68,6 +70,8 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
       setDescription(product.description || "");
       setPageLink(product.pageLink || "");
       setVideoLink(product.videoLink || "");
+      setExternalImageUrl(product.externalImageUrl || "");
+      setExternalPdfUrl(product.externalPdfUrl || "");
       setSelectedCategories(product.categories || []);
       
       setHasExistingMainImage(!!product.mainImage);
@@ -83,6 +87,8 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
       setDescription("");
       setPageLink("");
       setVideoLink("");
+      setExternalImageUrl("");
+      setExternalPdfUrl("");
       setSelectedCategories([]);
       setMainImage(null);
       setFlyer(null);
@@ -153,8 +159,8 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
       return;
     }
 
-    if (!product && !mainImage) {
-      toast.error("Product Image is compulsory for new products");
+    if (!product && !mainImage && !externalImageUrl) {
+      toast.error("Product Image or External Image URL is required for new products");
       return;
     }
 
@@ -208,15 +214,10 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
           description,
           pageLink,
           videoLink,
+          externalImageUrl: externalImageUrl || undefined,
+          externalPdfUrl: externalPdfUrl || undefined,
           categories: selectedCategories.length > 0 ? selectedCategories as any : undefined,
-          // If user removed existing file (we need UI for this, but for now let's assume replacing or keeping)
-          // To properly support removal, we need "remove" buttons for existing files.
-          // For now, we only support replacing or adding.
-          // If we want to support removal, we need state for "removeFlyer", etc.
-          // Let's add simple removal logic if we have time, but for now replacing is key.
-          // If we want to support removal, we need state for "removeFlyer", etc.
-          // Let's add simple removal logic if we have time, but for now replacing is key.
-          removeFlyer: hasExistingFlyer === false && !!product.flyer, // If it was there but now UI says no (we need to implement the UI removal)
+          removeFlyer: hasExistingFlyer === false && !!product.flyer,
           removeBridgeCard: hasExistingBridgeCard === false && !!product.bridgeCard,
           removeVisualaid: hasExistingVisualaid === false && !!product.visualaid,
         });
@@ -234,6 +235,8 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
           description,
           pageLink,
           videoLink,
+          externalImageUrl: externalImageUrl || undefined,
+          externalPdfUrl: externalPdfUrl || undefined,
           categories: selectedCategories.length > 0 ? selectedCategories as any : undefined,
         });
         toast.success("Product uploaded successfully");
@@ -437,8 +440,56 @@ export function ProductUploadDialog({ disabled, product, trigger }: ProductUploa
               type="url"
               value={pageLink} 
               onChange={(e) => setPageLink(e.target.value)} 
-              placeholder="https://example.com/product"
+              placeholder="https://cafoli.in/product-page"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="externalImageUrl">External Image URL (Optional)</Label>
+            <Input 
+              id="externalImageUrl" 
+              type="url"
+              value={externalImageUrl} 
+              onChange={(e) => setExternalImageUrl(e.target.value)} 
+              placeholder="https://cafoli.in/Static/V1/OtherPageImages/..."
+            />
+            <p className="text-xs text-muted-foreground">Direct URL to product image on cafoli.in — used by AI when sending product info</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="externalPdfUrl">External PDF URL (Optional)</Label>
+            <Input 
+              id="externalPdfUrl" 
+              type="url"
+              value={externalPdfUrl} 
+              onChange={(e) => setExternalPdfUrl(e.target.value)} 
+              placeholder="https://cafoli.in/Static/V1/OtherPagepdf/..."
+            />
+            <p className="text-xs text-muted-foreground">Direct URL to product PDF on cafoli.in — used by AI when sending product info</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="externalImageUrl">External Image URL (Optional)</Label>
+            <Input 
+              id="externalImageUrl" 
+              type="url"
+              value={externalImageUrl} 
+              onChange={(e) => setExternalImageUrl(e.target.value)} 
+              placeholder="https://cafoli.in/Static/V1/OtherPageImages/..."
+            />
+            <p className="text-xs text-muted-foreground">Direct URL to product image on cafoli.in — used by AI when sending product info</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="externalPdfUrl">External PDF URL (Optional)</Label>
+            <Input 
+              id="externalPdfUrl" 
+              type="url"
+              value={externalPdfUrl} 
+              onChange={(e) => setExternalPdfUrl(e.target.value)} 
+              placeholder="https://cafoli.in/Static/V1/OtherPagepdf/..."
+            />
+            <p className="text-xs text-muted-foreground">Direct URL to product PDF on cafoli.in — used by AI when sending product info</p>
           </div>
 
           <div className="space-y-2">

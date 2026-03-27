@@ -74,32 +74,44 @@ export const generateAndSendAiReplyInternal = internalAction({
       const products = await ctx.runQuery(internal.products.listProductsInternal);
       const rangePdfs = await ctx.runQuery(internal.rangePdfs.listRangePdfsInternal);
 
-      const productNames = products.map((p: any) => p.name).join(", ");
+      // Include molecule info so AI can match competitor brands by molecule
+      const productList = products.map((p: any) =>
+        `- ${p.name}${p.molecule ? ` (Molecule: ${p.molecule})` : ""}${p.brandName && p.brandName !== p.name ? ` [Brand: ${p.brandName}]` : ""}`
+      ).join("\n");
       const pdfNames = rangePdfs.map((p: any) => p.name).join(", ");
 
-      const systemPrompt = `You are a helpful CRM assistant for a pharmaceutical company.
-      You are chatting with a lead on WhatsApp.
-      
-      Available Products: ${productNames}
-      Available Range PDFs: ${pdfNames}
-      
-      Your goal is to assist the lead, answer questions, and provide product information.
-      
-      You can perform the following actions by returning a JSON object:
-      1. Reply with text: { "action": "reply", "text": "your message" }
-      2. Send a product with image and details: { "action": "send_product", "text": "optional intro message", "resource_name": "exact product name from the list above" }
-      3. Send a PDF: { "action": "send_pdf", "text": "optional caption", "resource_name": "exact pdf name" }
-      4. Send full catalogue (link + all PDFs): { "action": "send_full_catalogue", "text": "optional message" }
-      5. Request human intervention (if you can't help): { "action": "intervention_request", "text": "I will connect you with an agent.", "reason": "reason" }
-      6. Request contact (if they want a meeting/call): { "action": "contact_request", "text": "I've noted your request.", "reason": "reason" }
-      
-      IMPORTANT: When using send_product, you MUST use the EXACT product name from the Available Products list above.
-      Do fuzzy matching yourself - if the user asks for "Lubicom Plus" and the list has "Lubicom Eye Drop", use "Lubicom Eye Drop".
-      When the user asks for product details, images, or information about a specific product, use "send_product" action.
-      When the user asks for "full catalogue", "complete catalogue", "all products", or similar requests, use the "send_full_catalogue" action.
-      
-      Always return ONLY the JSON object. Do not include other text.
-      `;
+      const systemPrompt = `You are a helpful CRM assistant for Cafoli Lifecare, a pharmaceutical company.
+You are chatting with a lead on WhatsApp.
+
+Available Cafoli Products (with molecules):
+${productList}
+
+Available Range PDFs: ${pdfNames}
+
+Your goal is to assist the lead, answer questions, and provide product information.
+
+COMPETITOR BRAND HANDLING:
+- If the user asks for a product by a competitor brand name (e.g., "Lubicom Plus", "Vildrop", etc.), use your pharmaceutical knowledge to identify the molecule/active ingredient of that competitor product.
+- Then find the matching Cafoli product from the list above that has the same molecule.
+- Use send_product with the Cafoli product name. Mention in the "text" field that you are offering Cafoli's equivalent.
+- Example: User asks "Lubicom Plus" → identify molecule (Carboxymethylcellulose) → find Cafoli product with same molecule → send_product with that Cafoli product name.
+- If no molecule match found in the list, use intervention_request.
+
+You can perform the following actions by returning a JSON object:
+1. Reply with text: { "action": "reply", "text": "your message" }
+2. Send a product with image and details: { "action": "send_product", "text": "optional intro message", "resource_name": "EXACT product name from the list above" }
+3. Send a PDF: { "action": "send_pdf", "text": "optional caption", "resource_name": "exact pdf name" }
+4. Send full catalogue (link + all PDFs): { "action": "send_full_catalogue", "text": "optional message" }
+5. Request human intervention (if you can't help): { "action": "intervention_request", "text": "I will connect you with an agent.", "reason": "reason" }
+6. Request contact (if they want a meeting/call): { "action": "contact_request", "text": "I've noted your request.", "reason": "reason" }
+
+CRITICAL RULES:
+- For send_product, resource_name MUST be the EXACT product name from the Available Cafoli Products list above.
+- Do NOT use competitor brand names as resource_name.
+- If the user asks for a competitor product, find the Cafoli equivalent by molecule and use that Cafoli product name.
+- When the user asks for "full catalogue", "complete catalogue", "all products", use send_full_catalogue.
+
+Always return ONLY the JSON object. Do not include other text.`;
 
       const chatContext = JSON.stringify(args.context);
       const userPrompt = `Context: ${chatContext}\n\nUser Message: ${args.prompt}`;
@@ -127,7 +139,7 @@ export const generateAndSendAiReplyInternal = internalAction({
         });
 
       } else if (aiAction.action === "send_product") {
-        // Fuzzy match: exact first, then case-insensitive, then partial
+        // Fuzzy match: exact → case-insensitive → partial name → molecule → brandName
         let product = products.find((p: any) => p.name === aiAction.resource_name);
         if (!product) {
           const lower = (aiAction.resource_name || "").toLowerCase();
@@ -137,6 +149,24 @@ export const generateAndSendAiReplyInternal = internalAction({
           const lower = (aiAction.resource_name || "").toLowerCase();
           product = products.find((p: any) =>
             p.name?.toLowerCase().includes(lower) || lower.includes(p.name?.toLowerCase() || "")
+          );
+        }
+        if (!product) {
+          const lower = (aiAction.resource_name || "").toLowerCase();
+          product = products.find((p: any) =>
+            p.molecule && (
+              p.molecule.toLowerCase().includes(lower) ||
+              lower.includes(p.molecule.toLowerCase())
+            )
+          );
+        }
+        if (!product) {
+          const lower = (aiAction.resource_name || "").toLowerCase();
+          product = products.find((p: any) =>
+            p.brandName && (
+              p.brandName.toLowerCase().includes(lower) ||
+              lower.includes(p.brandName.toLowerCase())
+            )
           );
         }
 
@@ -155,13 +185,13 @@ export const generateAndSendAiReplyInternal = internalAction({
           // Try to send image from externalImageUrl first, then fall back to Convex storage
           if (product.externalImageUrl) {
             try {
-              const ext = product.externalImageUrl.toLowerCase();
-              const mimeType = ext.endsWith(".webp") ? "image/webp" : ext.endsWith(".png") ? "image/png" : "image/jpeg";
+              const extUrl = product.externalImageUrl.toLowerCase();
+              const mimeType = extUrl.endsWith(".webp") ? "image/webp" : extUrl.endsWith(".png") ? "image/png" : "image/jpeg";
               await ctx.runAction(internal.whatsapp.messages.sendMediaFromUrl, {
                 leadId: args.leadId,
                 phoneNumber: args.phoneNumber,
                 url: product.externalImageUrl,
-                fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}.${ext.split(".").pop() || "jpg"}`,
+                fileName: `${product.name.replace(/[^a-zA-Z0-9]/g, "_")}.${extUrl.split(".").pop() || "jpg"}`,
                 mimeType,
               });
               await new Promise(resolve => setTimeout(resolve, 800));
@@ -256,7 +286,7 @@ export const generateAndSendAiReplyInternal = internalAction({
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
-            message: `I couldn't find the product "${aiAction.resource_name}". Please check the product name and try again.`,
+            message: `I couldn't find a matching product for "${aiAction.resource_name}" in our catalog. Please contact our team for more information.`,
           });
         }
 

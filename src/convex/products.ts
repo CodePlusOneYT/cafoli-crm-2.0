@@ -15,10 +15,10 @@ export const createProduct = mutation({
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
     videoLink: v.optional(v.string()),
-    categoryId: v.optional(v.id("productCategories")),
-    categories: v.optional(v.array(v.id("productCategories"))),
     externalImageUrl: v.optional(v.string()),
     externalPdfUrl: v.optional(v.string()),
+    categoryId: v.optional(v.id("productCategories")),
+    categories: v.optional(v.array(v.id("productCategories"))),
   },
   handler: async (ctx, args) => {
     const productId = await ctx.db.insert("products", {
@@ -35,10 +35,10 @@ export const createProduct = mutation({
       description: args.description,
       pageLink: args.pageLink,
       videoLink: args.videoLink,
-      categoryId: args.categoryId,
-      categories: args.categories,
       externalImageUrl: args.externalImageUrl,
       externalPdfUrl: args.externalPdfUrl,
+      categoryId: args.categoryId,
+      categories: args.categories,
     });
     return productId;
   },
@@ -59,13 +59,13 @@ export const updateProduct = mutation({
     description: v.optional(v.string()),
     pageLink: v.optional(v.string()),
     videoLink: v.optional(v.string()),
+    externalImageUrl: v.optional(v.string()),
+    externalPdfUrl: v.optional(v.string()),
     categoryId: v.optional(v.id("productCategories")),
     categories: v.optional(v.array(v.id("productCategories"))),
     removeFlyer: v.optional(v.boolean()),
     removeBridgeCard: v.optional(v.boolean()),
     removeVisualaid: v.optional(v.boolean()),
-    externalImageUrl: v.optional(v.string()),
-    externalPdfUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const product = await ctx.db.get(args.id);
@@ -80,16 +80,17 @@ export const updateProduct = mutation({
       description: args.description,
       pageLink: args.pageLink,
       videoLink: args.videoLink,
-      categoryId: args.categoryId,
-      categories: args.categories,
       externalImageUrl: args.externalImageUrl,
       externalPdfUrl: args.externalPdfUrl,
+      categoryId: args.categoryId,
+      categories: args.categories,
     };
 
     if (args.mainImage) {
       updates.mainImage = args.mainImage;
       updates.images = [args.mainImage];
     }
+
     if (args.flyer) updates.flyer = args.flyer;
     if (args.bridgeCard) updates.bridgeCard = args.bridgeCard;
     if (args.visualaid) updates.visualaid = args.visualaid;
