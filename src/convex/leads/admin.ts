@@ -291,3 +291,47 @@ export const fixInvalidMobiles = mutation({
     };
   },
 });
+
+export const unassignLeadsFromNonStaff = mutation({
+  args: { adminId: v.id("users") },
+  handler: async (ctx, args) => {
+    const admin = await ctx.db.get(args.adminId);
+    if (!admin || admin.role !== ROLES.ADMIN) {
+      throw new Error("Only admins can unassign leads");
+    }
+
+    // Get all non-staff users (admin and uploader)
+    const allUsers = await ctx.db.query("users").collect();
+    const nonStaffIds = new Set(
+      allUsers
+        .filter(u => u.role === ROLES.ADMIN || u.role === ROLES.UPLOADER)
+        .map(u => u._id)
+    );
+
+    if (nonStaffIds.size === 0) {
+      return { unassignedCount: 0, message: "No admin/uploader accounts found" };
+    }
+
+    // Find all leads assigned to non-staff users
+    const allLeads = await ctx.db.query("leads").take(10000);
+    let unassignedCount = 0;
+
+    for (const lead of allLeads) {
+      if (lead.assignedTo && nonStaffIds.has(lead.assignedTo)) {
+        await ctx.db.patch(lead._id, {
+          assignedTo: undefined,
+          assignedToName: undefined,
+          lastActivity: Date.now(),
+        });
+        await ctx.db.insert("comments", {
+          leadId: lead._id,
+          content: `Lead unassigned from admin/uploader account by admin. Awaiting reassignment to staff.`,
+          isSystem: true,
+        });
+        unassignedCount++;
+      }
+    }
+
+    return { unassignedCount };
+  },
+});

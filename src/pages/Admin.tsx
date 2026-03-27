@@ -74,6 +74,7 @@ export default function Admin() {
   const deleteUser = useMutation(api.users.deleteUser);
   const updateUserRole = useMutation(api.users.updateUserRole);
   const deduplicateLeads = useMutation(api.leads.deduplication.deduplicateLeads);
+  const unassignNonStaffLeads = useMutation(api.leads.admin.unassignLeadsFromNonStaff);
   
   const [activeTab, setActiveTab] = useState("users");
   const [deduplicationResult, setDeduplicationResult] = useState<any>(null);
@@ -102,6 +103,7 @@ export default function Admin() {
 
   const fixInvalidMobiles = useMutation(api.leads.admin.fixInvalidMobiles);
   const [isFixingMobiles, setIsFixingMobiles] = useState(false);
+  const [isUnassigning, setIsUnassigning] = useState(false);
 
   const allLeadsForExport = useQuery(
     api.leads.queries.getAllLeadsForExport,
@@ -213,6 +215,19 @@ export default function Admin() {
 
   const deselectAllColumns = () => {
     setSelectedColumns(new Set());
+  };
+
+  const handleUnassignNonStaffLeads = async () => {
+    if (!currentUser) return;
+    setIsUnassigning(true);
+    try {
+      const result = await unassignNonStaffLeads({ adminId: currentUser._id });
+      toast.success(`Unassigned ${result.unassignedCount} leads from admin/uploader accounts`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to unassign leads");
+    } finally {
+      setIsUnassigning(false);
+    }
   };
 
   const handleFixInvalidMobiles = async () => {
@@ -908,6 +923,24 @@ export default function Admin() {
 
           {currentUser.role === "admin" && (
             <TabsContent value="deduplication" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Unassign Admin/Uploader Leads</CardTitle>
+                  <CardDescription>
+                    Remove lead assignments from admin and uploader accounts. Only staff accounts should have leads assigned to them.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={handleUnassignNonStaffLeads}
+                    disabled={isUnassigning}
+                    variant="outline"
+                  >
+                    {isUnassigning ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+                    {isUnassigning ? "Unassigning..." : "Unassign Admin/Uploader Leads"}
+                  </Button>
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader>
                   <CardTitle>Lead Deduplication</CardTitle>
