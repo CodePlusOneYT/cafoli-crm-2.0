@@ -125,6 +125,10 @@ export default function Admin() {
 
   const scrapeAllProducts = useAction(api.cafoliScraper.scrapeAllCafoliProducts);
   const getWebProductStats = useAction(api.cafoliScraper.getWebProductStats);
+  const deleteAllWebProducts = useMutation(api.cafoliScraperDb.deleteAllWebProducts);
+  const deleteAllCatalogProducts = useMutation(api.products.deleteAllProducts);
+  const [isDeletingCache, setIsDeletingCache] = useState(false);
+  const [isDeletingCatalog, setIsDeletingCatalog] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeStats, setScrapeStats] = useState<{ total: number; scraped: number; failed: number; offset: number } | null>(null);
   const [webProductCount, setWebProductCount] = useState<number | null>(null);
