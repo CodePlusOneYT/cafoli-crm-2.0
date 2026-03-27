@@ -125,7 +125,31 @@ export const generateAndSendAiReplyInternal = internalAction({
         });
 
       } else if (aiAction.action === "send_product") {
-        const product = products.find((p: any) => p.name === aiAction.resource_name);
+        // Fuzzy product matching: exact → case-insensitive → partial → molecule/brandName
+        const resourceName: string = (aiAction.resource_name || "").toLowerCase().trim();
+        let product = products.find((p: any) => p.name === aiAction.resource_name);
+        if (!product) {
+          product = products.find((p: any) => (p.name || "").toLowerCase() === resourceName);
+        }
+        if (!product) {
+          product = products.find((p: any) =>
+            (p.name || "").toLowerCase().includes(resourceName) ||
+            resourceName.includes((p.name || "").toLowerCase())
+          );
+        }
+        if (!product) {
+          product = products.find((p: any) =>
+            (p.brandName || "").toLowerCase().includes(resourceName) ||
+            resourceName.includes((p.brandName || "").toLowerCase())
+          );
+        }
+        if (!product) {
+          product = products.find((p: any) =>
+            (p.molecule || "").toLowerCase().includes(resourceName) ||
+            resourceName.includes((p.molecule || "").toLowerCase())
+          );
+        }
+
         if (product) {
           logAiInfo("SEND_PRODUCT", `Found product: ${product.name}`, { leadId: args.leadId });
 
@@ -212,7 +236,7 @@ export const generateAndSendAiReplyInternal = internalAction({
           await ctx.runAction(internal.whatsapp.internal.sendMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
-            message: `I couldn't find the product "${aiAction.resource_name}". Please check the product name and try again.`,
+            message: `I couldn't find the product "${aiAction.resource_name}" in our database. Please contact our team for more information.`,
           });
         }
 
