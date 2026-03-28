@@ -4,8 +4,6 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
 // Parse the allproduct.aspx HTML to extract product rows
-// Strategy: find each "first-all-p" td directly, then extract the next fixed-len link
-// This avoids the <tr> boundary problem caused by navigation HTML bleeding into rows
 function parseProductListHtml(html: string): Array<{ brandName: string; composition: string; pageUrl: string; imageUrl: string; dosageForm: string }> {
   const products: Array<{ brandName: string; composition: string; pageUrl: string; imageUrl: string; dosageForm: string }> = [];
   
@@ -20,8 +18,6 @@ function parseProductListHtml(html: string): Array<{ brandName: string; composit
     
     const pageUrl = `https://cafoli.in/${slug}`;
     const matchEnd = firstTdMatch.index + firstTdMatch[0].length;
-    
-    // Look for the fixed-len link in the next ~600 chars after this td
     const nextChunk = html.substring(matchEnd, matchEnd + 600);
     
     const compMatch = nextChunk.match(/class="fixed-len">([^<]+)<\/a>/i);
@@ -43,10 +39,9 @@ function parseProductListHtml(html: string): Array<{ brandName: string; composit
     const dosageMatch = nextChunk.match(/class="fixed-len">[^<]+<\/a>\s*<\/td>\s*<td[^>]*>\s*<a[^>]*>([^<]+)<\/a>/i);
     const dosageForm = dosageMatch ? dosageMatch[1].trim() : "";
     
-    // Look for image URL in the last-all-p td (within next 800 chars)
+    // Match image with spaces in filename allowed
     const imgChunk = html.substring(matchEnd, matchEnd + 800);
-    // Match both absolute and relative image paths
-    const imgMatch = imgChunk.match(/src="(?:https:\/\/cafoli\.in)?(?:\.\.\/)*Static\/V1\/OtherPageImages\/([^"]+\.webp)"/i);
+    const imgMatch = imgChunk.match(/src="(?:https:\/\/cafoli\.in\/)?(?:\.\.\/)*Static\/V1\/OtherPageImages\/([^"]+\.webp)"/i);
     const imageUrl = imgMatch ? `https://cafoli.in/Static/V1/OtherPageImages/${imgMatch[1]}` : "";
     
     products.push({ brandName, composition, pageUrl, imageUrl, dosageForm });
@@ -58,18 +53,19 @@ function parseProductListHtml(html: string): Array<{ brandName: string; composit
 // Resolve a relative or absolute image/pdf URL to an absolute cafoli.in URL
 function resolveUrl(src: string, type: "image" | "pdf"): string {
   if (!src) return "";
-  // Already absolute
   if (src.startsWith("http")) return src;
-  // Relative path like ../../Static/V1/OtherPageImages/... or ../Static/V1/OtherPagepdf/...
   const staticPath = type === "image" ? "Static/V1/OtherPageImages/" : "Static/V1/OtherPagepdf/";
   const idx = src.indexOf(staticPath);
   if (idx >= 0) {
     return `https://cafoli.in/${src.substring(idx)}`;
   }
-  return `https://cafoli.in/${src.replace(/^\.\.\//, "").replace(/^\.\.\//, "")}`;
+  // Strip leading ../
+  const cleaned = src.replace(/^(\.\.\/)+/, "");
+  return `https://cafoli.in/${cleaned}`;
 }
 
 // Extract product details from a product page HTML
+// Based on actual HTML structure of cafoli.in product pages
 function extractProductPageDetails(html: string): {
   brandName: string | null;
   composition: string | null;
@@ -79,14 +75,16 @@ function extractProductPageDetails(html: string): {
   packagingType: string | null;
   description: string | null;
   imageUrl: string | null;
+  imageUrls: string[];
   pdfUrl: string | null;
   literaturePdfUrl: string | null;
 } {
-  // Brand name from <h2 class="w-100"> inside <div class="med-name">
-  const brandNameMatch = html.match(/<div[^>]*class="med-name"[^>]*>[\s\S]*?<h2[^>]*>([^<]+)<\/h2>/i);
+  // Brand name: <div class="med-name">...<h2 class="w-100" style="...">BRAND NAME</h2>
+  const brandNameMatch = html.match(/<div[^>]*class="med-name"[^>]*>[\s\S]{0,300}?<h2[^>]*>([^<]+)<\/h2>/i);
   const brandName = brandNameMatch ? brandNameMatch[1].trim() : null;
 
-  // Composition: <p class="com-name" ...><b class="c-name">Composition : </b>TEXT</p>
+  // Composition: <p class="com-name" id="more_paragraph"><b class="c-name">Composition : </b>TEXT</p>
+  // The text is directly after </b> and before </p>
   const compositionMatch =
     html.match(/<p[^>]*class="com-name"[^>]*>[\s\S]*?<b[^>]*class="c-name"[^>]*>Composition\s*:\s*<\/b>\s*([^<]+)/i) ||
     html.match(/Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i) ||
@@ -97,10 +95,10 @@ function extractProductPageDetails(html: string): {
   const dosageFormMatch = html.match(/<b[^>]*>Dosage\s*Form\s*:\s*<\/b>\s*([^<\n]{1,100})/i);
   const dosageForm = dosageFormMatch ? dosageFormMatch[1].replace(/<[^>]+>/g, "").trim() : null;
 
-  // MRP: <p><b>Price : </b><span ...>₹655/-</span></p>
+  // MRP: <p><b>Price : </b><span style="font-weight: bold;">₹655/-</span></p>
   const mrpMatch =
-    html.match(/Price\s*:\s*<\/b>\s*<span[^>]*>[\s₹Rs\.]*(\d+(?:\.\d+)?)\s*\/-/i) ||
-    html.match(/[₹Rs\.]\s*(\d+(?:\.\d+)?)\s*\/-/i) ||
+    html.match(/Price\s*:\s*<\/b>\s*<span[^>]*>[\s]*[₹Rs\.]*\s*(\d+(?:\.\d+)?)\s*\/-/i) ||
+    html.match(/[₹]\s*(\d+(?:\.\d+)?)\s*\/-/i) ||
     html.match(/Price\s*:\s*[₹Rs\.]*\s*(\d+)/i);
   const mrp = mrpMatch ? mrpMatch[1] : null;
 
@@ -108,50 +106,76 @@ function extractProductPageDetails(html: string): {
   const packagingTypeMatch = html.match(/<b[^>]*>Packaging\s*Type\s*:\s*<\/b>\s*([^<\n]{1,100})/i);
   const packagingType = packagingTypeMatch ? packagingTypeMatch[1].replace(/<[^>]+>/g, "").trim() : null;
 
-  // Packaging: <p><b>Packaging : </b>10x1x10</p>
-  const packagingMatch =
-    html.match(/<b[^>]*>Packaging\s*:\s*<\/b>\s*([^<\n]{1,100})/i) ||
-    html.match(/Packaging\s*:\s*<\/strong>\s*([^<\n]+)/i);
+  // Packaging (size): <p><b>Packaging : </b>10x1x10</p>
+  // Must NOT match "Packaging Type" - use negative lookahead equivalent by checking the match doesn't include "Type"
+  const packagingMatches = [...html.matchAll(/<b[^>]*>Packaging\s*:\s*<\/b>\s*([^<\n]{1,100})/gi)];
+  const packagingMatch = packagingMatches.find(m => !m[0].toLowerCase().includes("type"));
   const packaging = packagingMatch ? packagingMatch[1].replace(/<[^>]+>/g, "").trim() : null;
 
-  // Description: from <div class="panel"><p>...</p></div> (accordion panel)
-  const panelMatch = html.match(/<div[^>]*class="panel"[^>]*>([\s\S]*?)<\/div>/i);
+  // Description: <button id="dbtn" class="accordion">Description</button><div class="panel">...<p>TEXT</p>...</div>
+  // The panel div contains nested <p> tags with the actual description text
+  // Use a greedy match to get all content between panel div tags
   let description: string | null = null;
-  if (panelMatch) {
-    // Strip all HTML tags and get clean text
-    const panelText = panelMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    description = panelText.substring(0, 500) || null;
+  const panelIdx = html.indexOf('<div class="panel">');
+  if (panelIdx >= 0) {
+    // Find the closing </div> for this panel - look for it after the opening
+    const panelContent = html.substring(panelIdx + '<div class="panel">'.length, panelIdx + 5000);
+    // Strip all HTML tags to get plain text
+    const plainText = panelContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (plainText.length > 20) {
+      description = plainText.substring(0, 600);
+    }
   }
   if (!description) {
-    // Fallback: find substantial paragraphs
-    const paraMatches = [...html.matchAll(/<p[^>]*style="text-align:\s*justify[^"]*"[^>]*>([\s\S]*?)<\/p>/gi)];
+    // Fallback: justified paragraphs
+    const paraMatches = [...html.matchAll(/<p[^>]*style="[^"]*text-align:\s*justify[^"]*"[^>]*>([\s\S]*?)<\/p>/gi)];
     if (paraMatches.length > 0) {
-      description = paraMatches[0][1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 500);
+      description = paraMatches[0][1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 600);
     }
   }
 
-  // Images: match both absolute and relative paths
-  // Pattern: src="../../Static/V1/OtherPageImages/NAME.webp" or src="https://cafoli.in/Static/..."
-  const imageRegex = /src="((?:https:\/\/cafoli\.in\/Static\/V1\/OtherPageImages\/|(?:\.\.\/)*Static\/V1\/OtherPageImages\/)[^"]+\.webp)"/gi;
+  // Images: src="../../Static/V1/OtherPageImages/NAME WITH SPACES.webp"
+  // Allow spaces and special chars in filename (everything up to .webp")
+  const imageRegex = /src="((?:https:\/\/cafoli\.in\/)?(?:\.\.\/)*Static\/V1\/OtherPageImages\/[^"]+?\.webp)"/gi;
   const imageMatches = [...html.matchAll(imageRegex)];
-  const validImages = imageMatches
+  const allImages = imageMatches
     .map(m => resolveUrl(m[1], "image"))
     .filter(url => {
       const filename = url.split("/").pop() || "";
-      return filename.length > 10;
+      // Must have a reasonable filename (not just a short name)
+      return filename.length > 5 && url.includes("OtherPageImages");
     });
-  // Use the first product image (skip any tiny thumbnails - take index 0 which is the main product image)
-  const imageUrl = validImages[0] || null;
+  // Deduplicate
+  const seenImages = new Set<string>();
+  const uniqueImages: string[] = [];
+  for (const img of allImages) {
+    if (!seenImages.has(img)) {
+      seenImages.add(img);
+      uniqueImages.push(img);
+    }
+  }
+  const imageUrl = uniqueImages[0] || null;
+  const imageUrls = uniqueImages.slice(0, 4); // Store up to 4 images
 
-  // PDFs: match both absolute and relative paths
-  // Pattern: href="../Static/V1/OtherPagepdf/NAME.pdf" or href="https://cafoli.in/Static/..."
-  const pdfRegex = /href="((?:https:\/\/cafoli\.in\/Static\/V1\/OtherPagepdf\/|(?:\.\.\/)*Static\/V1\/OtherPagepdf\/)[^"]+\.pdf)"/gi;
+  // PDFs: href="../Static/V1/OtherPagepdf/NAME WITH SPACES.pdf"
+  const pdfRegex = /href="((?:https:\/\/cafoli\.in\/)?(?:\.\.\/)*Static\/V1\/OtherPagepdf\/[^"]+?\.pdf)"/gi;
   const pdfMatches = [...html.matchAll(pdfRegex)];
-  const pdfUrls = pdfMatches.map(m => resolveUrl(m[1], "pdf"));
-  const pdfUrl = pdfUrls[0] || null;
-  const literaturePdfUrl = pdfUrls[1] || null;
+  const pdfUrls = pdfMatches
+    .map(m => resolveUrl(m[1], "pdf"))
+    .filter(url => url.includes("OtherPagepdf"));
+  // Deduplicate
+  const seenPdfs = new Set<string>();
+  const uniquePdfs: string[] = [];
+  for (const pdf of pdfUrls) {
+    if (!seenPdfs.has(pdf)) {
+      seenPdfs.add(pdf);
+      uniquePdfs.push(pdf);
+    }
+  }
+  const pdfUrl = uniquePdfs[0] || null;
+  const literaturePdfUrl = uniquePdfs[1] || null;
 
-  return { brandName, composition, dosageForm, mrp, packaging, packagingType, description, imageUrl, pdfUrl, literaturePdfUrl };
+  return { brandName, composition, dosageForm, mrp, packaging, packagingType, description, imageUrl, imageUrls, pdfUrl, literaturePdfUrl };
 }
 
 export const listWebProductsPublic = action({
@@ -192,6 +216,7 @@ export const scrapeProductDetailsBatch = internalAction({
           packagingType: null,
           description: null,
           imageUrl: product.imageUrl || null,
+          imageUrls: product.imageUrl ? [product.imageUrl] : [],
           pdfUrl: null,
           literaturePdfUrl: null,
         };
@@ -201,14 +226,12 @@ export const scrapeProductDetailsBatch = internalAction({
           details = extractProductPageDetails(html);
           if (!details.imageUrl && product.imageUrl) {
             details.imageUrl = product.imageUrl;
+            details.imageUrls = [product.imageUrl];
           }
         }
         
-        // Use page-extracted composition if available, else fall back to list composition
         const finalComposition = details.composition || product.composition;
-        // Use page-extracted dosage form if available, else fall back to list dosage form
         const finalDosageForm = details.dosageForm || product.dosageForm;
-        // Use page-extracted brand name if available, else fall back to list brand name
         const finalBrandName = details.brandName || product.brandName;
         
         await ctx.runMutation(internal.cafoliScraperDb.upsertWebProduct, {
@@ -217,6 +240,7 @@ export const scrapeProductDetailsBatch = internalAction({
           dosageForm: finalDosageForm,
           pageUrl: product.pageUrl,
           imageUrl: details.imageUrl || undefined,
+          imageUrls: details.imageUrls.length > 0 ? details.imageUrls : undefined,
           pdfUrl: details.pdfUrl || undefined,
           literaturePdfUrl: details.literaturePdfUrl || undefined,
           mrp: details.mrp || undefined,

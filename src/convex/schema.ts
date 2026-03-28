@@ -189,6 +189,7 @@ export default defineSchema({
     dosageForm: v.optional(v.string()),
     pageUrl: v.string(),
     imageUrl: v.optional(v.string()),
+    imageUrls: v.optional(v.array(v.string())),
     pdfUrl: v.optional(v.string()),
     literaturePdfUrl: v.optional(v.string()),
     mrp: v.optional(v.string()),
