@@ -392,9 +392,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <MandatoryFollowUpPopup leads={leadsWithoutFollowUp} />
       ) : (
         <>
-          <LeadReminders />
-          {user && <InterventionPopup userId={user._id} />}
-          {user && <FollowUpReminderPopup userId={user._id} />}
+          {!isAdmin && <LeadReminders />}
+          {user && !isAdmin && <InterventionPopup userId={user._id} />}
+          {user && !isAdmin && <FollowUpReminderPopup userId={user._id} />}
         </>
       )}
 
