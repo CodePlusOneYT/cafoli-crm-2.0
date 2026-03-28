@@ -4,62 +4,56 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
 // Parse the allproduct.aspx HTML to extract product rows
-// Structure: <tr><td class="first-all-p"><a href='slug'>Brand Name</a></td><td><a href='slug' class="fixed-len">Composition</a></td><td><a href='slug'>Dosage</a></td><td class="last-all-p"><a href='slug'><img src="...webp"/></a></td></tr>
+// Strategy: find each "first-all-p" td directly, then extract the next fixed-len link
+// This avoids the <tr> boundary problem caused by navigation HTML bleeding into rows
 function parseProductListHtml(html: string): Array<{ brandName: string; composition: string; pageUrl: string; imageUrl: string; dosageForm: string }> {
   const products: Array<{ brandName: string; composition: string; pageUrl: string; imageUrl: string; dosageForm: string }> = [];
   
-  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let rowMatch;
+  // Find all "first-all-p" td positions
+  // Pattern: <td class="first-all-p ..."><a href='slug'>Brand Name</a></td>
+  const firstTdRegex = /<td[^>]*class="first-all-p[^"]*"[^>]*>\s*<a\s+href='([^']+)'>([^<]+)<\/a>\s*<\/td>/gi;
+  let firstTdMatch;
   
-  while ((rowMatch = rowRegex.exec(html)) !== null) {
-    const row = rowMatch[1];
+  while ((firstTdMatch = firstTdRegex.exec(html)) !== null) {
+    const slug = firstTdMatch[1].trim();
+    const brandName = firstTdMatch[2].trim();
     
-    // Must have "first-all-p" class to be a product row
-    if (!row.includes("first-all-p")) continue;
-    // Must also have "last-all-p" to be a complete product row (not navigation)
-    if (!row.includes("last-all-p")) continue;
-    // Skip navigation rows that contain dropdown items
-    if (row.includes("dropdown-item")) continue;
-    
-    // Extract slug from first-all-p td: <a href='slug'>Brand Name</a>
-    const slugMatch = row.match(/class="first-all-p[^"]*"[^>]*>[\s\S]*?<a\s+href='([^']+)'>([^<]+)<\/a>/i);
-    if (!slugMatch) continue;
-    
-    const slug = slugMatch[1].trim();
-    const brandName = slugMatch[2].trim();
     if (!brandName || brandName.length < 2 || !slug) continue;
     
     const pageUrl = `https://cafoli.in/${slug}`;
+    const matchEnd = firstTdMatch.index + firstTdMatch[0].length;
     
-    // Extract composition from fixed-len class - must be in a td WITHOUT first-all-p or last-all-p
-    // Use a stricter pattern that only matches the composition td
-    const compMatch = row.match(/class="fixed-len">([^<]+)<\/a>/i);
-    const composition = compMatch ? compMatch[1].trim() : "";
+    // Look for the fixed-len link in the next ~500 chars after this td
+    const nextChunk = html.substring(matchEnd, matchEnd + 600);
     
-    // Validate composition - reject if it looks like navigation/blog content
-    const isValidComposition = composition && 
-      composition.length < 200 && 
-      !composition.toLowerCase().includes("guide") &&
-      !composition.toLowerCase().includes("franchise") &&
-      !composition.toLowerCase().includes("pcd") &&
-      !composition.toLowerCase().includes("pharma") &&
-      !composition.toLowerCase().includes("business") &&
-      !composition.toLowerCase().includes("company");
+    // The composition td comes immediately after: <td ...><a href='slug' class="fixed-len">Composition</a></td>
+    const compMatch = nextChunk.match(/class="fixed-len">([^<]+)<\/a>/i);
+    const rawComposition = compMatch ? compMatch[1].trim() : "";
     
-    const finalComposition = isValidComposition ? composition : "";
+    // Validate: reject navigation/blog content
+    const isValidComposition = rawComposition &&
+      rawComposition.length < 250 &&
+      !rawComposition.toLowerCase().includes("guide") &&
+      !rawComposition.toLowerCase().includes("franchise") &&
+      !rawComposition.toLowerCase().includes("pcd") &&
+      !rawComposition.toLowerCase().includes("pharma") &&
+      !rawComposition.toLowerCase().includes("business") &&
+      !rawComposition.toLowerCase().includes("company") &&
+      !rawComposition.includes("'>") &&
+      !rawComposition.includes("</");
     
-    // Extract dosage form from third td (after composition)
-    const tdMatches = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
-    let dosageForm = "";
-    if (tdMatches.length >= 3) {
-      dosageForm = tdMatches[2][1].replace(/<[^>]+>/g, "").trim();
-    }
+    const composition = isValidComposition ? rawComposition : "";
     
-    // Extract image URL from last-all-p td
-    const imgMatch = row.match(/src="(https:\/\/cafoli\.in\/Static\/V1\/OtherPageImages\/[^"]+\.webp)"/i);
+    // Look for dosage form in the next td after composition
+    const dosageMatch = nextChunk.match(/class="fixed-len">[^<]+<\/a>\s*<\/td>\s*<td[^>]*>\s*<a[^>]*>([^<]+)<\/a>/i);
+    const dosageForm = dosageMatch ? dosageMatch[1].trim() : "";
+    
+    // Look for image URL in the last-all-p td (within next 800 chars)
+    const imgChunk = html.substring(matchEnd, matchEnd + 800);
+    const imgMatch = imgChunk.match(/src="(https:\/\/cafoli\.in\/Static\/V1\/OtherPageImages\/[^"]+\.webp)"/i);
     const imageUrl = imgMatch ? imgMatch[1] : "";
     
-    products.push({ brandName, composition: finalComposition, pageUrl, imageUrl, dosageForm });
+    products.push({ brandName, composition, pageUrl, imageUrl, dosageForm });
   }
   
   return products;
