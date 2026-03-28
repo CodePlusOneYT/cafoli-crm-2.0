@@ -193,6 +193,7 @@ export default defineSchema({
     literaturePdfUrl: v.optional(v.string()),
     mrp: v.optional(v.string()),
     packaging: v.optional(v.string()),
+    packagingType: v.optional(v.string()),
     description: v.optional(v.string()),
     scrapedAt: v.number(),
   }).index("by_brandName", ["brandName"])

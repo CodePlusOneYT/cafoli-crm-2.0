@@ -9,8 +9,6 @@ import { internal } from "./_generated/api";
 function parseProductListHtml(html: string): Array<{ brandName: string; composition: string; pageUrl: string; imageUrl: string; dosageForm: string }> {
   const products: Array<{ brandName: string; composition: string; pageUrl: string; imageUrl: string; dosageForm: string }> = [];
   
-  // Find all "first-all-p" td positions
-  // Pattern: <td class="first-all-p ..."><a href='slug'>Brand Name</a></td>
   const firstTdRegex = /<td[^>]*class="first-all-p[^"]*"[^>]*>\s*<a\s+href='([^']+)'>([^<]+)<\/a>\s*<\/td>/gi;
   let firstTdMatch;
   
@@ -23,14 +21,12 @@ function parseProductListHtml(html: string): Array<{ brandName: string; composit
     const pageUrl = `https://cafoli.in/${slug}`;
     const matchEnd = firstTdMatch.index + firstTdMatch[0].length;
     
-    // Look for the fixed-len link in the next ~500 chars after this td
+    // Look for the fixed-len link in the next ~600 chars after this td
     const nextChunk = html.substring(matchEnd, matchEnd + 600);
     
-    // The composition td comes immediately after: <td ...><a href='slug' class="fixed-len">Composition</a></td>
     const compMatch = nextChunk.match(/class="fixed-len">([^<]+)<\/a>/i);
     const rawComposition = compMatch ? compMatch[1].trim() : "";
     
-    // Validate: reject navigation/blog content
     const isValidComposition = rawComposition &&
       rawComposition.length < 250 &&
       !rawComposition.toLowerCase().includes("guide") &&
@@ -44,14 +40,14 @@ function parseProductListHtml(html: string): Array<{ brandName: string; composit
     
     const composition = isValidComposition ? rawComposition : "";
     
-    // Look for dosage form in the next td after composition
     const dosageMatch = nextChunk.match(/class="fixed-len">[^<]+<\/a>\s*<\/td>\s*<td[^>]*>\s*<a[^>]*>([^<]+)<\/a>/i);
     const dosageForm = dosageMatch ? dosageMatch[1].trim() : "";
     
     // Look for image URL in the last-all-p td (within next 800 chars)
     const imgChunk = html.substring(matchEnd, matchEnd + 800);
-    const imgMatch = imgChunk.match(/src="(https:\/\/cafoli\.in\/Static\/V1\/OtherPageImages\/[^"]+\.webp)"/i);
-    const imageUrl = imgMatch ? imgMatch[1] : "";
+    // Match both absolute and relative image paths
+    const imgMatch = imgChunk.match(/src="(?:https:\/\/cafoli\.in)?(?:\.\.\/)*Static\/V1\/OtherPageImages\/([^"]+\.webp)"/i);
+    const imageUrl = imgMatch ? `https://cafoli.in/Static/V1/OtherPageImages/${imgMatch[1]}` : "";
     
     products.push({ brandName, composition, pageUrl, imageUrl, dosageForm });
   }
@@ -59,51 +55,103 @@ function parseProductListHtml(html: string): Array<{ brandName: string; composit
   return products;
 }
 
+// Resolve a relative or absolute image/pdf URL to an absolute cafoli.in URL
+function resolveUrl(src: string, type: "image" | "pdf"): string {
+  if (!src) return "";
+  // Already absolute
+  if (src.startsWith("http")) return src;
+  // Relative path like ../../Static/V1/OtherPageImages/... or ../Static/V1/OtherPagepdf/...
+  const staticPath = type === "image" ? "Static/V1/OtherPageImages/" : "Static/V1/OtherPagepdf/";
+  const idx = src.indexOf(staticPath);
+  if (idx >= 0) {
+    return `https://cafoli.in/${src.substring(idx)}`;
+  }
+  return `https://cafoli.in/${src.replace(/^\.\.\//, "").replace(/^\.\.\//, "")}`;
+}
+
 // Extract product details from a product page HTML
 function extractProductPageDetails(html: string): {
+  brandName: string | null;
   composition: string | null;
+  dosageForm: string | null;
   mrp: string | null;
   packaging: string | null;
+  packagingType: string | null;
   description: string | null;
   imageUrl: string | null;
   pdfUrl: string | null;
   literaturePdfUrl: string | null;
 } {
-  const imageMatches = [...html.matchAll(/https:\/\/cafoli\.in\/Static\/V1\/OtherPageImages\/([^"'\s]+\.webp)/gi)];
+  // Brand name from <h2 class="w-100"> inside <div class="med-name">
+  const brandNameMatch = html.match(/<div[^>]*class="med-name"[^>]*>[\s\S]*?<h2[^>]*>([^<]+)<\/h2>/i);
+  const brandName = brandNameMatch ? brandNameMatch[1].trim() : null;
+
+  // Composition: <p class="com-name" ...><b class="c-name">Composition : </b>TEXT</p>
+  const compositionMatch =
+    html.match(/<p[^>]*class="com-name"[^>]*>[\s\S]*?<b[^>]*class="c-name"[^>]*>Composition\s*:\s*<\/b>\s*([^<]+)/i) ||
+    html.match(/Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i) ||
+    html.match(/<b[^>]*>Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i);
+  const composition = compositionMatch ? compositionMatch[1].replace(/<[^>]+>/g, "").trim() : null;
+
+  // Dosage Form: <p><b>Dosage Form : </b>Tablet</p>
+  const dosageFormMatch = html.match(/<b[^>]*>Dosage\s*Form\s*:\s*<\/b>\s*([^<\n]{1,100})/i);
+  const dosageForm = dosageFormMatch ? dosageFormMatch[1].replace(/<[^>]+>/g, "").trim() : null;
+
+  // MRP: <p><b>Price : </b><span ...>₹655/-</span></p>
+  const mrpMatch =
+    html.match(/Price\s*:\s*<\/b>\s*<span[^>]*>[\s₹Rs\.]*(\d+(?:\.\d+)?)\s*\/-/i) ||
+    html.match(/[₹Rs\.]\s*(\d+(?:\.\d+)?)\s*\/-/i) ||
+    html.match(/Price\s*:\s*[₹Rs\.]*\s*(\d+)/i);
+  const mrp = mrpMatch ? mrpMatch[1] : null;
+
+  // Packaging Type: <p><b>Packaging Type : </b>Blister</p>
+  const packagingTypeMatch = html.match(/<b[^>]*>Packaging\s*Type\s*:\s*<\/b>\s*([^<\n]{1,100})/i);
+  const packagingType = packagingTypeMatch ? packagingTypeMatch[1].replace(/<[^>]+>/g, "").trim() : null;
+
+  // Packaging: <p><b>Packaging : </b>10x1x10</p>
+  const packagingMatch =
+    html.match(/<b[^>]*>Packaging\s*:\s*<\/b>\s*([^<\n]{1,100})/i) ||
+    html.match(/Packaging\s*:\s*<\/strong>\s*([^<\n]+)/i);
+  const packaging = packagingMatch ? packagingMatch[1].replace(/<[^>]+>/g, "").trim() : null;
+
+  // Description: from <div class="panel"><p>...</p></div> (accordion panel)
+  const panelMatch = html.match(/<div[^>]*class="panel"[^>]*>([\s\S]*?)<\/div>/i);
+  let description: string | null = null;
+  if (panelMatch) {
+    // Strip all HTML tags and get clean text
+    const panelText = panelMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    description = panelText.substring(0, 500) || null;
+  }
+  if (!description) {
+    // Fallback: find substantial paragraphs
+    const paraMatches = [...html.matchAll(/<p[^>]*style="text-align:\s*justify[^"]*"[^>]*>([\s\S]*?)<\/p>/gi)];
+    if (paraMatches.length > 0) {
+      description = paraMatches[0][1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 500);
+    }
+  }
+
+  // Images: match both absolute and relative paths
+  // Pattern: src="../../Static/V1/OtherPageImages/NAME.webp" or src="https://cafoli.in/Static/..."
+  const imageRegex = /src="((?:https:\/\/cafoli\.in\/Static\/V1\/OtherPageImages\/|(?:\.\.\/)*Static\/V1\/OtherPageImages\/)[^"]+\.webp)"/gi;
+  const imageMatches = [...html.matchAll(imageRegex)];
   const validImages = imageMatches
-    .map(m => `https://cafoli.in/Static/V1/OtherPageImages/${m[1]}`)
+    .map(m => resolveUrl(m[1], "image"))
     .filter(url => {
       const filename = url.split("/").pop() || "";
       return filename.length > 10;
     });
-  const imageUrl = validImages[1] || validImages[0] || null;
-  
-  const pdfMatches = [...html.matchAll(/https:\/\/cafoli\.in\/Static\/V1\/OtherPagepdf\/([^"'\s]+\.pdf)/gi)];
-  const pdfUrls = pdfMatches.map(m => `https://cafoli.in/Static/V1/OtherPagepdf/${m[1]}`);
+  // Use the first product image (skip any tiny thumbnails - take index 0 which is the main product image)
+  const imageUrl = validImages[0] || null;
+
+  // PDFs: match both absolute and relative paths
+  // Pattern: href="../Static/V1/OtherPagepdf/NAME.pdf" or href="https://cafoli.in/Static/..."
+  const pdfRegex = /href="((?:https:\/\/cafoli\.in\/Static\/V1\/OtherPagepdf\/|(?:\.\.\/)*Static\/V1\/OtherPagepdf\/)[^"]+\.pdf)"/gi;
+  const pdfMatches = [...html.matchAll(pdfRegex)];
+  const pdfUrls = pdfMatches.map(m => resolveUrl(m[1], "pdf"));
   const pdfUrl = pdfUrls[0] || null;
   const literaturePdfUrl = pdfUrls[1] || null;
-  
-  // Extract composition from product page: <p class="com-name"><b class="c-name">Composition : </b>...</p>
-  const compositionMatch = html.match(/<p[^>]*class="com-name"[^>]*>[\s\S]*?<b[^>]*class="c-name"[^>]*>Composition\s*:\s*<\/b>\s*([^<]+)/i) ||
-                           html.match(/Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i) ||
-                           html.match(/<b[^>]*>Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i);
-  const composition = compositionMatch ? compositionMatch[1].replace(/<[^>]+>/g, "").trim() : null;
-  
-  const mrpMatch = html.match(/[₹Rs\.]\s*(\d+(?:\.\d+)?)\s*\/-/i) ||
-                   html.match(/Price\s*:\s*[₹Rs\.]*\s*(\d+)/i);
-  const mrp = mrpMatch ? mrpMatch[1] : null;
-  
-  // Extract packaging: <p><b>Packaging : </b>10ml</p>
-  const packagingMatch = html.match(/<b[^>]*>Packaging\s*:\s*<\/b>\s*([^<\n]{1,100})/i) ||
-                         html.match(/Packaging\s*:\s*<\/strong>\s*([^<\n]+)/i) ||
-                         html.match(/Packaging\s*:\s*([^\n<]{1,100})/i);
-  const packaging = packagingMatch ? packagingMatch[1].replace(/<[^>]+>/g, "").trim() : null;
-  
-  // Extract description from substantial paragraphs
-  const paraMatches = [...html.matchAll(/<p[^>]*>([^<]{100,600})<\/p>/gi)];
-  const description = paraMatches.length > 0 ? paraMatches[0][1].replace(/<[^>]+>/g, "").trim().substring(0, 400) : null;
-  
-  return { composition, mrp, packaging, description, imageUrl, pdfUrl, literaturePdfUrl };
+
+  return { brandName, composition, dosageForm, mrp, packaging, packagingType, description, imageUrl, pdfUrl, literaturePdfUrl };
 }
 
 export const listWebProductsPublic = action({
@@ -135,7 +183,18 @@ export const scrapeProductDetailsBatch = internalAction({
           signal: AbortSignal.timeout(15000),
         });
         
-        let details = { composition: null as string | null, mrp: null as string | null, packaging: null as string | null, description: null as string | null, imageUrl: product.imageUrl || null, pdfUrl: null as string | null, literaturePdfUrl: null as string | null };
+        let details: ReturnType<typeof extractProductPageDetails> = {
+          brandName: null,
+          composition: null,
+          dosageForm: null,
+          mrp: null,
+          packaging: null,
+          packagingType: null,
+          description: null,
+          imageUrl: product.imageUrl || null,
+          pdfUrl: null,
+          literaturePdfUrl: null,
+        };
         
         if (res.ok) {
           const html = await res.text();
@@ -147,17 +206,22 @@ export const scrapeProductDetailsBatch = internalAction({
         
         // Use page-extracted composition if available, else fall back to list composition
         const finalComposition = details.composition || product.composition;
+        // Use page-extracted dosage form if available, else fall back to list dosage form
+        const finalDosageForm = details.dosageForm || product.dosageForm;
+        // Use page-extracted brand name if available, else fall back to list brand name
+        const finalBrandName = details.brandName || product.brandName;
         
         await ctx.runMutation(internal.cafoliScraperDb.upsertWebProduct, {
-          brandName: product.brandName,
+          brandName: finalBrandName,
           composition: finalComposition,
-          dosageForm: product.dosageForm,
+          dosageForm: finalDosageForm,
           pageUrl: product.pageUrl,
           imageUrl: details.imageUrl || undefined,
           pdfUrl: details.pdfUrl || undefined,
           literaturePdfUrl: details.literaturePdfUrl || undefined,
           mrp: details.mrp || undefined,
           packaging: details.packaging || undefined,
+          packagingType: details.packagingType || undefined,
           description: details.description || undefined,
         });
         
@@ -249,7 +313,6 @@ export const getWebProductStats = action({
 });
 
 // Fix corrupted compositions by re-fetching from product pages
-// Processes in batches of 20 to avoid timeouts
 export const fixCorruptedCompositions = action({
   args: {
     offset: v.optional(v.number()),
@@ -258,7 +321,6 @@ export const fixCorruptedCompositions = action({
     const offset = args.offset || 0;
     const batchSize = 20;
 
-    // Get all products with corrupted compositions
     const allProducts: any[] = await ctx.runQuery(internal.cafoliScraperDb.listWebProducts);
     
     const corruptedProducts = allProducts.filter((p: any) => {
@@ -294,7 +356,6 @@ export const fixCorruptedCompositions = action({
         });
 
         if (!res.ok) {
-          // Clear the corrupted composition at minimum
           await ctx.runMutation(internal.cafoliScraperDb.patchWebProduct, {
             id: product._id,
             composition: undefined,
@@ -304,22 +365,17 @@ export const fixCorruptedCompositions = action({
         }
 
         const html = await res.text();
-        
-        // Extract composition using the reliable com-name pattern
-        const compositionMatch = html.match(/<p[^>]*class="com-name"[^>]*>[\s\S]*?<b[^>]*class="c-name"[^>]*>Composition\s*:\s*<\/b>\s*([^<]+)/i) ||
-                                 html.match(/Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i);
-        const composition = compositionMatch ? compositionMatch[1].replace(/<[^>]+>/g, "").trim() : undefined;
+        const details = extractProductPageDetails(html);
 
         await ctx.runMutation(internal.cafoliScraperDb.patchWebProduct, {
           id: product._id,
-          composition,
+          composition: details.composition || undefined,
         });
 
         fixed++;
         await new Promise(r => setTimeout(r, 150));
       } catch (err) {
         console.error(`[FIX_COMP] Failed for ${product.pageUrl}:`, err);
-        // At minimum clear the corrupted value
         try {
           await ctx.runMutation(internal.cafoliScraperDb.patchWebProduct, {
             id: product._id,

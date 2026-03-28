@@ -13,6 +13,7 @@ export const upsertWebProduct = internalMutation({
     literaturePdfUrl: v.optional(v.string()),
     mrp: v.optional(v.string()),
     packaging: v.optional(v.string()),
+    packagingType: v.optional(v.string()),
     description: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -31,6 +32,7 @@ export const upsertWebProduct = internalMutation({
       literaturePdfUrl: args.literaturePdfUrl,
       mrp: args.mrp,
       packaging: args.packaging,
+      packagingType: args.packagingType,
       description: args.description,
       scrapedAt: Date.now(),
     };
