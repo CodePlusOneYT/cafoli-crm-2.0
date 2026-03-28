@@ -96,6 +96,37 @@ export const cleanupCorruptedCompositions = mutation({
   },
 });
 
+// Internal mutation to patch a single web product's composition
+export const patchWebProduct = internalMutation({
+  args: {
+    id: v.id("cafoliWebProducts"),
+    composition: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { composition: args.composition });
+  },
+});
+
+// Count corrupted compositions for display
+export const getCorruptedCompositionCount = query({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("cafoliWebProducts").take(10000);
+    return products.filter(p => {
+      if (!p.composition) return false;
+      const c = p.composition.toLowerCase();
+      return (
+        c.includes("guide-in-pcd-franchise") ||
+        c.includes("franchise") ||
+        c.includes("pcd pharma") ||
+        c.includes("business") ||
+        c.includes("company") ||
+        p.composition.length > 300
+      );
+    }).length;
+  },
+});
+
 // Delete a batch of cached web products - returns hasMore for looping
 export const deleteAllWebProducts = mutation({
   args: {},

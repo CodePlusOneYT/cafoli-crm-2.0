@@ -124,13 +124,17 @@ export default function Admin() {
   const isBatchProcessing = batchProgress?.status === "queued" || batchProgress?.status === "running";
 
   const scrapeAllProducts = useAction(api.cafoliScraper.scrapeAllCafoliProducts);
+  const fixCorruptedCompositions = useAction(api.cafoliScraper.fixCorruptedCompositions);
   const deleteAllWebProducts = useMutation(api.cafoliScraperDb.deleteAllWebProducts);
   const deleteAllCatalogProducts = useMutation(api.products.deleteAllProducts);
   const [isDeletingCache, setIsDeletingCache] = useState(false);
   const [isDeletingCatalog, setIsDeletingCatalog] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
+  const [isFixingCompositions, setIsFixingCompositions] = useState(false);
   const [scrapeStats, setScrapeStats] = useState<{ total: number; scraped: number; failed: number; offset: number } | null>(null);
+  const [fixStats, setFixStats] = useState<{ fixed: number; skipped: number; failed: number } | null>(null);
   const webProductCount = useQuery(api.cafoliScraperDb.getWebProductCountPublic);
+  const corruptedCount = useQuery(api.cafoliScraperDb.getCorruptedCompositionCount);
 
   if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "uploader")) {
     return <div className="p-8 text-center">You do not have permission to view this page.</div>;
@@ -473,6 +477,31 @@ export default function Admin() {
     }
   };
 
+  const handleFixCorruptedCompositions = async () => {
+    setIsFixingCompositions(true);
+    setFixStats(null);
+    let offset = 0;
+    let totalFixed = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
+    try {
+      while (true) {
+        const result = await fixCorruptedCompositions({ offset });
+        totalFixed += result.fixed;
+        totalSkipped += result.skipped;
+        totalFailed += result.failed;
+        setFixStats({ fixed: totalFixed, skipped: totalSkipped, failed: totalFailed });
+        if (!result.hasMore) break;
+        offset = result.nextOffset;
+      }
+      toast.success(`Fixed ${totalFixed} corrupted compositions, cleared ${totalSkipped} unfixable`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to fix compositions");
+    } finally {
+      setIsFixingCompositions(false);
+    }
+  };
+
   const handleDeleteAllWebProducts = async () => {
     setIsDeletingCache(true);
     try {
@@ -763,6 +792,15 @@ export default function Admin() {
                     {isScraping ? "Scraping..." : "Sync Products from cafoli.in"}
                   </Button>
                   <Button
+                    variant="outline"
+                    onClick={handleFixCorruptedCompositions}
+                    disabled={isFixingCompositions || isScraping}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isFixingCompositions ? "animate-spin" : ""}`} />
+                    {isFixingCompositions ? "Fixing..." : `Fix Compositions${corruptedCount ? ` (${corruptedCount})` : ""}`}
+                  </Button>
+                  <Button
                     variant="destructive"
                     onClick={handleDeleteAllWebProducts}
                     disabled={isDeletingCache}
@@ -785,6 +823,19 @@ export default function Admin() {
                     <CheckCircle2 className="h-4 w-4" />
                     <AlertDescription>
                       Sync complete: {scrapeStats.scraped} products scraped, {scrapeStats.failed} failed out of {scrapeStats.total} total.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {isFixingCompositions && fixStats && (
+                  <div className="text-sm text-muted-foreground">
+                    Fixing: {fixStats.fixed} fixed, {fixStats.skipped} cleared, {fixStats.failed} failed so far...
+                  </div>
+                )}
+                {!isFixingCompositions && fixStats && (
+                  <Alert>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertDescription>
+                      Fix complete: {fixStats.fixed} compositions fixed, {fixStats.skipped} cleared (page unavailable), {fixStats.failed} failed.
                     </AlertDescription>
                   </Alert>
                 )}

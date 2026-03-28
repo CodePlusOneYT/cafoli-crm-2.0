@@ -253,3 +253,91 @@ export const getWebProductStats = action({
     return { count };
   },
 });
+
+// Fix corrupted compositions by re-fetching from product pages
+// Processes in batches of 20 to avoid timeouts
+export const fixCorruptedCompositions = action({
+  args: {
+    offset: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ fixed: number; skipped: number; failed: number; hasMore: boolean; nextOffset: number }> => {
+    const offset = args.offset || 0;
+    const batchSize = 20;
+
+    // Get all products with corrupted compositions
+    const allProducts: any[] = await ctx.runQuery(internal.cafoliScraperDb.listWebProducts);
+    
+    const corruptedProducts = allProducts.filter((p: any) => {
+      if (!p.composition) return false;
+      const c = p.composition.toLowerCase();
+      return (
+        c.includes("guide-in-pcd-franchise") ||
+        c.includes("'>") ||
+        c.includes("</a>") ||
+        c.includes("dropdown-item") ||
+        c.includes("guide") ||
+        c.includes("franchise") ||
+        c.includes("pcd pharma") ||
+        c.includes("business") ||
+        c.includes("company") ||
+        p.composition.length > 300
+      );
+    });
+
+    const batch = corruptedProducts.slice(offset, offset + batchSize);
+    const hasMore = offset + batchSize < corruptedProducts.length;
+    const nextOffset = offset + batchSize;
+
+    let fixed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const product of batch) {
+      try {
+        const res = await fetch(product.pageUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; CafoliBot/1.0)" },
+          signal: AbortSignal.timeout(12000),
+        });
+
+        if (!res.ok) {
+          // Clear the corrupted composition at minimum
+          await ctx.runMutation(internal.cafoliScraperDb.patchWebProduct, {
+            id: product._id,
+            composition: undefined,
+          });
+          skipped++;
+          continue;
+        }
+
+        const html = await res.text();
+        
+        // Extract composition using the reliable com-name pattern
+        const compositionMatch = html.match(/<p[^>]*class="com-name"[^>]*>[\s\S]*?<b[^>]*class="c-name"[^>]*>Composition\s*:\s*<\/b>\s*([^<]+)/i) ||
+                                 html.match(/Composition\s*:\s*<\/b>\s*([^<\n]{5,300})/i);
+        const composition = compositionMatch ? compositionMatch[1].replace(/<[^>]+>/g, "").trim() : undefined;
+
+        await ctx.runMutation(internal.cafoliScraperDb.patchWebProduct, {
+          id: product._id,
+          composition,
+        });
+
+        fixed++;
+        await new Promise(r => setTimeout(r, 150));
+      } catch (err) {
+        console.error(`[FIX_COMP] Failed for ${product.pageUrl}:`, err);
+        // At minimum clear the corrupted value
+        try {
+          await ctx.runMutation(internal.cafoliScraperDb.patchWebProduct, {
+            id: product._id,
+            composition: undefined,
+          });
+        } catch {}
+        failed++;
+      }
+    }
+
+    console.log(`[FIX_COMP] Batch done: ${fixed} fixed, ${skipped} skipped, ${failed} failed. Total corrupted: ${corruptedProducts.length}, hasMore: ${hasMore}`);
+
+    return { fixed, skipped, failed, hasMore, nextOffset };
+  },
+});
