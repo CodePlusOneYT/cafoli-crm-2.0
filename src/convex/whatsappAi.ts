@@ -498,8 +498,24 @@ RULES:
 
 Always return ONLY the JSON object. Do not include other text.`;
 
-      const chatContext = JSON.stringify(args.context || {});
-      const userPrompt = `${chatContext}\n\nLatest message: "${args.prompt}"`;
+      // Format context as readable conversation history
+      const context = args.context || {};
+      const recentMessages: Array<{ role: string; content: string }> = context.recentMessages || [];
+      const contactRequestMessage: string | undefined = context.contactRequestMessage;
+
+      let conversationHistory = "";
+      if (recentMessages.length > 0) {
+        conversationHistory = "Recent conversation:\n" + recentMessages.map((m: any) => {
+          const role = m.role === "assistant" ? "Agent" : "Lead";
+          return `${role}: ${m.content}`;
+        }).join("\n") + "\n\n";
+      }
+
+      const contactRequestNote = contactRequestMessage
+        ? `\nNote: If the lead requests a callback/contact, use this message: "${contactRequestMessage}"\n`
+        : "";
+
+      const userPrompt = `${conversationHistory}${contactRequestNote}Latest message from lead: "${args.prompt}"`;
 
       const { text: rawText } = await generateWithGemini(ctx, systemPrompt, userPrompt, { jsonMode: true });
       logAiInfo("REPLY", "Raw AI response", { rawText: rawText.substring(0, 200) });
