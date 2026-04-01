@@ -128,11 +128,21 @@ export const getLeadsWithChatStatus = query({
             .query("chats")
             .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
             .first();
+          let hasInboundMessage = false;
+          if (chat) {
+            const inbound = await ctx.db
+              .query("messages")
+              .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+              .filter((q) => q.eq(q.field("direction"), "inbound"))
+              .first();
+            hasInboundMessage = !!inbound;
+          }
           return {
             ...lead,
             hasChat: !!chat,
             unreadCount: chat?.unreadCount || 0,
             lastMessageAt: chat?.lastMessageAt || 0,
+            hasInboundMessage,
           };
         })
       );
@@ -179,11 +189,21 @@ export const getLeadsWithChatStatus = query({
           .query("chats")
           .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
           .first();
+        let hasInboundMessage = false;
+        if (chat) {
+          const inbound = await ctx.db
+            .query("messages")
+            .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+            .filter((q) => q.eq(q.field("direction"), "inbound"))
+            .first();
+          hasInboundMessage = !!inbound;
+        }
         return {
           ...lead,
           hasChat: !!chat,
           unreadCount: chat?.unreadCount || 0,
           lastMessageAt: chat?.lastMessageAt || 0,
+          hasInboundMessage,
         };
       })
     );

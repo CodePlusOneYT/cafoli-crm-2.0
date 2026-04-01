@@ -53,6 +53,12 @@ export function ContactList({
     if (unreadFilter === "unread") {
       return matchesSearch && lead.unreadCount > 0;
     }
+    if (unreadFilter === "replied") {
+      return matchesSearch && lead.hasInboundMessage;
+    }
+    if (unreadFilter === "unreplied") {
+      return matchesSearch && !lead.hasInboundMessage;
+    }
     return matchesSearch;
   });
 
@@ -116,21 +122,35 @@ export function ContactList({
           type="single"
           value={unreadFilter}
           onValueChange={(val) => val && setUnreadFilter(val)}
-          className="justify-start"
+          className="justify-start flex-wrap gap-1"
         >
           <ToggleGroupItem
             value="all"
             size="sm"
-            className="text-xs rounded-full px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            className="text-xs rounded-full px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
           >
             All
           </ToggleGroupItem>
           <ToggleGroupItem
             value="unread"
             size="sm"
-            className="text-xs rounded-full px-4 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+            className="text-xs rounded-full px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
           >
             Unread
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="replied"
+            size="sm"
+            className="text-xs rounded-full px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          >
+            Replied
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="unreplied"
+            size="sm"
+            className="text-xs rounded-full px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          >
+            Unreplied
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
