@@ -106,12 +106,23 @@ export const handleIncomingMessage = internalAction({
         }
 
         if (isNewLead) {
-          // Check if the message is a product list / catalogue request — if so, skip welcome and let AI handle
+          // Always send welcome message to new leads
+          console.log(`📤 Sending welcome message to new lead ${leadId}`);
+          try {
+            await ctx.runAction(internal.whatsappTemplates.sendWelcomeMessage, {
+              leadId,
+              phoneNumber: args.from,
+            });
+            console.log("✅ Welcome message sent");
+          } catch (error) {
+            console.error("❌ Error sending welcome message:", error);
+          }
+
+          // Also trigger AI if the new lead's first message is a catalogue/product list request
           const msgLower = (args.text || "").toLowerCase();
           const isProductListRequest = /product\s*list|catalogue|catalog|range\s*pdf|send\s*pdf|price\s*list|all\s*products|send\s*list|send\s*range/.test(msgLower);
-
           if (isProductListRequest) {
-            console.log(`📤 New lead requested product list — skipping welcome, triggering AI for lead ${leadId}`);
+            console.log(`📤 New lead also requested product list — triggering AI for lead ${leadId}`);
             try {
               const allMessages = await ctx.runQuery(internal.whatsappQueries.getChatMessagesInternal, { leadId });
               const contextMessages = allMessages.slice(-5).map((m: any) => ({
@@ -128,17 +139,6 @@ export const handleIncomingMessage = internalAction({
               });
             } catch (error) {
               console.error("❌ Error triggering AI for product list request:", error);
-            }
-          } else {
-            console.log(`📤 Sending welcome message to new lead ${leadId}`);
-            try {
-              await ctx.runAction(internal.whatsappTemplates.sendWelcomeMessage, {
-                leadId,
-                phoneNumber: args.from,
-              });
-              console.log("✅ Welcome message sent");
-            } catch (error) {
-              console.error("❌ Error sending welcome message:", error);
             }
           }
         } else {
