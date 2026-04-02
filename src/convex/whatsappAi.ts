@@ -357,7 +357,7 @@ export const generateChatSummary = action({
   args: {
     leadId: v.id("leads"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<string> => {
     const chats = await ctx.runQuery(internal.whatsappQueries.getChatsByLeadId, { leadId: args.leadId });
     if (!chats || chats.length === 0) return "No chat history found.";
     const messages = chats[0].messages || [];
@@ -387,7 +387,7 @@ export const generateAndSendAiReply = action({
     replyingToMessageId: v.optional(v.id("messages")),
     replyingToExternalId: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<void> => {
     await ctx.runAction(internal.whatsappAi.generateAndSendAiReplyInternal, args);
   },
 });
@@ -403,7 +403,7 @@ export const generateAndSendAiReplyInternal = internalAction({
     replyingToExternalId: v.optional(v.string()),
     isAutoReply: v.optional(v.boolean()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<void> => {
     try {
       logAiInfo("REPLY", "Starting AI reply generation", { leadId: args.leadId, prompt: args.prompt.substring(0, 80) });
 
