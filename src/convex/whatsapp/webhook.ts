@@ -148,12 +148,7 @@ export const handleIncomingMessage = internalAction({
             if (!isChatActive) {
                 console.log(`🤖 Triggering auto-reply for lead ${leadId} (chat not active, type: ${args.type})`);
                 
-                const allMessages = await ctx.runQuery(internal.whatsappQueries.getChatMessagesInternal, { leadId });
-                const contextMessages = allMessages.slice(-20).map((m: any) => ({
-                    role: m.direction === "outbound" ? "assistant" : "user",
-                    content: m.content || (m.messageType ? `[${m.messageType}]` : "[media]")
-                }));
-
+                const tokenContext = await ctx.runAction(internal.whatsappAi.buildTokenWindowedContext, { leadId });
                 const contactRequestMessage = await ctx.runQuery(internal.whatsappConfig.getContactRequestMessage);
 
                 // Build a meaningful prompt for media messages
@@ -177,7 +172,7 @@ export const handleIncomingMessage = internalAction({
                         leadId,
                         phoneNumber: args.from,
                         context: { 
-                            recentMessages: contextMessages,
+                            ...tokenContext,
                             contactRequestMessage 
                         },
                         prompt,

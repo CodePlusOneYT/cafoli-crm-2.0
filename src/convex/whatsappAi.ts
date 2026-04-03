@@ -353,6 +353,77 @@ async function sendCatalogProductToLead(ctx: any, product: any, args: { leadId: 
   });
 }
 
+// ─── Token-windowed context builder ───────────────────────────────────────────
+// Estimates tokens as chars/4. Keeps the last ~100k tokens as "recent".
+// Older messages are summarized with Gemini into a compact summary.
+const RECENT_TOKEN_BUDGET = 100_000;
+const CHARS_PER_TOKEN = 4;
+
+export const buildTokenWindowedContext = internalAction({
+  args: {
+    leadId: v.id("leads"),
+  },
+  handler: async (ctx, args): Promise<{
+    summary: string;
+    recentMessages: Array<{ role: string; content: string }>;
+  }> => {
+    const allMessages: any[] = await ctx.runQuery(
+      internal.whatsappQueries.getChatMessagesInternal,
+      { leadId: args.leadId }
+    );
+
+    if (!allMessages || allMessages.length === 0) {
+      return { summary: "", recentMessages: [] };
+    }
+
+    // Convert to role/content pairs
+    const formatted = allMessages.map((m: any) => ({
+      role: m.direction === "outbound" ? "assistant" : "user",
+      content: m.content || (m.messageType ? `[${m.messageType}]` : "[media]"),
+    }));
+
+    // Walk from the end, accumulate until we hit the token budget
+    let tokenCount = 0;
+    let splitIdx = formatted.length; // index where "recent" starts
+
+    for (let i = formatted.length - 1; i >= 0; i--) {
+      const msgTokens = Math.ceil(formatted[i].content.length / CHARS_PER_TOKEN);
+      if (tokenCount + msgTokens > RECENT_TOKEN_BUDGET) {
+        splitIdx = i + 1;
+        break;
+      }
+      tokenCount += msgTokens;
+      splitIdx = i;
+    }
+
+    const olderMessages = formatted.slice(0, splitIdx);
+    const recentMessages = formatted.slice(splitIdx);
+
+    // If there are older messages, summarize them
+    let summary = "";
+    if (olderMessages.length > 0) {
+      try {
+        const olderText = olderMessages
+          .map((m) => `${m.role === "assistant" ? "Agent" : "Lead"}: ${m.content}`)
+          .join("\n");
+
+        const { text } = await generateWithGemini(
+          ctx,
+          `You are a CRM assistant. Summarize the following older WhatsApp conversation between an Agent and a Lead for a pharmaceutical company (Cafoli Lifecare). Be concise. Highlight: products discussed, lead's requirements, location, any commitments made, and pending actions.`,
+          `Conversation to summarize:\n${olderText}`,
+        );
+        summary = text.trim();
+      } catch (e) {
+        logAiError("BUILD_CONTEXT_SUMMARY", e);
+        // Fallback: use a truncated version
+        summary = `[Earlier conversation with ${olderMessages.length} messages — summary unavailable]`;
+      }
+    }
+
+    return { summary, recentMessages };
+  },
+});
+
 export const generateChatSummary = action({
   args: {
     leadId: v.id("leads"),
@@ -460,8 +531,7 @@ You can perform the following actions by returning a JSON object:
 6. Request contact (if they want a meeting/call): { "action": "contact_request", "text": "I've noted your request.", "reason": "reason" }
 
 RULES:
-- For send_product, resource_name MUST be the exact Cafoli brand name from the product list. NEVER use send_product with a null or empty resource_name.
-- If the user sends only an image with no text, use "reply" to ask them to type the product name.
+- For send_product, resource_name MUST be the exact Cafoli brand name from the product list.
 - ALWAYS try competitor brand → molecule → Cafoli equivalent matching before giving up.
 - Only use intervention_request if NO Cafoli product matches the molecule at all.
 - When the user asks for "full catalogue", "complete catalogue", "all products", "product list", "price list", "range", "send list", "send PDF", "send range", use send_full_catalogue.
@@ -470,14 +540,22 @@ RULES:
 
 Always return ONLY the JSON object. Do not include other text.`;
 
-      // Format context as readable conversation history
+      // Build conversation history from context (supports both old format and new token-windowed format)
       const context = args.context || {};
       const recentMessages: Array<{ role: string; content: string }> = context.recentMessages || [];
+      const olderSummary: string = context.summary || "";
       const contactRequestMessage: string | undefined = context.contactRequestMessage;
 
       let conversationHistory = "";
+
+      // Include older summary if present
+      if (olderSummary) {
+        conversationHistory += `[Summary of earlier conversation]\n${olderSummary}\n\n`;
+      }
+
+      // Include recent messages
       if (recentMessages.length > 0) {
-        conversationHistory = "Conversation history (oldest to newest):\n" + recentMessages.map((m: any) => {
+        conversationHistory += "Recent conversation:\n" + recentMessages.map((m: any) => {
           const role = m.role === "assistant" ? "Agent" : "Lead";
           return `${role}: ${m.content}`;
         }).join("\n") + "\n\n";
@@ -496,6 +574,17 @@ Always return ONLY the JSON object. Do not include other text.`;
       const aiAction = JSON.parse(jsonStr);
       logAiInfo("REPLY", "Parsed AI action", { action: aiAction.action, resource: aiAction.resource_name });
 
+      // Guard: if send_product has no resource_name, fall back to asking the lead
+      if (aiAction.action === "send_product" && !aiAction.resource_name) {
+        logAiInfo("SEND_PRODUCT", "resource_name is null/empty — asking lead to clarify", { leadId: args.leadId });
+        await ctx.runAction(internal.whatsapp.internal.sendMessage, {
+          leadId: args.leadId,
+          phoneNumber: args.phoneNumber,
+          message: "Could you please type the name of the product or its composition? I'll look it up for you right away! 😊",
+        });
+        return;
+      }
+
       if (aiAction.action === "reply") {
         await ctx.runAction(internal.whatsapp.internal.sendMessage, {
           leadId: args.leadId,
@@ -505,17 +594,6 @@ Always return ONLY the JSON object. Do not include other text.`;
         });
 
       } else if (aiAction.action === "send_product") {
-        // Guard: if resource_name is null/empty, fall back to a reply asking for product name
-        if (!aiAction.resource_name || aiAction.resource_name === "null") {
-          logAiInfo("SEND_PRODUCT", "resource_name is null/empty, asking lead for product name", { leadId: args.leadId });
-          await ctx.runAction(internal.whatsapp.internal.sendMessage, {
-            leadId: args.leadId,
-            phoneNumber: args.phoneNumber,
-            message: "Could you please type the name of the product or its composition? I'll look it up for you right away! 😊",
-          });
-          return;
-        }
-
         logAiInfo("SEND_PRODUCT", `Looking up product: "${aiAction.resource_name}"`, { leadId: args.leadId });
 
         let productSent = false;
@@ -525,12 +603,19 @@ Always return ONLY the JSON object. Do not include other text.`;
         if (webMatch) {
           logAiInfo("SEND_PRODUCT", `Found in web products DB: ${webMatch.brandName}`, { leadId: args.leadId });
 
+          // Build details object from web product cache
           let details: { name: string | null; molecule: string | null; mrp: string | null; packaging: string | null; description: string | null; imageUrl: string | null; pdfUrl: string | null; pageLink: string };
 
-          // Use cached data directly
+          // Check if composition looks corrupted (contains HTML or is too long)
+          const isCorruptedComposition = webMatch.composition && (
+            webMatch.composition.includes("<") ||
+            webMatch.composition.includes(">") ||
+            webMatch.composition.length > 500
+          );
+
           details = {
             name: webMatch.brandName || null,
-            molecule: webMatch.composition || null,
+            molecule: isCorruptedComposition ? null : (webMatch.composition || null),
             mrp: webMatch.mrp || null,
             packaging: webMatch.packaging || null,
             description: webMatch.description || null,
@@ -546,23 +631,20 @@ Always return ONLY the JSON object. Do not include other text.`;
               if (html) {
                 const liveDetails = extractProductDetailsFromHtml(html, webMatch.pageUrl);
                 // Merge: prefer live data but fall back to cached
-                const isCorruptedComposition = liveDetails.molecule && liveDetails.molecule.length > 200;
                 details = {
-                  name: liveDetails.name || webMatch.brandName || null,
-                  molecule: isCorruptedComposition ? null : (liveDetails.molecule || webMatch.composition || null),
+                  ...details,
                   mrp: liveDetails.mrp || webMatch.mrp || null,
                   packaging: liveDetails.packaging || webMatch.packaging || null,
                   description: liveDetails.description || webMatch.description || null,
                   imageUrl: liveDetails.imageUrl || webMatch.imageUrl || null,
                   pdfUrl: liveDetails.pdfUrl || webMatch.pdfUrl || null,
-                  pageLink: webMatch.pageUrl,
                 };
               }
             } catch {
-              // Use cached data as fallback
+              // Use cached data only
               details = {
                 name: webMatch.brandName || null,
-                molecule: webMatch.composition || null,
+                molecule: isCorruptedComposition ? null : (webMatch.composition || null),
                 mrp: webMatch.mrp || null,
                 packaging: webMatch.packaging || null,
                 description: webMatch.description || null,
