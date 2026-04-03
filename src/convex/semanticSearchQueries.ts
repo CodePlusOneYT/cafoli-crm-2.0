@@ -1,13 +1,10 @@
 import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
-// Score a lead against a set of search terms
-// Returns 0 if no meaningful match (used to filter out irrelevant results)
 function scoreLeadRelevance(lead: any, terms: string[], originalQuery: string): number {
   const q = originalQuery.toLowerCase();
   let score = 0;
 
-  // Direct field checks for exact/partial matches
   const name = (lead.name || "").toLowerCase();
   const mobile = (lead.mobile || "").toLowerCase();
   const altMobile = (lead.altMobile || "").toLowerCase();
@@ -21,31 +18,32 @@ function scoreLeadRelevance(lead: any, terms: string[], originalQuery: string): 
   const message = (lead.message || "").toLowerCase();
   const pincode = (lead.pincode || "").toLowerCase();
 
-  // Phone number match — highest priority
-  if (mobile.includes(q) || altMobile.includes(q)) score += 100;
-  // Exact name match
+  // Phone number match — check all variants
+  const phoneVariants = [q];
+  const cleanedQ = q.replace(/[\s\-\+\(\)]/g, "");
+  if (/^\d{10}$/.test(cleanedQ)) phoneVariants.push("91" + cleanedQ);
+  if (/^\d{12}$/.test(cleanedQ) && cleanedQ.startsWith("91")) phoneVariants.push(cleanedQ.slice(2));
+
+  for (const variant of phoneVariants) {
+    if (mobile.includes(variant) || altMobile.includes(variant)) { score += 100; break; }
+  }
+
   if (name === q) score += 80;
   else if (name.startsWith(q)) score += 50;
   else if (name.includes(q)) score += 30;
-  // Agency match
   if (agencyName.includes(q)) score += 25;
-  // Location match
   if (state.includes(q) || district.includes(q) || station.includes(q)) score += 15;
-  // Pincode match
   if (pincode.includes(q)) score += 20;
-  // Email match
   if (email.includes(q)) score += 20;
-  // Subject/message match
   if (subject.includes(q)) score += 10;
   if (message.includes(q)) score += 5;
   if (source.includes(q)) score += 5;
 
-  // Also score against expanded terms (but with lower weight)
   for (const term of terms) {
-    if (term === originalQuery) continue; // Already scored above
+    if (term === originalQuery) continue;
     const t = term.toLowerCase();
     if (name.includes(t)) score += 5;
-    else if (mobile.includes(t)) score += 8;
+    else if (mobile.includes(t) || altMobile.includes(t)) score += 8;
     else if (agencyName.includes(t)) score += 4;
   }
 
@@ -64,10 +62,9 @@ export const multiTermSearchQuery = internalQuery({
     const allResults: any[] = [];
     const originalQuery = args.originalQuery || args.terms[0] || "";
 
-    // For phone searches, search only with the original query (no expansion)
-    const termsToSearch = args.isPhoneSearch ? [originalQuery] : args.terms;
+    // For phone searches, search all variants
+    const termsToSearch = args.terms;
 
-    // Search with each term
     for (const term of termsToSearch) {
       if (!term || term.length < 1) continue;
       
@@ -88,14 +85,15 @@ export const multiTermSearchQuery = internalQuery({
       }
     }
 
-    // Score and rank results
     const scored = allResults.map(lead => ({
       ...lead,
       _relevanceScore: scoreLeadRelevance(lead, args.terms, originalQuery),
     }));
 
-    // Filter out leads with zero relevance score (no meaningful match)
-    const relevant = scored.filter(lead => lead._relevanceScore > 0);
+    // For phone searches, include all results (don't filter by score 0)
+    const relevant = args.isPhoneSearch
+      ? scored
+      : scored.filter(lead => lead._relevanceScore > 0);
 
     relevant.sort((a, b) => b._relevanceScore - a._relevanceScore);
 

@@ -77,7 +77,7 @@ export function LeadsMapView({ leads, onLeadSelect, selectedLeadId }: LeadsMapVi
   );
 
   const needsGeocode = useMemo(
-    () => leads.filter((l) => !(l as any).lat && !(l as any).lng && (l.city || l.state || l.country)),
+    () => leads.filter((l) => !(l as any).lat && !(l as any).lng && (l.state || (l as any).district || (l as any).station)),
     [leads]
   );
 
@@ -165,7 +165,7 @@ export function LeadsMapView({ leads, onLeadSelect, selectedLeadId }: LeadsMapVi
           popupAnchor: [0, -size],
         });
         const marker = L.marker([l.lat, l.lng], { icon });
-        const location = [lead.city, lead.state, lead.country].filter(Boolean).join(", ");
+        const location = [(lead as any).station, (lead as any).district, lead.state].filter(Boolean).join(", ");
         const company = lead.agencyName || (lead as any).company || "";
         marker.bindPopup(`
           <div style="min-width:180px;padding:4px">
@@ -210,9 +210,9 @@ export function LeadsMapView({ leads, onLeadSelect, selectedLeadId }: LeadsMapVi
       try {
         await geocodeLead({
           leadId: lead._id as any,
-          city: lead.city,
+          city: (lead as any).station || (lead as any).district,
           state: lead.state,
-          country: lead.country,
+          country: "India",
         });
         done++;
         await new Promise((r) => setTimeout(r, 1200));

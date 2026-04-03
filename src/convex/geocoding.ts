@@ -5,12 +5,12 @@ import { internal } from "./_generated/api";
 
 async function nominatimGeocode(query: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`;
     const response = await fetch(url, {
       headers: { "User-Agent": "CafoliConnect/1.0 (hardcorgamingstyle@gmail.com)" },
     });
     if (!response.ok) return null;
-    const data = await response.json();
+    const data: any[] = await response.json();
     if (data.length > 0) {
       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     }
@@ -27,7 +27,7 @@ export const geocodeLead = action({
     state: v.optional(v.string()),
     country: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ lat: number; lng: number } | null> => {
     const parts = [args.city, args.state, args.country].filter(Boolean);
     if (parts.length === 0) return null;
 
@@ -47,13 +47,12 @@ export const geocodeLead = action({
 
 export const batchGeocodeLeads = internalAction({
   args: {},
-  handler: async (ctx) => {
-    const leads = await ctx.runQuery(internal.geocodingDb.queryLeadsNeedingGeocode, {});
+  handler: async (ctx): Promise<{ geocoded: number; total: number }> => {
+    const leads: any[] = await ctx.runQuery(internal.geocodingDb.queryLeadsNeedingGeocode, {});
     let geocoded = 0;
 
-    for (const lead of leads) {
-      const l = lead as any;
-      const parts = [l.city, l.state, l.country].filter(Boolean);
+    for (const lead of leads.slice(0, 30)) {
+      const parts: string[] = [lead.station, lead.district, lead.state, "India"].filter(Boolean);
       if (parts.length === 0) continue;
 
       const query = parts.join(", ");
@@ -65,10 +64,10 @@ export const batchGeocodeLeads = internalAction({
           lng: coords.lng,
         });
         geocoded++;
-        await new Promise((r) => setTimeout(r, 1100));
+        await new Promise<void>((r) => setTimeout(r, 1100));
       }
     }
 
-    return { geocoded };
+    return { geocoded, total: leads.length };
   },
 });

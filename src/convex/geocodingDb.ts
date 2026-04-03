@@ -2,11 +2,12 @@ import { v } from "convex/values";
 import { internalQuery, internalMutation } from "./_generated/server";
 
 export const queryLeadsNeedingGeocode = internalQuery({
-  args: {},
+  args: { cursor: v.optional(v.string()) },
   handler: async (ctx) => {
-    const leads = await ctx.db.query("leads").take(50);
+    // Get leads that have location data but no coordinates
+    const leads = await ctx.db.query("leads").take(200);
     return leads.filter(
-      (l: any) => !l.lat && !l.lng && (l.city || l.state || l.country)
+      (l: any) => !l.lat && !l.lng && (l.state || l.district || l.station || l.pincode)
     );
   },
 });
