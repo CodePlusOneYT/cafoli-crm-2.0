@@ -210,6 +210,26 @@ function findWebProductByQuery(webProducts: any[], query: string): any | null {
     return bn.length > 3 && q.includes(bn);
   });
   if (match) return match;
+
+  // Word-level match: first significant word of query matches first word of brand name
+  // e.g. "Spirazen 3 M.I.U. Tablets" → first word "spirazen" matches brand "Spirazen 3 M.I.U."
+  const qFirstWord = q.split(/\s+/)[0];
+  if (qFirstWord && qFirstWord.length > 3) {
+    match = webProducts.find((p: any) => {
+      const bn = p.brandName?.toLowerCase() || "";
+      const bnFirstWord = bn.split(/\s+/)[0];
+      return bnFirstWord === qFirstWord;
+    });
+    if (match) return match;
+  }
+
+  // Word-level match: first word of brand name appears in query
+  match = webProducts.find((p: any) => {
+    const bn = p.brandName?.toLowerCase() || "";
+    const bnFirstWord = bn.split(/\s+/)[0];
+    return bnFirstWord.length > 4 && q.includes(bnFirstWord);
+  });
+  if (match) return match;
   
   // Composition/molecule exact match
   match = webProducts.find((p: any) => {
@@ -234,8 +254,44 @@ function findWebProductByQuery(webProducts: any[], query: string): any | null {
     return firstMolecule.length > 5 && q.includes(firstMolecule);
   });
   if (match) return match;
+
+  // Molecule word-level: any word in query matches first molecule word
+  const qWords = q.split(/\s+/).filter(w => w.length > 4);
+  match = webProducts.find((p: any) => {
+    const comp = p.composition?.toLowerCase() || "";
+    if (!comp) return false;
+    const firstMolecule = comp.split(/[+,]/)[0].trim().split(/\s+/)[0];
+    return firstMolecule.length > 4 && qWords.includes(firstMolecule);
+  });
+  if (match) return match;
   
   return null;
+}
+
+// Use Gemini to fuzzy-match a product name against the full web products list
+async function geminiProductFuzzyMatch(ctx: any, query: string, webProducts: any[]): Promise<any | null> {
+  if (!webProducts || webProducts.length === 0) return null;
+  try {
+    const productList = webProducts.map((p: any) =>
+      `${p.brandName}${p.composition ? ` | ${p.composition.substring(0, 60)}` : ""}`
+    ).join("\n");
+    const systemPrompt = `You are a pharmaceutical expert. Given a product query, find the single best matching Cafoli brand name from the list below.
+Return ONLY a JSON object: { "brandName": "ExactBrandName" } or { "brandName": null } if no reasonable match exists.
+The query may be a competitor brand, molecule name, or partial Cafoli brand name.
+Match by: molecule/composition similarity, brand name similarity, or therapeutic equivalence.`;
+    const { text } = await generateWithGemini(ctx, systemPrompt,
+      `Query: "${query}"\n\nCafoli products (BrandName | Composition):\n${productList}`,
+      { jsonMode: true }
+    );
+    const jsonStr = extractJsonFromMarkdown(text);
+    const parsed = JSON.parse(jsonStr);
+    if (!parsed.brandName) return null;
+    // Find the product by exact brand name
+    return webProducts.find((p: any) => p.brandName === parsed.brandName) || null;
+  } catch (e) {
+    logAiError("GEMINI_FUZZY_MATCH", e);
+    return null;
+  }
 }
 
 // Send a website-sourced product to the lead
@@ -658,6 +714,50 @@ Always return ONLY the JSON object. Do not include other text.`;
           if (details.name || details.imageUrl) {
             await sendWebsiteProductToLead(ctx, details, { leadId: args.leadId, phoneNumber: args.phoneNumber }, aiAction.text);
             productSent = true;
+          }
+        }
+
+        // Step 1.5: Gemini-powered fuzzy match against full web products list
+        if (!productSent) {
+          logAiInfo("SEND_PRODUCT", `Trying Gemini fuzzy match for: "${aiAction.resource_name}"`, { leadId: args.leadId });
+          const fuzzyMatch = await geminiProductFuzzyMatch(ctx, aiAction.resource_name || args.prompt, webProducts);
+          if (fuzzyMatch) {
+            logAiInfo("SEND_PRODUCT", `Gemini fuzzy matched: ${fuzzyMatch.brandName}`, { leadId: args.leadId });
+            const isCorruptedComposition = fuzzyMatch.composition && (
+              fuzzyMatch.composition.includes("<") ||
+              fuzzyMatch.composition.includes(">") ||
+              fuzzyMatch.composition.length > 500
+            );
+            let details = {
+              name: fuzzyMatch.brandName || null,
+              molecule: isCorruptedComposition ? null : (fuzzyMatch.composition || null),
+              mrp: fuzzyMatch.mrp || null,
+              packaging: fuzzyMatch.packaging || null,
+              description: fuzzyMatch.description || null,
+              imageUrl: fuzzyMatch.imageUrl || (fuzzyMatch.imageUrls && fuzzyMatch.imageUrls[0]) || null,
+              pdfUrl: fuzzyMatch.pdfUrl || null,
+              pageLink: fuzzyMatch.pageUrl || `https://cafoli.in`,
+            };
+            if (fuzzyMatch.pageUrl) {
+              try {
+                const html = await fetchPageHtml(fuzzyMatch.pageUrl);
+                if (html) {
+                  const liveDetails = extractProductDetailsFromHtml(html, fuzzyMatch.pageUrl);
+                  details = {
+                    ...details,
+                    mrp: liveDetails.mrp || fuzzyMatch.mrp || null,
+                    packaging: liveDetails.packaging || fuzzyMatch.packaging || null,
+                    description: liveDetails.description || fuzzyMatch.description || null,
+                    imageUrl: liveDetails.imageUrl || fuzzyMatch.imageUrl || null,
+                    pdfUrl: liveDetails.pdfUrl || fuzzyMatch.pdfUrl || null,
+                  };
+                }
+              } catch { /* use cached */ }
+            }
+            if (details.name || details.pageLink) {
+              await sendWebsiteProductToLead(ctx, details, { leadId: args.leadId, phoneNumber: args.phoneNumber }, aiAction.text);
+              productSent = true;
+            }
           }
         }
 
