@@ -50,17 +50,38 @@ export default function WhatsApp() {
       : "skip"
   );
 
-  // Accumulate leads across pages
+  // Accumulate leads across pages, re-sorting on every update so new messages bubble to top
   useEffect(() => {
     if (leadsResult?.page) {
       if (paginationOpts.cursor === null) {
-        setAllLeads(leadsResult.page);
-        setIsResetting(false);
+        // First page: replace entirely (also handles real-time updates to existing leads)
+        setAllLeads((prev) => {
+          if (prev.length === 0) {
+            setIsResetting(false);
+            return leadsResult.page;
+          }
+          // Merge: update existing leads with fresh data, add new ones, keep older pages
+          const updatedMap = new Map(leadsResult.page.map((l: any) => [l._id, l]));
+          const merged = prev.map((l: any) => updatedMap.get(l._id) || l);
+          // Add any brand-new leads from the first page that aren't in prev
+          const prevIds = new Set(prev.map((l: any) => l._id));
+          for (const l of leadsResult.page) {
+            if (!prevIds.has(l._id)) merged.push(l);
+          }
+          // Re-sort by lastMessageAt descending so new messages bubble to top
+          merged.sort((a: any, b: any) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+          setIsResetting(false);
+          return merged;
+        });
       } else {
+        // Subsequent pages: append new leads only, then re-sort
         setAllLeads((prev) => {
           const existingIds = new Set(prev.map((l: any) => l._id));
           const newLeads = leadsResult.page.filter((l: any) => !existingIds.has(l._id));
-          return [...prev, ...newLeads];
+          if (newLeads.length === 0) return prev;
+          const merged = [...prev, ...newLeads];
+          merged.sort((a: any, b: any) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+          return merged;
         });
       }
     }
