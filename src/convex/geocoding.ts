@@ -3,9 +3,26 @@ import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-async function nominatimGeocode(query: string): Promise<{ lat: number; lng: number } | null> {
+// Geocode with international support — no country restriction by default
+// If country is provided, try with country first, then without
+async function nominatimGeocode(query: string, countryCode?: string): Promise<{ lat: number; lng: number } | null> {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`;
+    // Try with country code first if provided
+    if (countryCode) {
+      const urlWithCountry = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=${countryCode.toLowerCase()}`;
+      const res = await fetch(urlWithCountry, {
+        headers: { "User-Agent": "CafoliConnect/1.0 (hardcorgamingstyle@gmail.com)" },
+      });
+      if (res.ok) {
+        const data: any[] = await res.json();
+        if (data.length > 0) {
+          return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        }
+      }
+    }
+
+    // Try without country restriction (international fallback)
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
     const response = await fetch(url, {
       headers: { "User-Agent": "CafoliConnect/1.0 (hardcorgamingstyle@gmail.com)" },
     });
@@ -20,6 +37,31 @@ async function nominatimGeocode(query: string): Promise<{ lat: number; lng: numb
   }
 }
 
+// Detect country code from lead data
+function detectCountryCode(lead: any): string | undefined {
+  if (lead.country) {
+    // Map common country names to ISO codes
+    const countryMap: Record<string, string> = {
+      "india": "in", "in": "in",
+      "usa": "us", "united states": "us", "us": "us",
+      "uk": "gb", "united kingdom": "gb", "gb": "gb",
+      "uae": "ae", "united arab emirates": "ae",
+      "nepal": "np", "np": "np",
+      "bangladesh": "bd", "bd": "bd",
+      "pakistan": "pk", "pk": "pk",
+      "sri lanka": "lk", "lk": "lk",
+      "australia": "au", "au": "au",
+      "canada": "ca", "ca": "ca",
+      "germany": "de", "de": "de",
+      "france": "fr", "fr": "fr",
+    };
+    const normalized = lead.country.toLowerCase().trim();
+    return countryMap[normalized];
+  }
+  // Default to India if no country specified (existing leads)
+  return "in";
+}
+
 export const geocodeLead = action({
   args: {
     leadId: v.id("leads"),
@@ -28,11 +70,14 @@ export const geocodeLead = action({
     country: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ lat: number; lng: number } | null> => {
-    const parts = [args.city, args.state, args.country].filter(Boolean);
-    if (parts.length === 0) return null;
+    const parts = [args.city, args.state].filter(Boolean);
+    if (parts.length === 0 && !args.country) return null;
 
-    const query = parts.join(", ");
-    const coords = await nominatimGeocode(query);
+    const query = [...parts, args.country].filter(Boolean).join(", ");
+    
+    // Detect country code for targeted search
+    const countryCode = args.country ? detectCountryCode({ country: args.country }) : "in";
+    const coords = await nominatimGeocode(query, countryCode);
     if (!coords) return null;
 
     await ctx.runMutation(internal.geocodingDb.updateLeadCoordinates, {
@@ -51,12 +96,28 @@ export const batchGeocodeLeads = internalAction({
     const leads: any[] = await ctx.runQuery(internal.geocodingDb.queryLeadsNeedingGeocode, {});
     let geocoded = 0;
 
-    for (const lead of leads.slice(0, 30)) {
-      const parts: string[] = [lead.station, lead.district, lead.state, "India"].filter(Boolean);
+    // Process up to 40 leads per run (1.1s delay each = ~44s total, well within action limits)
+    for (const lead of leads.slice(0, 40)) {
+      // Build location query — prefer more specific data
+      const countryCode = detectCountryCode(lead);
+      
+      // Build query parts from most specific to least
+      const parts: string[] = [];
+      if (lead.station) parts.push(lead.station);
+      if (lead.district) parts.push(lead.district);
+      if (lead.state) parts.push(lead.state);
+      if (lead.country) parts.push(lead.country);
+      else if (countryCode === "in") parts.push("India");
+
+      if (parts.length === 0 && lead.pincode) {
+        parts.push(lead.pincode);
+        if (countryCode === "in") parts.push("India");
+      }
+
       if (parts.length === 0) continue;
 
       const query = parts.join(", ");
-      const coords = await nominatimGeocode(query);
+      const coords = await nominatimGeocode(query, countryCode);
       if (coords) {
         await ctx.runMutation(internal.geocodingDb.updateLeadCoordinates, {
           id: lead._id,
@@ -64,8 +125,9 @@ export const batchGeocodeLeads = internalAction({
           lng: coords.lng,
         });
         geocoded++;
-        await new Promise<void>((r) => setTimeout(r, 1100));
       }
+      // Nominatim rate limit: 1 request/second
+      await new Promise<void>((r) => setTimeout(r, 1100));
     }
 
     return { geocoded, total: leads.length };
