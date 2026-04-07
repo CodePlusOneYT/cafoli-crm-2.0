@@ -81,11 +81,8 @@ export const handleIncomingMessage = internalAction({
           messageType = "file";
         }
 
-        // Check if this message was already processed (deduplication)
-        const alreadyProcessed = await ctx.runQuery(internal.whatsappMutations.getExistingExternalIds, { leadId });
-        const isDuplicate = alreadyProcessed.includes(args.messageId);
-
-        if (!isDuplicate) {
+        // storeMessage handles deduplication internally via by_external_id index
+        {
           await ctx.runMutation(internal.whatsappMutations.storeMessage, {
             leadId,
             phoneNumber: args.from,
@@ -100,9 +97,6 @@ export const handleIncomingMessage = internalAction({
             quotedMessageExternalId: args.quotedMessageExternalId,
           });
           console.log("✅ Message stored in database");
-        } else {
-          console.log(`[DEDUP] Message ${args.messageId} already processed, skipping storage and AI`);
-          return;
         }
 
         if (isNewLead) {

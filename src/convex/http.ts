@@ -60,14 +60,14 @@ http.route({
     try {
       const body = await req.json();
       
-      // Process status updates (sent, delivered, read)
+      // Process status updates (sent, delivered, read) — call mutation directly, skip Node action
       if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
         const statuses = body.entry[0].changes[0].value.statuses;
         
         for (const statusUpdate of statuses) {
           try {
-            await ctx.runAction(internal.whatsapp.webhook.handleStatusUpdate, {
-              messageId: statusUpdate.id,
+            await ctx.runMutation(internal.whatsappMutations.updateMessageStatus, {
+              externalId: statusUpdate.id,
               status: statusUpdate.status,
             });
           } catch (e) {
