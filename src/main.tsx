@@ -39,7 +39,7 @@ function RouteLoading() {
 }
 
 // Hardcoded Convex URL for Electron build
-const convexUrl = "https://polished-marmot-96.convex.cloud";
+const convexUrl = "https://canny-porcupine-779.convex.cloud";
 
 const convex = new ConvexReactClient(convexUrl);
 
