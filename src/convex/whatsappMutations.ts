@@ -189,19 +189,20 @@ export const storeMessage = internalMutation({
       }
     }
 
-    // Log activity
-    await ctx.scheduler.runAfter(0, internal.activityLogs.logActivity, {
-      category: args.direction === "inbound" ? LOG_CATEGORIES.WHATSAPP_INCOMING : LOG_CATEGORIES.WHATSAPP_OUTGOING,
-      action: args.direction === "inbound" ? "Received WhatsApp message" : "Sent WhatsApp message",
-      details: args.content.substring(0, 100) + (args.content.length > 100 ? "..." : ""),
-      leadId: args.leadId,
-      metadata: {
-        messageId: messageId,
-        externalId: args.externalId,
-        type: args.messageType,
-        direction: args.direction,
-      }
-    });
+    // Only log inbound messages to reduce activity log volume
+    if (args.direction === "inbound") {
+      await ctx.scheduler.runAfter(0, internal.activityLogs.logActivity, {
+        category: LOG_CATEGORIES.WHATSAPP_INCOMING,
+        action: "Received WhatsApp message",
+        details: args.content.substring(0, 100) + (args.content.length > 100 ? "..." : ""),
+        leadId: args.leadId,
+        metadata: {
+          messageId: messageId,
+          externalId: args.externalId,
+          type: args.messageType,
+        }
+      });
+    }
   },
 });
 
@@ -443,18 +444,6 @@ export const updateMessageStatus = internalMutation({
       await ctx.db.patch(message._id, {
         status: args.status,
       });
-      console.log(`Updated message ${args.externalId} status to ${args.status}`);
-
-      // Log status change
-      const chat = await ctx.db.get(message.chatId);
-      if (chat) {
-        await ctx.scheduler.runAfter(0, internal.activityLogs.logActivity, {
-            category: LOG_CATEGORIES.WHATSAPP_STATUS,
-            action: `Message status updated: ${args.status}`,
-            leadId: chat.leadId,
-            details: `External ID: ${args.externalId}`,
-        });
-      }
     } else {
       console.log(`Message not found for external ID: ${args.externalId}`);
     }
