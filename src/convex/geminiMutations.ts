@@ -1,4 +1,4 @@
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 // Get all keys (for admin UI)
@@ -13,8 +13,8 @@ export const getGeminiApiKeys = query({
   },
 });
 
-// Get active keys (internal use)
-export const getActiveKeys = internalMutation({
+// Get active keys (internal use) — internalQuery is cheaper than internalMutation
+export const getActiveKeys = internalQuery({
   args: {},
   handler: async (ctx) => {
     return await ctx.db

@@ -157,27 +157,26 @@ export const deleteBatchControlInternal = internalMutation({
   },
 });
 
-// Get leads that need summaries (no summary or outdated)
+// Get leads that need summaries (no summary or outdated) — capped at limit
 export const getLeadsNeedingSummaries = internalQuery({
   args: { limit: v.number() },
   handler: async (ctx, args) => {
-    // Get all non-irrelevant leads
+    const cap = Math.min(args.limit, 200);
     const allLeads = await ctx.db
       .query("leads")
-      .filter((q) => q.neq(q.field("status"), "irrelevant"))
+      .withIndex("by_last_activity")
       .order("desc")
-      .take(args.limit);
+      .take(cap);
 
     const leadsNeedingSummaries = [];
 
     for (const lead of allLeads) {
-      // Check if summary exists
+      if (lead.status === "irrelevant") continue;
       const summary = await ctx.db
         .query("leadSummaries")
         .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
         .first();
 
-      // Need summary if: no summary OR lastActivityHash doesn't match
       if (!summary || summary.lastActivityHash !== `${lead.lastActivity}`) {
         leadsNeedingSummaries.push(lead);
       }
@@ -187,33 +186,30 @@ export const getLeadsNeedingSummaries = internalQuery({
   },
 });
 
-// Get leads that need scores (have summary but no score or outdated score)
+// Get leads that need scores — capped at limit
 export const getLeadsNeedingScores = internalQuery({
   args: { limit: v.number() },
   handler: async (ctx, args) => {
-    // Get all non-irrelevant leads that have summaries
+    const cap = Math.min(args.limit, 200);
     const allLeads = await ctx.db
       .query("leads")
-      .filter((q) => q.neq(q.field("status"), "irrelevant"))
+      .withIndex("by_last_activity")
       .order("desc")
-      .take(args.limit);
+      .take(cap);
 
     const leadsNeedingScores = [];
 
     for (const lead of allLeads) {
-      // Check if summary exists
+      if (lead.status === "irrelevant") continue;
       const summary = await ctx.db
         .query("leadSummaries")
         .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
         .first();
 
-      // Only score leads that have summaries
       if (summary) {
-        // Need score if: no score OR no aiScoredAt OR score is old (older than summary)
         const needsScore = !lead.aiScore ||
                           !lead.aiScoredAt ||
                           (summary.generatedAt && lead.aiScoredAt < summary.generatedAt);
-
         if (needsScore) {
           leadsNeedingScores.push(lead);
         }
@@ -221,5 +217,42 @@ export const getLeadsNeedingScores = internalQuery({
     }
 
     return leadsNeedingScores;
+  },
+});
+
+// Consolidated context fetcher — replaces 4 separate queries with 1
+export const getFullLeadContextInternal = internalQuery({
+  args: { leadId: v.id("leads") },
+  handler: async (ctx, args) => {
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) return null;
+
+    const chat = await ctx.db
+      .query("chats")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    const messages = chat
+      ? (await ctx.db
+          .query("messages")
+          .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+          .order("desc")
+          .take(20))
+          .map((m) => ({ direction: m.direction, content: m.content, timestamp: m._creationTime }))
+      : [];
+
+    const cmts = await ctx.db
+      .query("comments")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .order("desc")
+      .take(10);
+    const comments = cmts.map((c) => c.content || "").filter(Boolean);
+
+    const summary = await ctx.db
+      .query("leadSummaries")
+      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+      .first();
+
+    return { lead, messages, comments, summary };
   },
 });

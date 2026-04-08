@@ -2,7 +2,7 @@ import { Doc, Id } from "@/convex/_generated/dataModel";
 import { LeadCard } from "@/components/LeadCard";
 import { Loader2 } from "lucide-react";
 import { useLeadSummaries } from "@/hooks/useLeadSummaries";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
 import { getConvexApi } from "@/lib/convex-api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -124,43 +124,48 @@ export function LeadsListPanel({
   isDone,
 }: LeadsListPanelProps) {
   const { summaries, loading, fetchSummary, updateSummary } = useLeadSummaries();
+  // Track which leads have already been queued to prevent re-triggering
+  const queuedRef = useRef<Set<string>>(new Set());
 
-  // Get visible lead IDs (all Convex leads now — no R2)
+  // Get visible lead IDs (first 20)
   const visibleLeadIds = leads.slice(0, 20).map(l => l._id);
 
-  // Load cached summaries for all visible leads
+  // Load cached summaries for all visible leads (reactive subscription)
   const cachedSummaries = useQuery(
     api.aiMutations.getCachedSummaries,
     visibleLeadIds.length > 0 ? { leadIds: visibleLeadIds } : "skip"
   );
 
-  // Update summaries from cache
+  // Update summaries from cache when they arrive
   useEffect(() => {
     if (cachedSummaries) {
       cachedSummaries.forEach(({ leadId, summary }: { leadId: Id<"leads">, summary?: string }) => {
         if (summary && !summaries[leadId]) {
           updateSummary(leadId, summary);
+          queuedRef.current.delete(leadId);
         }
       });
     }
   }, [cachedSummaries]);
 
   // Fetch summaries for visible leads that don't have cached summaries
+  // Only depends on leads (not summaries/loading) to avoid cascade re-runs
   useEffect(() => {
     leads.slice(0, 20).forEach(lead => {
-      if (!summaries[lead._id] && !loading[lead._id]) {
-        fetchSummary(lead._id, {
-          name: lead.name,
-          subject: lead.subject || "",
-          source: lead.source || "",
-          status: lead.status,
-          type: lead.type || "",
-          message: lead.message || "",
-          lastActivity: lead.lastActivity,
-        });
-      }
+      // Skip if already queued, already have summary, or already loading
+      if (queuedRef.current.has(lead._id) || summaries[lead._id] || loading[lead._id]) return;
+      queuedRef.current.add(lead._id);
+      fetchSummary(lead._id, {
+        name: lead.name,
+        subject: lead.subject || "",
+        source: lead.source || "",
+        status: lead.status,
+        type: lead.type || "",
+        message: lead.message || "",
+        lastActivity: lead.lastActivity,
+      });
     });
-  }, [leads, summaries, loading]);
+  }, [leads]);
 
   // Poll for cached summaries for visible loading leads
   const firstLoadingLeadId = visibleLeadIds.find(id => loading[id]);

@@ -26,7 +26,7 @@ export function extractJsonFromMarkdown(text: string): string {
 
 export async function getGeminiKeys(ctx: ActionCtx) {
   // @ts-ignore
-  const keys = await ctx.runMutation(internal.geminiMutations.getActiveKeys) as Doc<"geminiApiKeys">[];
+  const keys = await ctx.runQuery(internal.geminiMutations.getActiveKeys) as Doc<"geminiApiKeys">[];
   
   const allKeys: Array<{ apiKey: string; keyId?: Id<"geminiApiKeys">; label?: string }> = [...keys];
   
