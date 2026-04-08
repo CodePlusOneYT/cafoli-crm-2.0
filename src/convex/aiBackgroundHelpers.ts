@@ -157,27 +157,26 @@ export const deleteBatchControlInternal = internalMutation({
   },
 });
 
-// Get leads that need summaries (no summary or outdated)
+// Get leads that need summaries (no summary or outdated) — capped at limit
 export const getLeadsNeedingSummaries = internalQuery({
   args: { limit: v.number() },
   handler: async (ctx, args) => {
-    // Get all non-irrelevant leads
+    const cap = Math.min(args.limit, 200);
     const allLeads = await ctx.db
       .query("leads")
-      .filter((q) => q.neq(q.field("status"), "irrelevant"))
+      .withIndex("by_last_activity")
       .order("desc")
-      .take(args.limit);
+      .take(cap);
 
     const leadsNeedingSummaries = [];
 
     for (const lead of allLeads) {
-      // Check if summary exists
+      if (lead.status === "irrelevant") continue;
       const summary = await ctx.db
         .query("leadSummaries")
         .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
         .first();
 
-      // Need summary if: no summary OR lastActivityHash doesn't match
       if (!summary || summary.lastActivityHash !== `${lead.lastActivity}`) {
         leadsNeedingSummaries.push(lead);
       }
@@ -187,33 +186,30 @@ export const getLeadsNeedingSummaries = internalQuery({
   },
 });
 
-// Get leads that need scores (have summary but no score or outdated score)
+// Get leads that need scores — capped at limit
 export const getLeadsNeedingScores = internalQuery({
   args: { limit: v.number() },
   handler: async (ctx, args) => {
-    // Get all non-irrelevant leads that have summaries
+    const cap = Math.min(args.limit, 200);
     const allLeads = await ctx.db
       .query("leads")
-      .filter((q) => q.neq(q.field("status"), "irrelevant"))
+      .withIndex("by_last_activity")
       .order("desc")
-      .take(args.limit);
+      .take(cap);
 
     const leadsNeedingScores = [];
 
     for (const lead of allLeads) {
-      // Check if summary exists
+      if (lead.status === "irrelevant") continue;
       const summary = await ctx.db
         .query("leadSummaries")
         .withIndex("by_lead", (q) => q.eq("leadId", lead._id))
         .first();
 
-      // Only score leads that have summaries
       if (summary) {
-        // Need score if: no score OR no aiScoredAt OR score is old (older than summary)
         const needsScore = !lead.aiScore ||
                           !lead.aiScoredAt ||
                           (summary.generatedAt && lead.aiScoredAt < summary.generatedAt);
-
         if (needsScore) {
           leadsNeedingScores.push(lead);
         }
