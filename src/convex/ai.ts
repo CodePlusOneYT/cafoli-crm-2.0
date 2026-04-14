@@ -1,9 +1,8 @@
 "use node";
 import { action, internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { generateWithGemini, getGeminiKeys, gemmaModel } from "./lib/gemini";
+import { generateWithGemini, getGeminiKeys } from "./lib/gemini";
 import { internal } from "./_generated/api";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const generate = action({
   args: {

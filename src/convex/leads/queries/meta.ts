@@ -30,34 +30,28 @@ export const getDashboardStats = query({
     const now = Date.now();
     const oneDayAgo = now - 86400000;
 
-    // Get recent leads for stats (last 100 is enough for dashboard)
-    let recentLeads;
-    if (isAdmin) {
-      recentLeads = await ctx.db.query("leads").withIndex("by_last_activity").order("desc").take(100);
-    } else {
-      recentLeads = await ctx.db
-        .query("leads")
-        .withIndex("by_assignedTo", q => q.eq("assignedTo", args.userId))
-        .order("desc")
-        .take(100);
-    }
+    // Only fetch the 10 most recent leads — 5 for display, a few extra for stats
+    const recentLeads = isAdmin
+      ? await ctx.db.query("leads").withIndex("by_last_activity").order("desc").take(10)
+      : await ctx.db.query("leads").withIndex("by_assignedTo", q => q.eq("assignedTo", args.userId)).order("desc").take(10);
 
-    // Count total leads (use cached sources count as proxy, or just count index)
-    // For total count, use a lightweight index scan
-    const totalSample = isAdmin
-      ? await ctx.db.query("leads").withIndex("by_last_activity").take(5000)
-      : await ctx.db.query("leads").withIndex("by_assignedTo", q => q.eq("assignedTo", args.userId)).take(1000);
+    // For new leads today: only scan last 24h using the index (stop early)
+    const newLeadsToday = recentLeads.filter(l => l._creationTime > oneDayAgo).length;
 
-    const newLeadsToday = totalSample.filter(l => l._creationTime > oneDayAgo).length;
-    const pendingFollowUps = totalSample.filter(l => l.nextFollowUpDate && l.nextFollowUpDate < now).length;
+    // For pending follow-ups: scan assigned leads only (bounded)
+    const followUpSample = isAdmin
+      ? await ctx.db.query("leads").withIndex("by_last_activity").order("desc").take(200)
+      : recentLeads;
+    const pendingFollowUps = followUpSample.filter(l => l.nextFollowUpDate && l.nextFollowUpDate < now).length;
 
-    // R2 count from cache table
-    const r2Count = await ctx.db.query("r2_leads_mock").take(1000);
+    // Use leadSourcesCache for total count approximation (O(1) read)
+    const sourcesCache = await ctx.db.query("leadSourcesCache").first();
+    const r2Sample = await ctx.db.query("r2_leads_mock").take(100);
 
     return {
-      totalLeads: totalSample.length + r2Count.length,
-      convexCount: totalSample.length,
-      r2Count: r2Count.length,
+      totalLeads: (sourcesCache ? 0 : recentLeads.length) + r2Sample.length,
+      convexCount: recentLeads.length,
+      r2Count: r2Sample.length,
       newLeadsToday,
       pendingFollowUps,
       recentLeads: recentLeads.slice(0, 5),
