@@ -151,14 +151,12 @@ export const getLeadsWithChatStatus = query({
     }
 
     // Standard mode — query chats directly sorted by lastMessageAt (most recent first)
-    // This ensures ALL leads with chats appear, regardless of lead lastActivity
+    // Uses the by_lastMessageAt index for correct ordering
     const allChats = await ctx.db
       .query("chats")
+      .withIndex("by_lastMessageAt")
       .order("desc")
       .take(500);
-
-    // Sort by lastMessageAt descending
-    allChats.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
 
     // Enrich with lead data
     const enriched: any[] = [];
