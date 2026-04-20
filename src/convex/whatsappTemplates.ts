@@ -184,10 +184,31 @@ async function sendTemplateMessageHelper(
         const rawDocUrl = mediaUrl || variables?.headerUrl;
         if (rawDocUrl) {
           const publicDocUrl = toPublicFileUrl(rawDocUrl);
-
-          // Check cache first (whatsappConfig key = "media_cache:<url>")
-          const cacheKey = `media_cache:${publicDocUrl}`;
           const internalAny = internal as any;
+          const cacheKey = `media_cache:${publicDocUrl}`;
+
+          // Helper to upload and cache a fresh media ID
+          const uploadAndCache = async () => {
+            console.log(`[Media Cache] Uploading fresh media for ${publicDocUrl}`);
+            const uploadedDocument = await uploadDocumentToWhatsAppMedia(
+              publicDocUrl,
+              accessToken,
+              phoneNumberId,
+              "Master_Cafoli_MRP_List_All_11032026.pdf"
+            );
+            try {
+              await ctx.runMutation(
+                internalAny.whatsappTemplatesMutations.setCachedMediaId,
+                { cacheKey, mediaId: uploadedDocument.id }
+              );
+              console.log(`[Media Cache] Stored media_id ${uploadedDocument.id} for ${publicDocUrl}`);
+            } catch (cacheErr) {
+              console.warn(`[Media Cache] Failed to store cache:`, cacheErr);
+            }
+            return uploadedDocument;
+          };
+
+          // Check cache first
           let cachedMediaId: string | null = null;
           try {
             cachedMediaId = await ctx.runQuery(
@@ -207,25 +228,9 @@ async function sendTemplateMessageHelper(
             filename = getFilenameFromUrl(publicDocUrl, "Master_Cafoli_MRP_List_All_11032026.pdf");
           } else {
             console.log(`[Media Cache] MISS for ${publicDocUrl} — uploading`);
-            const uploadedDocument = await uploadDocumentToWhatsAppMedia(
-              publicDocUrl,
-              accessToken,
-              phoneNumberId,
-              "Master_Cafoli_MRP_List_All_11032026.pdf"
-            );
-            mediaId = uploadedDocument.id;
-            filename = uploadedDocument.filename;
-
-            // Persist media_id to cache
-            try {
-              await ctx.runMutation(
-                internalAny.whatsappTemplatesMutations.setCachedMediaId,
-                { cacheKey, mediaId }
-              );
-              console.log(`[Media Cache] Stored media_id ${mediaId} for ${publicDocUrl}`);
-            } catch (cacheErr) {
-              console.warn(`[Media Cache] Failed to store cache:`, cacheErr);
-            }
+            const uploaded = await uploadAndCache();
+            mediaId = uploaded.id;
+            filename = uploaded.filename;
           }
 
           components.push({
@@ -238,6 +243,9 @@ async function sendTemplateMessageHelper(
               }
             }]
           });
+
+          // Store for potential retry below
+          (components as any).__docMeta = { publicDocUrl, cacheKey, filename, uploadAndCache };
         }
       } else if (headerComponent.format === "VIDEO") {
         const videoUrl = mediaUrl || variables?.headerUrl;
@@ -258,31 +266,33 @@ async function sendTemplateMessageHelper(
       leadId: leadId,
     });
 
-    const payload: any = {
+    const buildPayload = (comps: any[]) => ({
       messaging_product: "whatsapp",
       to: phoneNumber,
       type: "template",
       template: {
         name: templateName,
-        language: {
-          code: languageCode,
-        },
+        language: { code: languageCode },
+        ...(comps.length > 0 ? { components: comps } : {}),
       },
-    };
+    });
 
-    if (components.length > 0) {
-      payload.template.components = components;
-    }
+    // Strip internal metadata before sending
+    const cleanComponents = components.map((c: any) => {
+      const { __docMeta: _ignored, ...rest } = c;
+      return rest;
+    });
 
-    // Scrubbed payload log (no auth tokens)
+    let payload = buildPayload(cleanComponents);
+
     console.log(`[Template Send] Payload to Meta:`, JSON.stringify({
       ...payload,
-      _debug: { phoneNumberId, templateName, languageCode, componentCount: components.length }
+      _debug: { phoneNumberId, templateName, languageCode, componentCount: cleanComponents.length }
     }));
 
     console.log(`Sending template ${templateName} to ${phoneNumber} for lead ${leadId}`);
 
-    const response = await fetch(
+    let response = await fetch(
       `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
       {
         method: "POST",
@@ -294,7 +304,65 @@ async function sendTemplateMessageHelper(
       }
     );
 
-    const data = await response.json();
+    let data = await response.json();
+
+    // If the media ID is invalid (expired), clear cache, re-upload, and retry once
+    if (
+      !response.ok &&
+      data?.error?.message?.includes("not a valid whatsapp business account media attachment ID")
+    ) {
+      console.warn("[Media Cache] Cached media_id rejected by Meta — clearing cache and re-uploading");
+      const docMeta = (components as any).__docMeta as {
+        publicDocUrl: string;
+        cacheKey: string;
+        filename: string;
+        uploadAndCache: () => Promise<{ id: string; filename: string }>;
+      } | undefined;
+
+      if (docMeta) {
+        // Clear stale cache entry
+        try {
+          const internalAny = internal as any;
+          await ctx.runMutation(
+            internalAny.whatsappTemplatesMutations.setCachedMediaId,
+            { cacheKey: docMeta.cacheKey, mediaId: "" }
+          );
+        } catch { /* ignore */ }
+
+        const freshUpload = await docMeta.uploadAndCache();
+        const retryComponents = cleanComponents.map((c: any) => {
+          if (
+            c.type === "header" &&
+            c.parameters?.[0]?.type === "document"
+          ) {
+            return {
+              ...c,
+              parameters: [{
+                type: "document",
+                document: { id: freshUpload.id, filename: freshUpload.filename },
+              }],
+            };
+          }
+          return c;
+        });
+
+        payload = buildPayload(retryComponents);
+        console.log(`[Template Send] Retrying with fresh media_id ${freshUpload.id}`);
+
+        response = await fetch(
+          `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+        data = await response.json();
+      }
+    }
     
     if (!response.ok) {
       console.error("WhatsApp API error response", {
