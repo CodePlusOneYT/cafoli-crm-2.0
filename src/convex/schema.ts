@@ -262,7 +262,8 @@ export default defineSchema({
     unreadCount: v.optional(v.number()),
     lastMessageAt: v.optional(v.number()),
     platform: v.optional(v.string()),
-  }).index("by_lead", ["leadId"]),
+  }).index("by_lead", ["leadId"])
+    .index("by_lastMessageAt", ["lastMessageAt"]),
 
   messages: defineTable({
     chatId: v.id("chats"),
