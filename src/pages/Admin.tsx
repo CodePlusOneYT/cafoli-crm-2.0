@@ -31,7 +31,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableRow, TableBody, TableCell, TableHead } from "@/components/ui/table";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
-import { Trash2 } from "lucide-react";
+import { Trash2, Megaphone } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 // All available columns for export
 const ALL_EXPORT_COLUMNS = [
@@ -122,6 +123,38 @@ export default function Admin() {
   );
 
   const isBatchProcessing = batchProgress?.status === "queued" || batchProgress?.status === "running";
+
+  // Announcements state
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementMessage, setAnnouncementMessage] = useState("");
+  const [announcementType, setAnnouncementType] = useState<"announcement" | "update">("announcement");
+  const [isCreatingAnnouncement, setIsCreatingAnnouncement] = useState(false);
+  const createAnnouncement = useMutation(api.announcements.createAnnouncement);
+  const deleteAnnouncement = useMutation(api.announcements.deleteAnnouncement);
+  const allAnnouncements = useQuery(api.announcements.getAllAnnouncements);
+
+  const handleCreateAnnouncement = async () => {
+    if (!currentUser || !announcementTitle.trim() || !announcementMessage.trim()) {
+      toast.error("Please fill in both title and message");
+      return;
+    }
+    setIsCreatingAnnouncement(true);
+    try {
+      await createAnnouncement({
+        title: announcementTitle.trim(),
+        message: announcementMessage.trim(),
+        type: announcementType,
+        adminId: currentUser._id,
+      });
+      setAnnouncementTitle("");
+      setAnnouncementMessage("");
+      toast.success("Announcement sent to all users!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create announcement");
+    } finally {
+      setIsCreatingAnnouncement(false);
+    }
+  };
 
   const scrapeAllProducts = useAction(api.cafoliScraper.scrapeAllCafoliProducts);
   const fixCorruptedCompositions = useAction(api.cafoliScraper.fixCorruptedCompositions);
@@ -556,6 +589,7 @@ export default function Admin() {
             {currentUser.role === "admin" && <TabsTrigger value="deduplication">Deduplication</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="r2-tiering">R2 Data Tiering</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="backup">Backup & Restore</TabsTrigger>}
+            {currentUser.role === "admin" && <TabsTrigger value="announcements">Announcements</TabsTrigger>}
             {currentUser.role === "admin" && <TabsTrigger value="logs">System Logs</TabsTrigger>}
           </TabsList>
 
@@ -1125,6 +1159,120 @@ export default function Admin() {
             </TabsContent>
           )}
           
+          {currentUser.role === "admin" && (
+            <TabsContent value="announcements" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Megaphone className="h-5 w-5" />
+                    Broadcast Announcement
+                  </CardTitle>
+                  <CardDescription>
+                    Send a popup announcement or update to all users. They will see it the next time they open the app.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      variant={announcementType === "announcement" ? "default" : "outline"}
+                      onClick={() => setAnnouncementType("announcement")}
+                      className="flex items-center gap-2"
+                    >
+                      <Megaphone className="h-4 w-4" />
+                      Announcement
+                    </Button>
+                    <Button
+                      variant={announcementType === "update" ? "default" : "outline"}
+                      onClick={() => setAnnouncementType("update")}
+                      className="flex items-center gap-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Update
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ann-title">Title</Label>
+                    <Input
+                      id="ann-title"
+                      placeholder="e.g. New Feature Available"
+                      value={announcementTitle}
+                      onChange={(e) => setAnnouncementTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ann-message">Message</Label>
+                    <Textarea
+                      id="ann-message"
+                      placeholder="Write your announcement here..."
+                      value={announcementMessage}
+                      onChange={(e) => setAnnouncementMessage(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleCreateAnnouncement}
+                    disabled={isCreatingAnnouncement || !announcementTitle.trim() || !announcementMessage.trim()}
+                    className="w-full"
+                  >
+                    {isCreatingAnnouncement ? (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Megaphone className="mr-2 h-4 w-4" />
+                    )}
+                    Send to All Users
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Active Announcements List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Active Announcements</CardTitle>
+                  <CardDescription>These are currently visible to users who haven't dismissed them.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {!allAnnouncements || allAnnouncements.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No announcements yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {allAnnouncements.map((ann: any) => (
+                        <div key={ann._id} className="flex items-start justify-between p-3 border rounded-lg bg-muted/20">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs font-semibold uppercase px-2 py-0.5 rounded-full ${ann.type === "update" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+                                {ann.type}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(ann.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                              </span>
+                            </div>
+                            <p className="font-medium text-sm">{ann.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ann.message}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 ml-2 flex-shrink-0"
+                            onClick={async () => {
+                              try {
+                                await deleteAnnouncement({ announcementId: ann._id, adminId: currentUser._id });
+                                toast.success("Announcement deleted");
+                              } catch (err: any) {
+                                toast.error(err.message || "Failed to delete");
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {currentUser.role === "admin" && (
             <TabsContent value="logs">
                <div className="p-4 border rounded bg-muted/20">

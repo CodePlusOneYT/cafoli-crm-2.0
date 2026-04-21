@@ -14,6 +14,7 @@ import type * as ai from "../ai.js";
 import type * as aiBackground from "../aiBackground.js";
 import type * as aiBackgroundHelpers from "../aiBackgroundHelpers.js";
 import type * as aiMutations from "../aiMutations.js";
+import type * as announcements from "../announcements.js";
 import type * as auth from "../auth.js";
 import type * as authProviders from "../authProviders.js";
 import type * as backup from "../backup.js";
@@ -120,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   aiBackground: typeof aiBackground;
   aiBackgroundHelpers: typeof aiBackgroundHelpers;
   aiMutations: typeof aiMutations;
+  announcements: typeof announcements;
   auth: typeof auth;
   authProviders: typeof authProviders;
   backup: typeof backup;
