@@ -1,54 +1,56 @@
-import React, { useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
-import HeatmapLayer from 'react-leaflet-heatmap-layer-v3';
-import 'leaflet/dist/leaflet.css';
+const isChatActive = await ctx.runQuery(internal.activeChatSessions.isLeadChatActive, { leadId });
 
-type MapMode = 'cluster' | 'heatmap';
-
-const LeadsMap: React.FC<{ leads: Lead[] }> = ({ leads }) => {
-  const [mode, setMode] = useState<MapMode>('cluster');
-  
-  const points = leads.map(lead => [lead.lat, lead.lng, 1.0]);
-  
-  return (
-    <div>
-      <div>
-        <button onClick={() => setMode('cluster')}>Cluster View</button>
-        <button onClick={() => setMode('heatmap')}>Heatmap View</button>
-      </div>
-      <MapContainer center={[20, 0]} zoom={2} style={{ height: '500px', width: '100%' }}>
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        {mode === 'cluster' ? (
-          <MarkerClusterGroup>
-            {leads.map((lead) => (
-              <Marker key={lead.id} position={[lead.lat, lead.lng]}>
-                <Popup>
-                  <h3>{lead.name}</h3>
-                  <p>{lead.city}, {lead.state}</p>
-                </Popup>
-              </Marker>
-            ))}
-          </MarkerClusterGroup>
-        ) : (
-          <HeatmapLayer
-            points={points}
-            longitudeExtractor={(m: any) => m[1]}
-            latitudeExtractor={(m: any) => m[0]}
-            intensityExtractor={(m: any) => m[2]}
-          />
-        )}
-      </MapContainer>
-    </div>
-  );
-};
-
-// Define Lead interface if not already defined elsewhere
-interface Lead {
-  id: number | string;
-  name: string;
-  lat: number;
-  lng: number;
-  city: string;
-  state: string;
+if (!isChatActive) {
+  // trigger AI
 }
+
+const allChats = await ctx.db
+  .query("chats")
+  .withIndex("by_lastMessageAt")
+  .order("desc")
+  .take(500);
+
+const chat = await ctx.db
+  .query("chats")
+  .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
+  .first();
+
+if (!chat) {
+  return { page: [], isDone: true, continueCursor: "" };
+}
+
+// For outbound/AI/template messages: always reset ghost unread state.
+if ((chat.unreadCount || 0) > 0) {
+  const unreadInboundMessages = await ctx.db
+    .query("messages")
+    .withIndex("by_chat_status", (q) =>
+      q.eq("chatId", chat._id).eq("status", "received")
+    )
+    .take(1);
+
+  if (unreadInboundMessages.length === 0) {
+    updateFields.unreadCount = 0;
+  }
+}
+
+if (args.externalId) {
+  const existing = await ctx.db
+    .query("messages")
+    .withIndex("by_external_id", (q) => q.eq("externalId", args.externalId!))
+    .first();
+  if (existing) {
+    console.log(`[DEDUP] Message ${args.externalId} already stored, skipping`);
+    return;  // ← Returns undefined, not the messageId
+  }
+}
+
+// Only fetch the last 20 messages for context
+const messages = await ctx.db
+  .query("messages")
+  .withIndex("by_chat", (q) => q.eq("chatId", chat._id))
+  .order("desc")
+  .take(20);  // ← Only 20 messages for AI context
+
+await ctx.runMutation("whatsappMutations:storeMessage" as any, { ... });
+
+messageType: args.messageType || "text",

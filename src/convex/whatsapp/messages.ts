@@ -70,7 +70,8 @@ export const send = action({
         throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
       }
 
-      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+      // Use internal reference for internalMutation
+      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message,
@@ -128,7 +129,7 @@ export const sendMedia = action({
         try {
           const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
           
-          await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+          await ctx.runMutation(internal.whatsappMutations.storeMessage, {
             leadId: args.leadId,
             phoneNumber: args.phoneNumber,
             content: args.message || "",
@@ -136,7 +137,7 @@ export const sendMedia = action({
             status: "sent",
             externalId: result.messages?.[0]?.id || "",
             messageType: mediaType,
-            mediaUrl: displayUrl,
+            mediaUrl: displayUrl ?? undefined,
             mediaName: args.fileName,
             mediaMimeType: args.mimeType,
           });
@@ -202,7 +203,7 @@ export const sendMedia = action({
 
       const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
 
-      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message || "",
@@ -210,7 +211,7 @@ export const sendMedia = action({
         status: "sent",
         externalId: result.messages?.[0]?.id || "",
         messageType: mediaType,
-        mediaUrl: displayUrl,
+        mediaUrl: displayUrl ?? undefined,
         mediaName: args.fileName,
         mediaMimeType: args.mimeType,
       });
@@ -313,7 +314,8 @@ export const sendMediaFromUrl = internalAction({
 
       const result = await sendMediaMessage(accessToken, phoneNumberId, args.phoneNumber, mediaType, mediaId, args.message, args.fileName);
 
-      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+      // Use internal reference for internalMutation
+      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message || "",

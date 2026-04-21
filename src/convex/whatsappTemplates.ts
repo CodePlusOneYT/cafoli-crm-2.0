@@ -165,6 +165,7 @@ async function sendTemplateMessageHelper(
 
     // Prepare components for the API call
     const components: any[] = [];
+    const internalAny = internal as any;
 
     // 1. Handle Header Component
     const headerComponent = template.components?.find((c: any) => c.type === "HEADER");
@@ -184,7 +185,6 @@ async function sendTemplateMessageHelper(
         const rawDocUrl = mediaUrl || variables?.headerUrl;
         if (rawDocUrl) {
           const publicDocUrl = toPublicFileUrl(rawDocUrl);
-          const internalAny = internal as any;
           const cacheKey = `media_cache:${publicDocUrl}`;
 
           // Helper to upload and cache a fresh media ID
@@ -443,7 +443,7 @@ async function sendTemplateMessageHelper(
     }
 
     // Store message in database with actual template content and media info
-    await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+    await ctx.runMutation(internalAny.whatsappMutations.storeMessage, {
       leadId: leadId,
       phoneNumber: phoneNumber,
       content: templateContent,
@@ -632,7 +632,8 @@ export const createTemplate = action({
       }
 
       // Store in database
-      await ctx.runMutation("whatsappTemplatesMutations:upsertTemplate" as any, {
+      const internalAny = internal as any;
+      await ctx.runMutation(internalAny.whatsappTemplatesMutations.upsertTemplate, {
         name: args.name,
         language: args.language,
         category: args.category,
