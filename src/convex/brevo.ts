@@ -393,3 +393,40 @@ export const sendWelcomeEmailToRecentLeads = action({
     };
   },
 });
+
+// One-time action to send a custom email with a specific sender address
+export const sendCustomEmail = action({
+  args: {
+    to: v.string(),
+    toName: v.string(),
+    subject: v.string(),
+    htmlContent: v.string(),
+    senderEmail: v.string(),
+    senderName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const keyData = await getNextApiKey(ctx);
+    if (!keyData) throw new Error("No available Brevo API keys.");
+
+    const cleanEmail = args.to.trim().toLowerCase().replace(/\s/g, "");
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "api-key": keyData.key,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: args.senderName, email: args.senderEmail },
+        to: [{ email: cleanEmail, name: args.toName }],
+        subject: args.subject,
+        htmlContent: args.htmlContent,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`Brevo error: ${JSON.stringify(data)}`);
+    await incrementKeyUsage(ctx, keyData.keyId);
+    return { success: true, messageId: data.messageId };
+  },
+});
