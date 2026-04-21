@@ -36,6 +36,7 @@ import { getConvexApi } from "@/lib/convex-api";
 import { PushNotificationManager } from "@/components/PushNotificationManager";
 import { Id } from "@/convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
+import { AnnouncementPopup } from "./AnnouncementPopup";
 
 const api = getConvexApi() as any;
 import { FollowUpNotifications } from "./FollowUpNotifications";
@@ -383,6 +384,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Announcement Popup — shown to all users */}
+      {user && <AnnouncementPopup />}
+
       {/* Contact Request Popup - Highest Priority */}
       <ContactRequestPopup />
       

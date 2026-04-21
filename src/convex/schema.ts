@@ -446,4 +446,23 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
 
+  // Admin announcements broadcast to all users
+  announcements: defineTable({
+    title: v.string(),
+    message: v.string(),
+    type: v.string(), // "announcement" | "update"
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    isActive: v.boolean(),
+  }).index("by_active", ["isActive"])
+    .index("by_createdAt", ["createdAt"]),
+
+  // Track which users have dismissed which announcements
+  announcementDismissals: defineTable({
+    userId: v.id("users"),
+    announcementId: v.id("announcements"),
+    dismissedAt: v.number(),
+  }).index("by_user", ["userId"])
+    .index("by_user_and_announcement", ["userId", "announcementId"]),
+
 }, { schemaValidation: false });
