@@ -181,12 +181,31 @@ export const processIndiamartLead = internalMutation({
 
       await ctx.db.patch(existingLead._id, updates);
 
+      // Mark as repeat lead
+      const repeatCount = (existingLead.repeatLeadCount || 0) + 1;
+      await ctx.db.patch(existingLead._id, {
+        isRepeatLead: true,
+        repeatLeadAt: now,
+        repeatLeadSource: "IndiaMART",
+        repeatLeadCount: repeatCount,
+      });
+
       // Add system comment
       await ctx.db.insert("comments", {
         leadId: existingLead._id,
         content: `Lead reposted from IndiaMART.\nNew Message: ${args.message || "No message"}\nSubject: ${args.subject}`,
         isSystem: true,
       });
+
+      // Notify assigned user about repeat lead
+      if (existingLead.assignedTo) {
+        await ctx.scheduler.runAfter(0, (internal as any).pushNotificationsActions.sendPushNotification, {
+          userId: existingLead.assignedTo,
+          title: `Repeat Lead: ${existingLead.name}`,
+          body: `This lead has re-enquired from IndiaMART. Check their latest message.`,
+          url: `/leads?leadId=${existingLead._id}`,
+        });
+      }
 
       return { status: "merged", id: existingLead._id };
     }

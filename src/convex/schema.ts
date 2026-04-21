@@ -64,6 +64,11 @@ export default defineSchema({
     businessType: v.optional(v.string()), // Wholesaler / Retailer / Doctor / Hospital / Distributor
     marketingArea: v.optional(v.string()),
     preferredCallTime: v.optional(v.string()),
+    // Repeat lead tracking
+    isRepeatLead: v.optional(v.boolean()),
+    repeatLeadAt: v.optional(v.number()),
+    repeatLeadSource: v.optional(v.string()),
+    repeatLeadCount: v.optional(v.number()),
   }).index("by_mobile", ["mobile"])
     .index("by_assignedTo", ["assignedTo"])
     .index("by_status", ["status"])

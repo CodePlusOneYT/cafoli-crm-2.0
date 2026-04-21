@@ -37,6 +37,7 @@ import { PushNotificationManager } from "@/components/PushNotificationManager";
 import { Id } from "@/convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
 import { AnnouncementPopup } from "./AnnouncementPopup";
+import { RepeatLeadPopup } from "./RepeatLeadPopup";
 
 const api = getConvexApi() as any;
 import { FollowUpNotifications } from "./FollowUpNotifications";
@@ -386,6 +387,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       {/* Announcement Popup — shown to all users */}
       {user && <AnnouncementPopup />}
+
+      {/* Repeat Lead Popup — notify assigned user when their lead re-enquires */}
+      {user && !isAdmin && <RepeatLeadPopup />}
 
       {/* Contact Request Popup - Highest Priority */}
       <ContactRequestPopup />
