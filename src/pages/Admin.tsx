@@ -133,6 +133,29 @@ export default function Admin() {
   const deleteAnnouncement = useMutation(api.announcements.deleteAnnouncement);
   const allAnnouncements = useQuery(api.announcements.getAllAnnouncements);
 
+  const sendCustomEmail = useAction(api.brevo.sendCustomEmail);
+  const [isSendingUpdateEmail, setIsSendingUpdateEmail] = useState(false);
+
+  const handleSendUpdateEmail = async () => {
+    if (!currentUser) return;
+    setIsSendingUpdateEmail(true);
+    try {
+      await sendCustomEmail({
+        to: "info@cafoli.in",
+        toName: "Cafoli Team",
+        senderEmail: "fixes@mail.skinticals.com",
+        senderName: "Cafoli Connect Fixes",
+        subject: "Bug Fixes & New Features — WhatsApp & Repeat Lead System",
+        htmlContent: `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;line-height:1.7;color:#333;max-width:600px;margin:0 auto;padding:24px"><h2 style="color:#2563eb;border-bottom:2px solid #e5e7eb;padding-bottom:8px">Updates from Cafoli Connect CRM</h2><p>Hi Team,</p><p>The following fixes and new features have been deployed to the CRM:</p><h3 style="color:#16a34a">✅ Bug Fix: WhatsApp Messages Not Visible in CRM</h3><p>A critical bug was identified and fixed where AI-generated WhatsApp replies and incoming messages were being sent/received successfully on WhatsApp but were <strong>not being stored in the CRM database</strong>. This meant the chat history was invisible on the /whatsapp page.</p><p><strong>Root cause:</strong> The message storage function (<code>storeMessage</code>) was being called via an incorrect string reference that silently failed for internal Convex mutations.</p><p><strong>Fix:</strong> All message storage calls now use the correct internal references — all inbound and outbound messages are properly saved and visible in the CRM going forward.</p><h3 style="color:#16a34a">✅ New Feature: Repeat Lead Detection & Notifications</h3><p>The CRM now automatically detects when an existing lead re-enquires through IndiaMART or Pharmavends:</p><ul><li>Repeat leads are flagged with a red <strong>"Repeat Lead"</strong> badge showing the date and source</li><li>If assigned: badge shows <strong>"Assigned to [Staff Name]"</strong></li><li>If unassigned: badge shows <strong>"Repeat Lead - Unassigned"</strong></li><li>The assigned staff member receives an <strong>in-app popup notification</strong> when their lead re-enquires</li><li>Repeat leads appear on the Unassigned page for admin visibility</li></ul><h3 style="color:#16a34a">✅ New Feature: Admin Announcements & Updates</h3><p>Admins can now send system-wide announcements to all CRM users:</p><ul><li>Go to <strong>Admin → Announcements</strong> tab</li><li>Create an Announcement or Update with a title and message</li><li>All users see a popup when they next open the CRM</li><li>Users can dismiss — it will never show again for that user</li></ul><p>Please let us know if you notice any issues.</p><p>Best regards,<br><strong>Cafoli Connect Development Team</strong></p></body></html>`,
+      });
+      toast.success("Update email sent to info@cafoli.in!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send email");
+    } finally {
+      setIsSendingUpdateEmail(false);
+    }
+  };
+
   const handleCreateAnnouncement = async () => {
     if (!currentUser || !announcementTitle.trim() || !announcementMessage.trim()) {
       toast.error("Please fill in both title and message");
@@ -1273,15 +1296,28 @@ export default function Admin() {
             </TabsContent>
           )}
 
-          {currentUser.role === "admin" && (
+            {currentUser.role === "admin" && (
             <TabsContent value="logs">
-               <div className="p-4 border rounded bg-muted/20">
+               <div className="p-4 border rounded bg-muted/20 space-y-4">
                   <p className="text-muted-foreground">System logs are available in the Convex dashboard.</p>
                   <Button variant="outline" className="mt-4" asChild>
                     <a href="https://dashboard.convex.dev" target="_blank" rel="noopener noreferrer">
                       Open Convex Dashboard
                     </a>
                   </Button>
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium mb-2">Send Update Email to info@cafoli.in</p>
+                    <p className="text-xs text-muted-foreground mb-3">Sends a summary of recent bug fixes and new features from fixes@mail.skinticals.com</p>
+                    <Button
+                      onClick={handleSendUpdateEmail}
+                      disabled={isSendingUpdateEmail}
+                      variant="outline"
+                      size="sm"
+                    >
+                      {isSendingUpdateEmail ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                      {isSendingUpdateEmail ? "Sending..." : "Send Update Email"}
+                    </Button>
+                  </div>
                </div>
             </TabsContent>
           )}
