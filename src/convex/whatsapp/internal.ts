@@ -59,8 +59,8 @@ export const sendWelcomeMessage = internalAction({
         throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
       }
 
-      // Store welcome message in database
-      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+      // Store welcome message in database using internal reference
+      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: welcomeMessage,
@@ -141,7 +141,8 @@ export const sendMessage = internalAction({
         return { success: false, error: `WhatsApp API error: ${JSON.stringify(data)}` };
       }
 
-      await ctx.runMutation("whatsappMutations:storeMessage" as any, {
+      // Use internal reference instead of string reference for internalMutation
+      await ctx.runMutation(internal.whatsappMutations.storeMessage, {
         leadId: args.leadId,
         phoneNumber: args.phoneNumber,
         content: args.message,
