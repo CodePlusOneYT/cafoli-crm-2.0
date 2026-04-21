@@ -147,3 +147,18 @@ export const getLeadsWithUnreadCounts = query({
     }));
   },
 });
+
+export const getRecentRepeatLeadsForUser = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    // Get repeat leads assigned to this user that came in the last 7 days
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_assignedTo", (q) => q.eq("assignedTo", args.userId))
+      .filter((q) => q.eq(q.field("isRepeatLead"), true))
+      .take(50);
+    
+    return leads.filter((l: any) => l.repeatLeadAt && l.repeatLeadAt > cutoff);
+  },
+});

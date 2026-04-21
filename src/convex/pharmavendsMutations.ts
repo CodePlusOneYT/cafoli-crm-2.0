@@ -154,7 +154,15 @@ export const mergePharmavendsLead = internalMutation({
       merged.message
     ].filter(Boolean).join(" ");
 
-    await ctx.db.patch(args.id, updates);
+    const lead2 = await ctx.db.get(args.id);
+    const repeatCount = (lead2?.repeatLeadCount || 0) + 1;
+    await ctx.db.patch(args.id, {
+      ...updates,
+      isRepeatLead: true,
+      repeatLeadAt: now,
+      repeatLeadSource: "Pharmavends",
+      repeatLeadCount: repeatCount,
+    });
 
     // Add system comment
     await ctx.db.insert("comments", {
@@ -162,6 +170,16 @@ export const mergePharmavendsLead = internalMutation({
       content: `Lead reposted from Pharmavends.\\nNew Message: ${args.message || "No message"}\\nSubject: ${args.subject}`,
       isSystem: true,
     });
+
+    // Notify assigned user about repeat lead
+    if (lead.assignedTo) {
+      await ctx.scheduler.runAfter(0, (internal as any).pushNotificationsActions.sendPushNotification, {
+        userId: lead.assignedTo,
+        title: `Repeat Lead: ${lead.name}`,
+        body: `This lead has re-enquired from Pharmavends. Check their latest message.`,
+        url: `/leads?leadId=${args.id}`,
+      });
+    }
   },
 });
 
